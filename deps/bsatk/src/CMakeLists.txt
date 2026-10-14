@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
-find_package(Boost REQUIRED CONFIG COMPONENTS thread interprocess)
+# interprocess is header-only: some distributions (Fedora) ship no CMake config for it
+find_package(Boost REQUIRED CONFIG COMPONENTS thread)
 find_package(ZLIB REQUIRED)
 find_package(lz4 CONFIG REQUIRED)
 find_package(mo2-dds-header CONFIG REQUIRED)
@@ -8,7 +9,7 @@ find_package(mo2-dds-header CONFIG REQUIRED)
 add_library(bsatk STATIC)
 target_link_libraries(bsatk
 	PUBLIC mo2::dds-header
-	PRIVATE ZLIB::ZLIB lz4::lz4 Boost::thread Boost::interprocess
+	PRIVATE ZLIB::ZLIB lz4::lz4 Boost::headers Boost::thread
 )
 
 target_sources(bsatk
