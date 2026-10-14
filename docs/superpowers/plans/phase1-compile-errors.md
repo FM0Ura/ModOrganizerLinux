@@ -82,11 +82,12 @@ the unticked items above (`installationmanager.h` 46, `settings.h` 29,
 
 The environment layer except `env.cpp`/`env_linux.cpp` (`envmetrics`, `envmodule`,
 `envsecurity`, `envshell`, `envshortcut`, `envwindows` and their `*_linux.cpp`, plus
-`envdump_linux.cpp`) is the static library `organizer_env`, linked by the application
-and by `organizer_tests` (19 tests). The paths of the data tree
+`envdump_linux.cpp`) is the static library `organizer_env`, and `archivefiletree.cpp`
+(the file tree of archives used by the installation) is `organizer_archivetree`; both
+are linked by the application and by `organizer_tests` (22 tests). The paths of the data tree
 (`FileEntry::getFullPath()`, `getRelativePath()`) use the separator of the system,
 and `MOShared::normalizeSeparators()` (`shared/util.h`) converts the backslashes of
-paths from user files. `ninja -k 0` after Task 10: 149 objects for the application,
+paths from user files. `ninja -k 0` after Task 10: 148 objects for the application,
 **96 failed** (one more than after Task 9: `env.cpp` is now built and stops at
 `settings.h`); the first errors are the same unticked items as above.
 
