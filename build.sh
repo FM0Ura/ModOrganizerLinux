@@ -4,7 +4,8 @@
 #   ./build.sh [--only <target>]... [--allow-fail <target>]... [--tests] [--list]
 #
 # --allow-fail <target>: a failure of that target is reported but does not stop the
-# build or fail the run (used by CI for targets that are still being ported).
+# build or fail the run (used by CI for targets that are still being ported); the
+# modorganizer unit tests (--tests) are not covered by it.
 #
 # Environment: MO2_SRC (default ../modorganizer) is the application fork.
 # Works inside the build container and in any environment that provides the
@@ -18,7 +19,8 @@ INSTALL="$ROOT/install"
 BUILD_OUT="$ROOT/build-out"
 
 # Build order. Each target <t> is built by a function build_<t> (dashes become
-# underscores). A target without such a function is "not implemented yet".
+# underscores). A target without such a function is "not implemented yet". An optional
+# function pre_<t> runs first, outside --allow-fail.
 ALL_TARGETS=(
     7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk lootcli
     modorganizer game_bethesda installer_quick installer_manual installer_fomod
@@ -38,11 +40,11 @@ is_known() { local t; for t in "${ALL_TARGETS[@]}"; do [[ $t == "$1" ]] && retur
 # Prepend the install prefix to CMAKE_PREFIX_PATH (keeping what the environment gave us).
 export CMAKE_PREFIX_PATH="$INSTALL${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 
-# cmake_build <target> <source-dir> [extra configure args...]
-# Generic CMake target: configure, build, (ctest with --tests), install.
+# cmake_configure <target> <source-dir> [extra configure args...]
+# Configures $BUILD_OUT/<target>; BUILD_TESTING follows --tests.
 # CMAKE_INSTALL_LIBDIR is pinned to lib: Fedora would default to lib64, but the
 # install tree keeps every library in lib/ (the application's RPATH is $ORIGIN/../lib).
-cmake_build() {
+cmake_configure() {
     local name="$1" src="$2"; shift 2
     local bdir="$BUILD_OUT/$name" testing=OFF
     [[ $TESTS == 1 ]] && testing=ON
@@ -54,6 +56,14 @@ cmake_build() {
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH//:/;}" \
         -DBUILD_TESTING="$testing" "$@"
+}
+
+# cmake_build <target> <source-dir> [extra configure args...]
+# Generic CMake target: configure, build, (ctest with --tests), install.
+cmake_build() {
+    local name="$1" src="$2"; shift 2
+    local bdir="$BUILD_OUT/$name"
+    cmake_configure "$name" "$src" "$@"
     log "build $name"
     cmake --build "$bdir"
     if [[ $TESTS == 1 ]]; then
@@ -149,6 +159,19 @@ build_modorganizer() {
     cmake_build modorganizer "$MO2_SRC" --preset linux-gcc
 }
 
+# With --tests, the unit tests of the application (organizer_tests: the data tree and
+# the Linux env layer, which build without the rest of the application) are built and
+# run before the application. This is a pre_ step: it runs even when the application
+# itself is in --allow-fail, and its failure always fails the run.
+pre_modorganizer() {
+    [[ $TESTS == 1 ]] || return 0
+    cmake_configure modorganizer "$MO2_SRC" --preset linux-gcc
+    log "build organizer_tests"
+    cmake --build "$BUILD_OUT/modorganizer" --target organizer_tests
+    log "test organizer_tests"
+    ctest --test-dir "$BUILD_OUT/modorganizer" --output-on-failure
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
@@ -159,7 +182,7 @@ while (($#)); do
         --allow-fail=*) ALLOW_FAIL+=("${1#--allow-fail=}"); shift ;;
         --tests) TESTS=1; shift ;;
         --list) printf '%s\n' "${ALL_TARGETS[@]}"; exit 0 ;;
-        -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
@@ -182,6 +205,10 @@ for t in "${ALL_TARGETS[@]}"; do
         skipped+=("$t"); continue
     fi
     log "target $t"
+    # optional pre_<target> step, never covered by --allow-fail
+    if declare -F "pre_${t//-/_}" >/dev/null; then
+        "pre_${t//-/_}"
+    fi
     if [[ " ${ALLOW_FAIL[*]} " == *" $t "* ]]; then
         # run in a subshell outside any condition so that set -e still applies inside
         set +e
