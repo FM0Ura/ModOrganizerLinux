@@ -1,6 +1,7 @@
 #ifndef ESPTYPES_H
 #define ESPTYPES_H
 
+#include <cstring>
 #include <istream>
 
 template <typename T>

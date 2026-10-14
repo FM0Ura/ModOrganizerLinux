@@ -1,5 +1,6 @@
 #include "record.h"
 #include "espexceptions.h"
+#include <cstring>
 
 ESP::Record::Record() : m_Header(), m_FormVersion(), m_Data(), m_OblivionStyle(false) {}
 

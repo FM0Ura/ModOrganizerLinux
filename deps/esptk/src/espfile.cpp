@@ -3,6 +3,9 @@
 #include "subrecord.h"
 #include "tes3subrecord.h"
 #include <bitset>
+#include <cstdio>
+#include <cstring>
+#include <filesystem>
 #include <sstream>
 
 ESP::File::File(const std::string& fileName)
@@ -13,7 +16,7 @@ ESP::File::File(const std::string& fileName)
 
 ESP::File::File(const std::wstring& fileName)
 {
-  m_File.open(fileName, std::fstream::in | std::fstream::binary);
+  m_File.open(std::filesystem::path(fileName), std::fstream::in | std::fstream::binary);
   init();
 }
 
