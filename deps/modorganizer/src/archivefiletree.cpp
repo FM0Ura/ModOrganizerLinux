@@ -23,6 +23,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "archivefiletree.h"
 
 #include "log.h"
+#include "shared/util.h"
 
 using namespace MOBase;
 
@@ -107,7 +108,8 @@ public:  // Overrides:
             dynamic_cast<const ArchiveFileTreeImpl&>(*entry);
         QString tmp = path + archiveEntry.name();
         if (archiveEntry.m_Index != -1) {
-          data[archiveEntry.m_Index]->addOutputFilePath(tmp.toStdWString());
+          data[archiveEntry.m_Index]->addOutputFilePath(
+              MOShared::normalizeSeparators(tmp).toStdWString());
         }
         mapToArchive(*archiveEntry.astree(), tmp, data);
       } else {
@@ -115,7 +117,8 @@ public:  // Overrides:
             dynamic_cast<const ArchiveFileEntry&>(*entry);
         if (archiveFileEntry.m_Index != -1) {
           data[archiveFileEntry.m_Index]->addOutputFilePath(
-              (path + archiveFileEntry.name()).toStdWString());
+              MOShared::normalizeSeparators(path + archiveFileEntry.name())
+                  .toStdWString());
         }
       }
     }
@@ -263,7 +266,8 @@ void mapToArchive(std::vector<FileData*> const& data, It begin, It end)
     auto* aentry = dynamic_cast<const ArchiveFileEntry*>(entry.get());
 
     if (aentry->m_Index != -1) {
-      data[aentry->m_Index]->addOutputFilePath(aentry->path().toStdWString());
+      data[aentry->m_Index]->addOutputFilePath(
+          MOShared::normalizeSeparators(aentry->path()).toStdWString());
     }
 
     if (entry->isDir()) {

@@ -83,8 +83,9 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 #
 # On Linux, the data tree (shared/ file register) and the filesystem part of env are
 # built as a static library, organizer_datatree, and the rest of env, except env.cpp
-# (which needs the settings), as organizer_env; the application links both and so do
-# the unit tests (tests/), without the rest of the application.
+# (which needs the settings), as organizer_env, and the file tree of archives used by
+# the installation as organizer_archivetree; the application links them and so do the
+# unit tests (tests/), without the rest of the application.
 set(_organizer_datatree_sources
 	shared/directoryentry.cpp
 	shared/fileentry.cpp
@@ -121,7 +122,8 @@ foreach(_source IN LISTS _organizer_sources)
 		if (_relative MATCHES "^(envfs|spawn|usvfsconnector|shared/windows_error|shared/util)\\.cpp$"
 				OR _relative MATCHES "\\.(rc|manifest)$"
 				OR _relative IN_LIST _organizer_datatree_sources
-				OR _relative IN_LIST _organizer_env_sources)
+				OR _relative IN_LIST _organizer_env_sources
+				OR _relative STREQUAL "archivefiletree.cpp")
 			continue()
 		endif()
 	endif()
@@ -148,7 +150,14 @@ if (NOT WIN32)
 	target_precompile_headers(organizer_env REUSE_FROM organizer_datatree)
 	target_link_libraries(organizer_env PUBLIC organizer_datatree)
 
-	target_link_libraries(organizer PRIVATE organizer_env organizer_datatree)
+	add_library(organizer_archivetree STATIC archivefiletree.cpp)
+	mo2_configure_target(organizer_archivetree
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+	target_precompile_headers(organizer_archivetree REUSE_FROM organizer_datatree)
+	target_link_libraries(organizer_archivetree PUBLIC organizer_datatree mo2::archive)
+
+	target_link_libraries(organizer PRIVATE
+		organizer_archivetree organizer_env organizer_datatree)
 endif()
 
 # we add translations "manually" to handle MO2_INSTALL_IS_BIN

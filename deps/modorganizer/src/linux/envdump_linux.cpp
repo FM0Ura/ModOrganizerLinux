@@ -2,19 +2,29 @@
 // coredumpOther() are in env.cpp and write minidumps).
 //
 // Mod Organizer doesn't write dump files on Linux: the handlers installed by
-// setCrashHandlers() write a backtrace to stderr and to the log, then re-raise the
-// signal with its default action so that the system writes its own core dump (a core
-// file or systemd-coredump, depending on its configuration). CoreDumpTypes is kept for
-// the settings but has no effect.
+// setCrashHandlers() write a backtrace to stderr and to the crash log file, then
+// re-raise the signal with its default action so that the system writes its own core
+// dump (a core file or systemd-coredump, depending on its configuration).
+// CoreDumpTypes is kept for the settings but has no effect.
+//
+// The handlers only do async-signal-safe things: the crash log is opened by
+// setCrashHandlers(), not in the handler, the backtrace is written with
+// backtrace_symbols_fd() (backtrace() is called once beforehand, so that libgcc is
+// already loaded and it doesn't allocate), and nothing goes through spdlog or malloc,
+// which could be the cause of the crash (heap corruption, a crash while logging) and
+// would deadlock. In case something blocks anyway (a write to a hung file system), a
+// watchdog alarm ends the process with the original signal.
 
 #include "../envdump.h"
 #include "../envmodule.h"
 
 #include <execinfo.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -34,13 +44,23 @@ namespace
 
   constexpr int MaxFrames = 128;
 
+  // seconds before the watchdog ends a crash handler that blocks
+  constexpr unsigned int WatchdogSeconds = 10;
+
   // the signals of a crash
   constexpr int CrashSignals[] = {SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT};
 
-  void writeStderr(const char* s)
+  // descriptor of the crash log, -1 if none
+  std::atomic<int> g_logFd{-1};
+
+  // the signal being handled, for the watchdog
+  volatile sig_atomic_t g_crashSignal = 0;
+
+  // writes to a descriptor, async-signal-safe
+  //
+  void writeFd(int fd, const char* s)
   {
-    // async-signal-safe
-    [[maybe_unused]] const auto r = ::write(STDERR_FILENO, s, std::strlen(s));
+    [[maybe_unused]] const auto r = ::write(fd, s, std::strlen(s));
   }
 
   // writes " (signal N)" to `out`, async-signal-safe
@@ -74,38 +94,79 @@ namespace
     out[i] = 0;
   }
 
-  // writes the backtrace of the current thread to stderr, then to the log
+  // writes the backtrace of the current thread to stderr, then to the crash log (all
+  // of it to stderr first, in case writing to the log blocks), async-signal-safe
+  // once backtrace() has been called once
   //
-  void logBacktrace(const char* what)
+  void writeBacktrace(const char* what)
   {
     void* frames[MaxFrames];
     const int n = ::backtrace(frames, MaxFrames);
 
-    writeStderr("ModOrganizer has crashed");
-    writeStderr(what);
-    writeStderr(", backtrace:\n");
-    ::backtrace_symbols_fd(frames, n, STDERR_FILENO);
+    const int fds[] = {STDERR_FILENO, g_logFd.load()};
 
-    // not async-signal-safe, but this is the last thing the process does
-    if (char** symbols = ::backtrace_symbols(frames, n)) {
-      log::error("ModOrganizer has crashed{}, backtrace:", what);
-
-      for (int i = 0; i < n; ++i) {
-        log::error("  {}", symbols[i]);
+    for (const int fd : fds) {
+      if (fd == -1) {
+        continue;
       }
 
-      std::free(symbols);
+      writeFd(fd, "ModOrganizer has crashed");
+      writeFd(fd, what);
+      writeFd(fd, ", backtrace:\n");
+      ::backtrace_symbols_fd(frames, n, fd);
     }
+
+    if (fds[1] != -1) {
+      ::fsync(fds[1]);
+    }
+  }
+
+  // ends the process with the signal being handled, async-signal-safe
+  //
+  [[noreturn]] void terminateWith(int sig)
+  {
+    ::signal(sig, SIG_DFL);
+
+    // the signal is blocked while its handler runs
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, sig);
+    ::pthread_sigmask(SIG_UNBLOCK, &set, nullptr);
+
+    ::raise(sig);
+
+    // the default action of SIGABRT, SIGSEGV, ... ends the process; just in case
+    ::_exit(128 + sig);
+  }
+
+  // the crash handler took too long
+  //
+  void onWatchdog(int)
+  {
+    const int sig = g_crashSignal;
+
+    // not to the crash log, writing to it may be what blocks
+    const char msg[]              = "crash handler timed out\n";
+    [[maybe_unused]] const auto r = ::write(STDERR_FILENO, msg, sizeof(msg) - 1);
+
+    terminateWith(sig != 0 ? sig : SIGABRT);
   }
 
   void onCrashSignal(int sig)
   {
     // the handler was installed with SA_RESETHAND: the action is the default one
     // again, a crash in here ends the process
+    g_crashSignal = sig;
+
+    ::signal(SIGALRM, onWatchdog);
+    ::alarm(WatchdogSeconds);
+
     char what[32];
     signalText(sig, what, sizeof(what));
 
-    logBacktrace(what);
+    writeBacktrace(what);
+
+    ::alarm(0);
 
     // delivered with the default action when the handler returns, which ends the
     // process and makes the system write a core dump; a fault (SIGSEGV, ...) would
@@ -115,12 +176,27 @@ namespace
 
 }  // namespace
 
-void setCrashHandlers()
+void setCrashHandlers(const std::filesystem::path& logFile)
 {
   // backtrace() loads libgcc the first time it is called, which allocates: not in
   // the handler
   void* frames[1];
   ::backtrace(frames, 1);
+
+  if (!logFile.empty()) {
+    const int fd =
+        ::open(logFile.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+
+    if (fd == -1) {
+      log::error("can't open crash log '{}', {}", logFile.string(),
+                 std::strerror(errno));
+    } else {
+      const int old = g_logFd.exchange(fd);
+      if (old != -1) {
+        ::close(old);
+      }
+    }
+  }
 
   // an alternate stack for this thread, so that a stack overflow can be reported
   static std::vector<char> altStack(std::max<std::size_t>(SIGSTKSZ, 64 * 1024));
@@ -144,9 +220,25 @@ void setCrashHandlers()
 
 bool coredump(const wchar_t*, CoreDumpTypes)
 {
-  logBacktrace("");
+  // not called from a signal handler, the log can be used
+  void* frames[MaxFrames];
+  const int n = ::backtrace(frames, MaxFrames);
+
+  writeBacktrace("");
+
+  if (char** symbols = ::backtrace_symbols(frames, n)) {
+    log::error("ModOrganizer has crashed, backtrace:");
+
+    for (int i = 0; i < n; ++i) {
+      log::error("  {}", symbols[i]);
+    }
+
+    std::free(symbols);
+  }
+
   std::wclog << L"the system writes the core dump, see its configuration "
                 L"(coredumpctl, /proc/sys/kernel/core_pattern)\n";
+
   return true;
 }
 
