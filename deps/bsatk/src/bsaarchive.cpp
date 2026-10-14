@@ -36,8 +36,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <queue>
 #include <sys/stat.h>
 #include <zlib.h>
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#else
+#include <filesystem>
+#endif
 
 using std::fstream;
 
@@ -45,6 +49,19 @@ using namespace boost::posix_time;
 
 namespace BSA
 {
+
+// Archive paths use '\\' as separator; the native one is '/' outside of Windows.
+static std::string nativePath(const std::string& directory,
+                              const std::string& archivePath)
+{
+#ifdef _WIN32
+  return directory + "\\" + archivePath;
+#else
+  std::string result = directory + "/" + archivePath;
+  std::replace(result.begin() + directory.size() + 1, result.end(), '\\', '/');
+  return result;
+#endif
+}
 
 Archive::Archive()
     : m_RootFolder(new Folder), m_ArchiveFlags(FLAG_HASDIRNAMES | FLAG_HASFILENAMES),
@@ -1017,8 +1034,7 @@ void Archive::extractFiles(const std::string& targetDirectory,
 
     DataBuffer dataBuffer = fileInfo.data;
 
-    std::string fileName = makeString("%s\\%s", targetDirectory.c_str(),
-                                      fileInfo.file->getFilePath().c_str());
+    std::string fileName = nativePath(targetDirectory, fileInfo.file->getFilePath());
     if (!overwrite && fileExists(fileName)) {
       continue;
     }
@@ -1134,8 +1150,13 @@ void Archive::createFolders(const std::string& targetDirectory, Folder::Ptr fold
 {
   for (std::vector<Folder::Ptr>::iterator iter = folder->m_SubFolders.begin();
        iter != folder->m_SubFolders.end(); ++iter) {
-    std::string subDirName = targetDirectory + "\\" + (*iter)->getName();
+    std::string subDirName = nativePath(targetDirectory, (*iter)->getName());
+#ifdef _WIN32
     ::CreateDirectoryA(subDirName.c_str(), nullptr);
+#else
+    std::error_code ec;
+    std::filesystem::create_directory(subDirName, ec);
+#endif
     createFolders(subDirName, *iter);
   }
 }

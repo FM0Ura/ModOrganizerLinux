@@ -6,6 +6,12 @@ project(bsatk)
 
 add_subdirectory(src)
 
+# not include(CTest): the tests are opt-in (build.sh --tests passes -DBUILD_TESTING=ON)
+if (BUILD_TESTING AND NOT WIN32)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
+
 configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/config.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/mo2-bsatk-config.cmake"
   INSTALL_DESTINATION "lib/cmake/mo2-bsatk"
