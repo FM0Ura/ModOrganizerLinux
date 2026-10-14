@@ -31,44 +31,19 @@ using std::fstream;
 namespace BSA
 {
 
-// Folder and file names inside an archive use '\\' as separator. std::filesystem::path
-// only splits those on Windows, so the names are split by hand.
-static bool isSeparator(char c)
+#ifndef _WIN32
+// Names inside an archive use '\\' as separator, std::filesystem::path only splits
+// on '/' here.
+static std::filesystem::path archivePath(std::string name)
 {
-  return c == '\\' || c == '/';
-}
-
-static std::vector<std::string> splitArchivePath(const std::string& path)
-{
-  std::vector<std::string> parts;
-  size_t start = 0;
-  while (start <= path.size()) {
-    size_t end = start;
-    while (end < path.size() && !isSeparator(path[end])) {
-      ++end;
+  for (char& c : name) {
+    if (c == '\\') {
+      c = '/';
     }
-    if (end > start) {
-      parts.push_back(path.substr(start, end - start));
-    }
-    start = end + 1;
   }
-  if (parts.empty()) {
-    parts.push_back(std::string());
-  }
-  return parts;
+  return std::filesystem::path(name);
 }
-
-static std::string joinArchivePath(const std::vector<std::string>& parts, size_t from)
-{
-  std::string result;
-  for (size_t i = from; i < parts.size(); ++i) {
-    if (!result.empty()) {
-      result += '\\';
-    }
-    result += parts[i];
-  }
-  return result;
-}
+#endif
 
 Folder::Folder() : m_Parent(nullptr), m_Name()
 {
@@ -82,8 +57,13 @@ Folder::Ptr Folder::readFolder(std::fstream& file, BSAUInt fileNamesLength,
 {
   Folder::Ptr result(new Folder());
   result->m_NameHash  = readType<BSAHash>(file);
-  result->m_FileCount = readType<BSAULong>(file);
+#ifdef _WIN32
+  result->m_FileCount = readType<unsigned long>(file);
+  result->m_Offset    = readType<unsigned long>(file);
+#else
+  result->m_FileCount = readType<BSAULong>(file);  // unsigned long is 64 bits here
   result->m_Offset    = readType<BSAULong>(file);
+#endif
   std::streamoff pos  = file.tellg();
 
   file.seekg(result->m_Offset - fileNamesLength, fstream::beg);
@@ -177,13 +157,21 @@ std::string Folder::getFullPath() const
 
 void Folder::addFolderInt(Folder::Ptr folder)
 {
-  const std::vector<std::string> parts = splitArchivePath(folder->m_Name);
-  const std::string firstStr           = parts.front();
-  const std::string remaining          = joinArchivePath(parts, 1);
+#ifdef _WIN32
+  std::filesystem::path path(folder->m_Name);
+#else
+  std::filesystem::path path = archivePath(folder->m_Name);
+#endif
+  auto it              = path.begin();
+  std::string firstStr = it->string();
+  std::filesystem::path remaining;
+  for (++it; it != path.end(); ++it) {
+    remaining /= *it;
+  }
 
   if (m_SubFoldersByName.contains(firstStr)) {
     // remove the matched part of the path and recurse
-    folder->m_Name = remaining;
+    folder->m_Name = remaining.string();
     m_SubFoldersByName.at(firstStr)->addFolderInt(folder);
     return;
   }
@@ -199,7 +187,7 @@ void Folder::addFolderInt(Folder::Ptr folder)
     Folder::Ptr dummy(new Folder);
     dummy->m_Parent = this;
     dummy->m_Name   = firstStr;
-    folder->m_Name  = remaining;
+    folder->m_Name  = remaining.string();
     dummy->addFolderInt(folder);
     m_SubFolders.push_back(dummy);
     m_SubFoldersByName[firstStr] = dummy;
@@ -208,14 +196,22 @@ void Folder::addFolderInt(Folder::Ptr folder)
 
 Folder::Ptr Folder::addOrFindFolderInt(Folder* folder)
 {
-  const std::vector<std::string> parts = splitArchivePath(folder->m_Name);
-  const std::string firstStr           = parts.front();
-  const std::string remaining          = joinArchivePath(parts, 1);
+#ifdef _WIN32
+  std::filesystem::path path(folder->m_Name);
+#else
+  std::filesystem::path path = archivePath(folder->m_Name);
+#endif
+  auto it              = path.begin();
+  std::string firstStr = it->string();
+  std::filesystem::path remaining;
+  for (++it; it != path.end(); ++it) {
+    remaining /= *it;
+  }
 
   if (m_SubFoldersByName.contains(firstStr)) {
     if (!remaining.empty()) {
       // remove the matched part of the path and recurse
-      folder->m_Name = remaining;
+      folder->m_Name = remaining.string();
       return m_SubFoldersByName.at(firstStr)->addOrFindFolderInt(folder);
     } else {
       return m_SubFoldersByName.at(firstStr);
@@ -234,7 +230,7 @@ Folder::Ptr Folder::addOrFindFolderInt(Folder* folder)
     Folder::Ptr dummy(new Folder);
     dummy->m_Parent    = this;
     dummy->m_Name      = firstStr;
-    folder->m_Name     = remaining;
+    folder->m_Name     = remaining.string();
     Folder::Ptr result = dummy->addOrFindFolderInt(folder);
     m_SubFolders.push_back(dummy);
     m_SubFoldersByName[firstStr] = dummy;
@@ -260,25 +256,23 @@ Folder::Ptr Folder::addFolderFromFile(std::string filePath, BSAUInt size,
                                       FO4TextureHeader header,
                                       std::vector<FO4TextureChunk>& texChunks)
 {
-  size_t lastSeparator = filePath.size();
-  while (lastSeparator > 0 && !isSeparator(filePath[lastSeparator - 1])) {
-    --lastSeparator;
-  }
-  // everything before the last separator is the folder, the rest the file name
-  const std::string folderName =
-      lastSeparator > 0 ? filePath.substr(0, lastSeparator - 1) : std::string();
+#ifdef _WIN32
+  std::filesystem::path file(filePath);
+#else
+  std::filesystem::path file = archivePath(filePath);
+#endif
 
   Folder* tempFolder = new Folder();
 
   tempFolder->m_NameHash = calculateBSAHash(filePath);
-  tempFolder->m_Name     = folderName;
+  tempFolder->m_Name     = file.parent_path().string();
   Folder::Ptr result     = addOrFindFolderInt(tempFolder);
 
   if (result.get() != tempFolder) {
     delete tempFolder;
   }
 
-  std::string fileName = filePath.substr(lastSeparator);
+  std::string fileName = file.filename().string();
 
   result->m_FileCount++;
   result->m_Files.push_back(File::Ptr(new File(fileName, result.get(), size, offset,

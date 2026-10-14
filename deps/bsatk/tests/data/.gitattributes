@@ -1,0 +1,5 @@
+# fixtures are compared byte for byte (files/ is what skyrimse.bsa contains), so their
+# line endings are never converted; the generator script keeps LF line endings
+* -text
+*.bsa binary
+make_fixtures.py text eol=lf
