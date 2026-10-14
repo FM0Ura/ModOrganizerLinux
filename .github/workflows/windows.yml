@@ -1,0 +1,104 @@
+name: Windows
+
+# Builds the application fork (FM0Ura/modorganizer) on Windows with upstream
+# ModOrganizer2 dependencies (master), the way upstream CI builds modorganizer.
+# The fork has GitHub Actions disabled, so this workflow lives in the superproject.
+# The fork branch follows the same-name rule as linux.yml: the branch of this ref if
+# the fork has it, else master; workflow_dispatch can name another fork ref.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      fork-ref:
+        description: Branch, tag or commit of FM0Ura/modorganizer to build (default same-name branch, else master)
+        required: false
+        default: ""
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # vcpkg binary cache for the ports built by every configure (uibase, archive, ...)
+  VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Pick fork ref
+        id: fork
+        shell: bash
+        env:
+          INPUT_REF: ${{ inputs.fork-ref }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if [[ -n $INPUT_REF ]]; then
+            ref=$INPUT_REF
+          elif git ls-remote --exit-code --heads https://github.com/FM0Ura/modorganizer "refs/heads/$BRANCH" >/dev/null; then
+            ref=$BRANCH
+          else
+            ref=master
+          fi
+          echo "Building FM0Ura/modorganizer at $ref"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-windows-${{ github.run_id }}
+          restore-keys: vcpkg-windows-
+
+      - name: Create vcpkg binary cache directory
+        shell: bash
+        run: mkdir -p vcpkg-cache
+
+      # Qt, vcpkg and the upstream dependencies (master of each ModOrganizer2 repository),
+      # built and installed into ./install. The action would check out *this* repository
+      # as the project to build, so its checkout/configure/build steps are skipped and the
+      # fork is built below with the same commands.
+      - name: Build dependencies with mob action
+        id: mob
+        uses: ModOrganizer2/build-with-mob-action@master
+        with:
+          mo2-owner: ModOrganizer2
+          mo2-branch: master
+          mo2-skip-checkout: true
+          qt-modules: qtpositioning qtwebchannel qtwebengine qtwebsockets qtnetworkauth
+          mo2-dependencies: usvfs uibase bsatk esptk archive lootcli
+
+      - name: Check out application fork
+        uses: actions/checkout@v4
+        with:
+          repository: FM0Ura/modorganizer
+          ref: ${{ steps.fork.outputs.ref }}
+          path: build/modorganizer
+
+      - name: Configure ModOrganizer
+        shell: pwsh
+        working-directory: build/modorganizer
+        run: |
+          cmake --preset vs2022-windows `
+            "-DCMAKE_PREFIX_PATH=${{ steps.mob.outputs.cmake-prefix-path }}" `
+            "-DCMAKE_INSTALL_PREFIX=${{ steps.mob.outputs.cmake-install-path }}" `
+            "-DBUILD_TESTING=ON"
+
+      - name: Build ModOrganizer
+        shell: pwsh
+        working-directory: build/modorganizer
+        run: cmake --build --preset vs2022-windows --config RelWithDebInfo --parallel 16
+
+      - name: Install ModOrganizer
+        shell: pwsh
+        working-directory: build/modorganizer
+        run: cmake --install vsbuild --config RelWithDebInfo
+
+      - name: Upload install tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: modorganizer-windows
+          path: install/bin
+          if-no-files-found: error
