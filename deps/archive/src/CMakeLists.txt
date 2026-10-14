@@ -25,6 +25,7 @@ target_sources(archive
 		opencallback.h
 		propertyvariant.cpp
 		propertyvariant.h
+		sevenzip_strings.h
 		unknown_impl.h
 	PUBLIC
 		FILE_SET HEADERS

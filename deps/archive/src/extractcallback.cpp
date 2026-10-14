@@ -32,6 +32,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include "archive.h"
 #include "extractcallback.h"
 #include "propertyvariant.h"
+#include "sevenzip_strings.h"
 
 std::wstring operationResultToString(Int32 operationResult)
 {
@@ -330,7 +331,7 @@ CArchiveExtractCallback::CryptoGetTextPassword(BSTR* passwordOut) ARCHIVE_NOTHRO
     *m_Password = m_PasswordCallback();
   }
 
-  *passwordOut = ::SysAllocString(m_Password->c_str());
+  *passwordOut = ::SysAllocString(ArchiveStrings::toSevenZip(*m_Password).c_str());
   return *passwordOut != 0 ? S_OK : E_OUTOFMEMORY;
 }
 

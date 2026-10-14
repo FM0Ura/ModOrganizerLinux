@@ -22,6 +22,7 @@
 #include <string_view>
 #include <vector>
 
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace fs = std::filesystem;
@@ -261,6 +262,89 @@ TEST_F(ArchiveTest, PasswordCallback)
     EXPECT_FALSE(ok);
     EXPECT_FALSE(fs::exists(m_out / "a.txt") && slurp(m_out / "a.txt") == "hello");
   }
+}
+
+// 7-Zip keeps the names of non-BMP characters as UTF-16 surrogate pairs even in its
+// 32-bit wchar_t strings; the API must hand out (and write to disk) real code points.
+TEST_F(ArchiveTest, NonBmpNames)
+{
+  ASSERT_TRUE(open("emoji.zip"));
+
+  const std::wstring expected = L"smile_\U0001F600.txt";
+  ASSERT_EQ(m_archive->getFileList().size(), 1u);
+  const std::wstring name = m_archive->getFileList()[0]->getArchiveFilePath();
+  EXPECT_EQ(name, expected);
+  ASSERT_EQ(name.size(), 11u);  // one wchar_t for the emoji, not two surrogates
+
+  ASSERT_TRUE(extractAll());
+  std::set<std::string> names;
+  for (const auto& e : fs::directory_iterator(m_out)) {
+    names.insert(e.path().filename().string());
+  }
+  EXPECT_EQ(names, std::set<std::string>{"smile_\xF0\x9F\x98\x80.txt"});
+  EXPECT_EQ(slurp(m_out / "smile_\xF0\x9F\x98\x80.txt"), "emoji");
+}
+
+TEST_F(ArchiveTest, PasswordWithNonBmpCharacter)
+{
+  // password.7z-like archive protected with "pä<U+1F600>mo2" (see make_fixtures.sh)
+  ASSERT_TRUE(open("password-emoji.7z", [] {
+    return std::wstring(L"p\u00E4\U0001F600mo2");
+  }));
+  ASSERT_TRUE(extractAll());
+  EXPECT_EQ(slurp(m_out / "a.txt"), "hello");
+}
+
+TEST_F(ArchiveTest, WrongNonBmpPasswordFails)
+{
+  bool ok = open("password-emoji.7z", [] {
+    return std::wstring(L"p\u00E4mo2");
+  });
+  if (ok) {
+    ok = extractAll();
+  }
+  EXPECT_FALSE(ok);
+}
+
+// Permissions stored in the archive are applied masked by the umask, without
+// setuid/setgid/sticky bits and only for regular files and directories. The owner
+// always keeps read/write (and search for directories) access.
+TEST_F(ArchiveTest, UnixModesAreMaskedAndSafe)
+{
+  const mode_t um = ::umask(0);
+  ::umask(um);
+
+  ASSERT_TRUE(open("modes.zip"));
+  ASSERT_TRUE(extractAll());
+
+  auto modeOf = [&](const char* name) {
+    struct stat st;
+    EXPECT_EQ(::lstat((m_out / name).c_str(), &st), 0) << name;
+    return st;
+  };
+  const mode_t special = S_ISUID | S_ISGID | S_ISVTX;
+
+  struct Expect
+  {
+    const char* name;
+    mode_t stored;
+    mode_t extra;  // bits always granted to the owner
+  };
+  for (const Expect& e :
+       {Expect{"exec.sh", 0755, 0600}, Expect{"private.txt", 0600, 0600},
+        Expect{"readonly.txt", 0444, 0600}, Expect{"suid.bin", 0755, 0600},
+        Expect{"sticky.txt", 0777, 0600}, Expect{"bin", 0700, 0700},
+        Expect{"open", 0777, 0700}}) {
+    SCOPED_TRACE(e.name);
+    const auto st = modeOf(e.name);
+    EXPECT_EQ(st.st_mode & special, 0u);
+    EXPECT_EQ(st.st_mode & 0777, (e.stored & ~um) | e.extra);
+  }
+
+  // the FIFO entry is extracted as a plain file whose stored mode is ignored
+  const auto fifo = modeOf("fifo");
+  EXPECT_TRUE(S_ISREG(fifo.st_mode));
+  EXPECT_EQ(fifo.st_mode & (special | 0777), static_cast<mode_t>(0666 & ~um));
 }
 
 TEST(ArchiveLibraryTest, MissingLibraryInvalidatesArchive)

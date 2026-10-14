@@ -50,9 +50,11 @@ namespace
 //
 // Windows: dlls/7zip.dll.
 //
-// Linux: the library named by the MO2_7Z_LIBRARY environment variable if set (used by
-// the tests), else 7z.so in <directory of the executable>/../lib if it exists, else
-// "7z.so" searched by the dynamic loader.
+// Linux: 7z.so in <directory of the executable>/../lib. The MO2_7Z_LIBRARY environment
+// variable, if set, overrides it (a test/development override, e.g. the unit tests
+// point it at the freshly built library). There is deliberately no fallback to a bare
+// "7z.so" searched by the dynamic loader, which could pick up an incompatible system
+// copy (p7zip). An empty result means that the executable could not be located.
 std::string libraryPath()
 {
 #ifdef _WIN32
@@ -64,13 +66,10 @@ std::string libraryPath()
 
   std::error_code ec;
   const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
-  if (!ec) {
-    auto candidate = exe.parent_path().parent_path() / "lib" / "7z.so";
-    if (std::filesystem::exists(candidate, ec)) {
-      return candidate.string();
-    }
+  if (ec) {
+    return {};
   }
-  return "7z.so";
+  return (exe.parent_path().parent_path() / "lib" / "7z.so").string();
 #endif
 }
 

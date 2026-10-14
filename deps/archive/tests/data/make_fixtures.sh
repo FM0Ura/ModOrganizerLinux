@@ -18,6 +18,13 @@
 #   unicode.7z              Ünïcödé/日本.txt = "unicode"
 #   password.7z             a.txt, dir/B.txt, password "mo2", encrypted headers
 #   corrupt.7z              simple.7z truncated to its first half
+#   emoji.zip               smile_😀.txt (a non-BMP name) = "emoji"
+#   password-emoji.7z       a.txt = "hello", password "pä😀mo2" (a non-BMP character),
+#                           encrypted headers; also opens with py7zr, which encodes the
+#                           password independently as UTF-16
+#   modes.zip               Unix permissions (see test_archive.cpp): exec.sh 0755,
+#                           private.txt 0600, readonly.txt 0444, suid.bin 04755,
+#                           sticky.txt 01777, a FIFO entry, bin/ 0700, open/ 01777
 #
 # 7-Zip uses a random salt for password.7z, so regenerating it changes its bytes (the
 # other files are reproducible).
@@ -46,6 +53,7 @@ sz() {  # sz <archive> <files...> [extra switches]; run from the content directo
 
 (cd "$WORK/simple" && sz "$HERE/simple.7z" a.txt dir)
 (cd "$WORK/simple" && sz "$HERE/password.7z" a.txt dir -pmo2 -mhe=on)
+(cd "$WORK/simple" && sz "$HERE/password-emoji.7z" a.txt -p'pä😀mo2' -mhe=on)
 (cd "$WORK/unicode" && sz "$HERE/unicode.7z" Ünïcödé)
 
 size=$(stat -c %s "$HERE/simple.7z")
@@ -63,4 +71,22 @@ def write(name, entries):
             z.writestr(info, data)
 write("simple.zip", [("a.txt", b"hello"), ("dir/B.txt", b"world")])
 write("backslash.zip", [("a.txt", b"hello"), ("dir\\B.txt", b"world")])
+write("emoji.zip", [("smile_\U0001F600.txt", b"emoji")])
+
+# Unix permissions are stored in the high 16 bits of the external attributes
+with zipfile.ZipFile(f"{here}/modes.zip", "w", zipfile.ZIP_DEFLATED) as z:
+    def add(name, mode, data=b"x"):
+        info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+        info.create_system = 3  # Unix
+        info.compress_type = zipfile.ZIP_DEFLATED
+        info.external_attr = mode << 16
+        z.writestr(info, data)
+    add("exec.sh", 0o100755)
+    add("private.txt", 0o100600)
+    add("readonly.txt", 0o100444)
+    add("suid.bin", 0o104755)
+    add("sticky.txt", 0o101777)
+    add("fifo", 0o010644)
+    add("bin/", 0o040700, b"")
+    add("open/", 0o041777, b"")
 PY

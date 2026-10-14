@@ -20,3 +20,7 @@ target_compile_definitions(archive_tests PRIVATE
 	MO2_ARCHIVE_TEST_7Z="${7zip_LIBRARY}")
 
 add_test(NAME archive_tests COMMAND archive_tests)
+
+# permissions depend on the umask: run those tests with a restrictive one as well
+add_test(NAME archive_tests_umask077
+	COMMAND sh -c "umask 077 && exec \"$0\" --gtest_filter=*UnixModes*" $<TARGET_FILE:archive_tests>)

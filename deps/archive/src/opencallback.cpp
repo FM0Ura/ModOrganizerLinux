@@ -27,6 +27,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "inputstream.h"
 #include "propertyvariant.h"
+#include "sevenzip_strings.h"
 
 #ifdef _WIN32
 #include <atlbase.h>
@@ -82,7 +83,7 @@ CArchiveOpenCallback::CryptoGetTextPassword(BSTR* passwordOut) ARCHIVE_NOTHROW
     return E_ABORT;
   }
   m_Password   = m_PasswordCallback();
-  *passwordOut = ::SysAllocString(m_Password.c_str());
+  *passwordOut = ::SysAllocString(ArchiveStrings::toSevenZip(m_Password).c_str());
   return *passwordOut != 0 ? S_OK : E_OUTOFMEMORY;
 }
 
@@ -92,7 +93,7 @@ STDMETHODIMP
 CArchiveOpenCallback::SetSubArchiveName(const wchar_t* name) ARCHIVE_NOTHROW
 {
   m_SubArchiveMode = true;
-  m_SubArchiveName = name;
+  m_SubArchiveName = ArchiveStrings::fromSevenZip(name);
   return S_OK;
 }
 
@@ -157,7 +158,8 @@ STDMETHODIMP CArchiveOpenCallback::GetStream(const wchar_t* name,
 
   // `name` is just the filename, so build a path from the directory that
   // contained the last file
-  const auto path = m_Path.parent_path() / IO::to_path(name);
+  const auto path =
+      m_Path.parent_path() / IO::to_path(ArchiveStrings::fromSevenZip(name));
 
   if (!exists(m_FileInfo.path()) || m_FileInfo.isDir()) {
     return S_FALSE;

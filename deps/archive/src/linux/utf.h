@@ -46,12 +46,68 @@ inline void appendUtf8(std::string& out, char32_t cp)
   }
 }
 
-// wchar_t string (UTF-32) -> UTF-8. Invalid code points become U+FFFD.
+inline bool isHighSurrogate(char32_t c)
+{
+  return c >= 0xD800 && c <= 0xDBFF;
+}
+
+inline bool isLowSurrogate(char32_t c)
+{
+  return c >= 0xDC00 && c <= 0xDFFF;
+}
+
+// 7-Zip keeps its strings as UTF-16 code units even where wchar_t is 32-bit: a
+// character outside the BMP is a high+low surrogate pair of two wchar_t. These
+// functions convert between that and strings holding real code points.
+
+// UTF-16 code units in wchar_t (from 7-Zip) -> code points. Unpaired surrogates become
+// U+FFFD.
+inline std::wstring combineSurrogates(std::wstring_view s)
+{
+  std::wstring out;
+  out.reserve(s.size());
+  for (std::size_t i = 0; i < s.size(); ++i) {
+    const char32_t c = static_cast<char32_t>(s[i]);
+    if (isHighSurrogate(c) && i + 1 < s.size() &&
+        isLowSurrogate(static_cast<char32_t>(s[i + 1]))) {
+      const char32_t low = static_cast<char32_t>(s[i + 1]);
+      out.push_back(
+          static_cast<wchar_t>(0x10000 + ((c - 0xD800) << 10) + (low - 0xDC00)));
+      ++i;
+    } else if (isHighSurrogate(c) || isLowSurrogate(c)) {
+      out.push_back(0xFFFD);
+    } else {
+      out.push_back(static_cast<wchar_t>(c));
+    }
+  }
+  return out;
+}
+
+// code points -> UTF-16 code units in wchar_t (for 7-Zip).
+inline std::wstring splitToSurrogates(std::wstring_view s)
+{
+  std::wstring out;
+  out.reserve(s.size());
+  for (wchar_t w : s) {
+    const char32_t c = static_cast<char32_t>(w);
+    if (c >= 0x10000 && c <= 0x10FFFF) {
+      out.push_back(static_cast<wchar_t>(0xD800 + ((c - 0x10000) >> 10)));
+      out.push_back(static_cast<wchar_t>(0xDC00 + ((c - 0x10000) & 0x3FF)));
+    } else {
+      out.push_back(w);
+    }
+  }
+  return out;
+}
+
+// wchar_t string (UTF-32) -> UTF-8. Invalid code points become U+FFFD. Surrogate pairs
+// (UTF-16 code units, see above) are combined rather than rejected.
 inline std::string toUtf8(std::wstring_view s)
 {
   std::string out;
-  out.reserve(s.size());
-  for (wchar_t c : s) {
+  const std::wstring combined = combineSurrogates(s);
+  out.reserve(combined.size());
+  for (wchar_t c : combined) {
     appendUtf8(out, static_cast<char32_t>(c));
   }
   return out;

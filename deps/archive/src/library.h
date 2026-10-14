@@ -105,14 +105,14 @@ class ALibrary
 {
 public:
   /**
-   * @param path Path of the shared library. A path without a slash is searched
-   * by
-   *     dlopen() in the usual library directories.
+   * @param path Path of the shared library (null or empty fails).
    */
   ALibrary(const char* path) : m_Module{nullptr}
   {
     // RTLD_LOCAL: the symbols of the 7-Zip library must not interpose ours
-    m_Module = ::dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    if (path != nullptr && *path != '\0') {
+      m_Module = ::dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    }
     if (m_Module == nullptr) {
       updateLastError();
     }
@@ -174,7 +174,7 @@ private:
   void updateLastError()
   {
     const char* message = ::dlerror();
-    m_LastError         = message ? message : "unknown error";
+    m_LastError         = message ? message : "no library path";
   }
 
   void* m_Module;

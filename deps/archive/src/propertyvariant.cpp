@@ -20,6 +20,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "propertyvariant.h"
 
+#include "sevenzip_strings.h"
+
 #ifdef _WIN32
 #include <guiddef.h>
 #endif
@@ -112,7 +114,8 @@ PropertyVariant::operator std::wstring() const
     return L"";
 
   case VT_BSTR:
-    return std::wstring(bstrVal, ::SysStringLen(bstrVal));
+    return ArchiveStrings::fromSevenZip(
+        std::wstring_view(bstrVal, ::SysStringLen(bstrVal)));
 
   default:
     throw std::runtime_error("Property is not a string");
@@ -169,7 +172,7 @@ PropertyVariant& PropertyVariant::operator=(std::wstring const& str)
 {
   clear();
   vt      = VT_BSTR;
-  bstrVal = ::SysAllocString(str.c_str());
+  bstrVal = ::SysAllocString(ArchiveStrings::toSevenZip(str).c_str());
   if (bstrVal == NULL) {
     throw std::bad_alloc();
   }

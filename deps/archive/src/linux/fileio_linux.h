@@ -183,14 +183,18 @@ inline std::filesystem::path make_path(std::wstring const& pathstr)
 
  * * When the archive stores Unix permissions (7-Zip convention: 0x8000 flag and
  * st_mode
- * in the high 16 bits) they are applied, always keeping the owner able to
- * read, write
- * (and enter, for directories) the result. Windows attributes are
- * ignored: a read-only
- * flag would only make the extracted mod files harder to
+ * in the high 16 bits) the permission bits (0777 only, never setuid, setgid
+ * or sticky)
+ * are applied masked by the umask, for regular files and directories
+ * only; the owner
+ * always keeps read and write access (and search for directories).
+ * Windows attributes
+ * are ignored: a read-only flag would only make the extracted mod
+ * files harder to
  * replace.
  *
- * @return true if nothing had to be changed or the change succeeded.
+ * @return true if nothing had to be changed or the
+ * change succeeded.
  */
 bool SetFileAttributes(std::filesystem::path const& path, UInt32 attributes,
                        bool isDirectory) noexcept;

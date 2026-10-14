@@ -14,6 +14,8 @@ version 3 of the
 
 #include <cerrno>
 #include <fcntl.h>
+#include <fstream>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -52,6 +54,28 @@ namespace
   }
 
 }  // namespace
+
+// The umask of the process. Reading it with umask(2) means changing it for a moment,
+// which is not safe with other threads running, so read it from /proc (Linux 4.7)
+// and assume the usual 022 if that is not available.
+static mode_t processUmask()
+{
+  static const mode_t value = [] {
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+      if (line.rfind("Umask:", 0) == 0) {
+        try {
+          return static_cast<mode_t>(std::stoul(line.substr(6), nullptr, 8) & 0777);
+        } catch (...) {
+          break;
+        }
+      }
+    }
+    return static_cast<mode_t>(022);
+  }();
+  return value;
+}
 
 // FileBase
 
@@ -276,7 +300,20 @@ bool SetFileAttributes(std::filesystem::path const& path, UInt32 attributes,
     return true;
   }
 
-  mode_t mode = static_cast<mode_t>((attributes >> 16) & 07777);
+  const mode_t stored = static_cast<mode_t>(attributes >> 16);
+
+  // Only regular files and directories get their permissions; other types (FIFOs,
+  // devices, symlinks, sockets) are extracted as plain files and keep the default mode.
+  // A type of 0 is accepted: some archivers store the permission bits alone.
+  const mode_t type = stored & S_IFMT;
+  if (type != 0 && type != (isDirectory ? S_IFDIR : S_IFREG)) {
+    return true;
+  }
+
+  // Permission bits only: never setuid, setgid or sticky. They are masked by the umask
+  // like for any file created by the process, and the owner can always read and write
+  // (and enter, for directories) what was extracted.
+  mode_t mode = stored & 0777 & ~processUmask();
   mode |= isDirectory ? S_IRWXU : (S_IRUSR | S_IWUSR);
   return ::chmod(path.c_str(), mode) == 0;
 }
