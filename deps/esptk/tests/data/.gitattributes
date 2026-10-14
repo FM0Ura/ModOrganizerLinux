@@ -1,0 +1,5 @@
+# fixtures are binary; the generator script keeps LF line endings
+* -text
+*.esp binary
+*.esm binary
+make_fixtures.py text eol=lf
