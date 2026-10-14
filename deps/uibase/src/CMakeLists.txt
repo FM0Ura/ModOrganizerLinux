@@ -38,9 +38,13 @@ if (NOT WIN32)
 	list(APPEND root_headers ../include/uibase/win32compat.h)
 endif()
 set(interface_headers
+    ../include/uibase/iexecutable.h
+    ../include/uibase/iexecutableslist.h
 	../include/uibase/ifiletree.h
 	../include/uibase/ifiletree_utils.h
 	../include/uibase/iinstallationmanager.h
+	../include/uibase/iinstance.h
+	../include/uibase/iinstancemanager.h
 	../include/uibase/imodinterface.h
 	../include/uibase/imodlist.h
 	../include/uibase/imodrepositorybridge.h
