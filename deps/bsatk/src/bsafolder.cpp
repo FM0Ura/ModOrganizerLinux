@@ -56,7 +56,7 @@ Folder::Ptr Folder::readFolder(std::fstream& file, BSAUInt fileNamesLength,
                                BSAUInt& endPos)
 {
   Folder::Ptr result(new Folder());
-  result->m_NameHash  = readType<BSAHash>(file);
+  result->m_NameHash = readType<BSAHash>(file);
 #ifdef _WIN32
   result->m_FileCount = readType<unsigned long>(file);
   result->m_Offset    = readType<unsigned long>(file);
@@ -64,7 +64,7 @@ Folder::Ptr Folder::readFolder(std::fstream& file, BSAUInt fileNamesLength,
   result->m_FileCount = readType<BSAULong>(file);  // unsigned long is 64 bits here
   result->m_Offset    = readType<BSAULong>(file);
 #endif
-  std::streamoff pos  = file.tellg();
+  std::streamoff pos = file.tellg();
 
   file.seekg(result->m_Offset - fileNamesLength, fstream::beg);
 
