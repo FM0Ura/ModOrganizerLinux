@@ -19,7 +19,7 @@ namespace lootcli
 {
 static const std::set<std::string>
     oldDefaultBranches({"master", "v0.7", "v0.8", "v0.10", "v0.13", "v0.14", "v0.15",
-                        "v0.17", "v0.18", "v0.21"});
+                        "v0.17", "v0.18", "v0.21", "v0.26"});
 static const std::regex GITHUB_REPO_URL_REGEX =
     std::regex(R"(^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$)",
                std::regex::ECMAScript | std::regex::icase);
@@ -85,9 +85,9 @@ void LOOTWorker::setGamePath(const std::string& gamePath)
   m_GamePath = gamePath;
 }
 
-void LOOTWorker::setOutput(const std::string& outputPath)
+void LOOTWorker::setReportOutputPath(const std::string& reportOutputPath)
 {
-  m_OutputPath = outputPath;
+  m_ReportOutputPath = reportOutputPath;
 }
 
 void LOOTWorker::setUpdateMasterlist(bool update)
@@ -98,6 +98,12 @@ void LOOTWorker::setUpdateMasterlist(bool update)
 void LOOTWorker::setPluginListPath(const std::string& pluginListPath)
 {
   m_PluginListPath = pluginListPath;
+}
+
+void LOOTWorker::setSortedPluginListOutputPath(
+    const std::string& sortedPluginListOutputPath)
+{
+  m_SortedPluginListOutputPath = sortedPluginListOutputPath;
 }
 
 void LOOTWorker::setLanguageCode(const std::string& languageCode)
@@ -263,7 +269,7 @@ void LOOTWorker::getSettings(const fs::path& file)
 
           auto path = gameTable["path"].value<std::string>();
           if (path) {
-            newSettings.SetGamePath(std::filesystem::u8path(*path));
+            newSettings.SetGamePath(std::filesystem::path(*path));
           }
 
           auto localPath   = gameTable["local_path"].value<std::string>();
@@ -272,7 +278,7 @@ void LOOTWorker::getSettings(const fs::path& file)
             throw std::runtime_error(
                 "Game settings have local_path and local_folder set, use only one.");
           } else if (localPath) {
-            newSettings.SetGameLocalPath(std::filesystem::u8path(*localPath));
+            newSettings.SetGameLocalPath(std::filesystem::path(*localPath));
           } else if (localFolder) {
             newSettings.SetGameLocalFolder(*localFolder);
           }
@@ -301,7 +307,7 @@ std::optional<std::string> LOOTWorker::GetLocalFolder(const toml::table& table)
   }
 
   if (localPath.has_value()) {
-    return std::filesystem::u8path(*localPath).filename().string();
+    return std::filesystem::path(*localPath).filename().string();
   }
 
   return std::nullopt;
@@ -312,7 +318,7 @@ bool LOOTWorker::IsNehrim(const toml::table& table)
   const auto installPath = table["path"].value<std::string>();
 
   if (installPath.has_value() && !installPath.value().empty()) {
-    const auto path = std::filesystem::u8path(installPath.value());
+    const auto path = std::filesystem::path(installPath.value());
     if (std::filesystem::exists(path)) {
       return std::filesystem::exists(path / "NehrimLauncher.exe");
     }
@@ -344,7 +350,7 @@ bool LOOTWorker::IsEnderal(const toml::table& table,
   const auto installPath = table["path"].value<std::string>();
 
   if (installPath.has_value() && !installPath.value().empty()) {
-    const auto path = std::filesystem::u8path(installPath.value());
+    const auto path = std::filesystem::path(installPath.value());
     if (std::filesystem::exists(path)) {
       return std::filesystem::exists(path / "Enderal Launcher.exe");
     }
@@ -418,9 +424,9 @@ bool LOOTWorker::isLocalPath(const std::string& location, const std::string& fil
   // Could be a local path. Only return true if it points to a non-bare
   // Git repository that currently has the given branch checked out and
   // the given filename exists in the repo root.
-  auto locationPath = std::filesystem::u8path(location);
+  auto locationPath = std::filesystem::path(location);
 
-  auto filePath = locationPath / std::filesystem::u8path(filename);
+  auto filePath = locationPath / std::filesystem::path(filename);
 
   if (!std::filesystem::is_regular_file(filePath)) {
     return false;
@@ -478,7 +484,7 @@ LOOTWorker::migrateMasterlistRepoSettings(loot::GameId GameId, std::string url,
 
   auto filename = "masterlist.yaml";
   if (isLocalPath(url, filename)) {
-    auto localRepoPath = std::filesystem::u8path(url);
+    auto localRepoPath = std::filesystem::path(url);
     if (!isBranchCheckedOut(localRepoPath, branch)) {
       log(loot::LogLevel::warning,
           "The URL " + url +
@@ -513,8 +519,9 @@ LOOTWorker::migrateMasterlistRepoSettings(loot::GameId GameId, std::string url,
 std::string LOOTWorker::migrateMasterlistSource(const std::string& source)
 {
   static const std::vector<std::string> officialMasterlistRepos = {
-      "morrowind", "oblivion",  "skyrim",   "skyrimse",   "skyrimvr",
-      "fallout3",  "falloutnv", "fallout4", "fallout4vr", "enderal"};
+      "morrowind",  "oblivion", "skyrim",    "skyrimse",
+      "skyrimvr",   "fallout3", "falloutnv", "fallout4",
+      "fallout4vr", "enderal",  "starfield", "oblivion-remastered"};
 
   for (const auto& repo : officialMasterlistRepos) {
     for (const auto& branch : oldDefaultBranches) {
@@ -705,7 +712,7 @@ int LOOTWorker::run()
       auto lootGamePath = gamePath();
       if (!fs::is_directory(lootGamePath)) {
         if (fs::exists(lootGamePath)) {
-          throw loot::FileAccessError(
+          throw std::runtime_error(
               "Could not create LOOT folder for game, the path exists but is not "
               "a directory");
         }
@@ -817,10 +824,10 @@ int LOOTWorker::run()
 
     progress(Progress::WritingLoadorder);
 
-    std::ofstream outf(m_PluginListPath);
+    std::ofstream outf(m_SortedPluginListOutputPath);
     if (!outf) {
       log(loot::LogLevel::error,
-          "failed to open " + m_PluginListPath + " to rewrite it");
+          "failed to open " + m_SortedPluginListOutputPath + " to rewrite it");
       return 1;
     }
     outf << "# This file was automatically generated by Mod Organizer." << std::endl;
@@ -830,7 +837,7 @@ int LOOTWorker::run()
     outf.close();
 
     progress(Progress::ParsingLootMessages);
-    std::ofstream(m_OutputPath) << createJsonReport(*gameHandle, sortedPlugins);
+    std::ofstream(m_ReportOutputPath) << createJsonReport(*gameHandle, sortedPlugins);
   } catch (std::system_error& e) {
     log(loot::LogLevel::error, e.what());
     return 1;
@@ -867,7 +874,8 @@ LOOTWorker::createJsonReport(loot::GameInterface& game,
 {
   QJsonObject root;
 
-  set(root, "messages", createMessages(game.GetDatabase().GetGeneralMessages(true)));
+  set(root, "messages",
+      createMessages(game.GetDatabase().GetGeneralMessages(true, true)));
   set(root, "plugins", createPlugins(game, sortedPlugins));
 
   const auto end = std::chrono::high_resolution_clock::now();
@@ -1107,8 +1115,7 @@ lootcli::LogLevels fromLootLogLevel(loot::LogLevel level)
   case L::warning:
     return LC::Warning;
 
-  case L::error:  // fall-through
-  case L::fatal:
+  case L::error:
     return LC::Error;
 
   default:
