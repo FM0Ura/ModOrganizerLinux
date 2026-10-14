@@ -59,6 +59,11 @@ cmake_build() {
 
 # --- per-target build steps (add new ones as build_<target> functions) -------
 
+# 7-Zip is built with its own makefiles; the logic lives in build/7zip/build-7zip.sh.
+build_7zip() {
+    INSTALL="$INSTALL" BUILD_OUT="$BUILD_OUT" "$ROOT/build/7zip/build-7zip.sh"
+}
+
 # cmake_common is a set of CMake modules, no build: copy them like the vcpkg port does.
 build_cmake_common() {
     local dest="$INSTALL/share/mo2-cmake" f
