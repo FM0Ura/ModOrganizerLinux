@@ -73,7 +73,14 @@
 #include <utility>
 #include <vector>
 
+#ifdef MO2_WITH_LIBBSARCH
 #include <libbsarch/bs_archive.h>
+#else
+#include <QFile>
+#include <QTemporaryDir>
+#include <bsatk/bsatk.h>
+#include <stdexcept>
+#endif
 
 #include "organizerproxy.h"
 
@@ -91,6 +98,76 @@ QStringList toStringList(InputIterator current, InputIterator end)
   }
   return result;
 }
+
+#ifndef MO2_WITH_LIBBSARCH
+// reads the file at fileName (relative to the data directory, matched
+// case-insensitively) from a BSA/BA2 archive with bsatk; throws on failure
+static QByteArray readFileFromArchive(const std::wstring& archivePath,
+                                      const QString& fileName)
+{
+  BSA::Archive archive;
+  const BSA::EErrorCode res = archive.read(std::filesystem::path(archivePath), false);
+  if (res != BSA::ERROR_NONE && res != BSA::ERROR_INVALIDHASHES) {
+    throw std::runtime_error("failed to read archive");
+  }
+
+  const auto matches = [](const std::string& name, const QString& part) {
+    return QString::fromStdString(name).compare(part, Qt::CaseInsensitive) == 0;
+  };
+
+  const QStringList parts =
+      QString(fileName).replace('\\', '/').split('/', Qt::SkipEmptyParts);
+  if (parts.isEmpty()) {
+    throw std::runtime_error("empty file name");
+  }
+
+  BSA::Folder::Ptr folder = archive.getRoot();
+  for (qsizetype i = 0; folder && i + 1 < parts.size(); ++i) {
+    BSA::Folder::Ptr subFolder;
+    for (unsigned int j = 0; j < folder->getNumSubFolders(); ++j) {
+      if (matches(folder->getSubFolder(j)->getName(), parts[i])) {
+        subFolder = folder->getSubFolder(j);
+        break;
+      }
+    }
+    folder = subFolder;
+  }
+
+  BSA::File::Ptr file;
+  for (unsigned int j = 0; folder && j < folder->getNumFiles(); ++j) {
+    if (matches(folder->getFile(j)->getName(), parts.last())) {
+      file = folder->getFile(j);
+      break;
+    }
+  }
+  if (!file) {
+    throw std::runtime_error("file not found in archive");
+  }
+
+  // bsatk only extracts to disk
+  QTemporaryDir tempDir;
+  if (!tempDir.isValid() ||
+      archive.extract(file, std::filesystem::path(tempDir.path().toStdWString())) !=
+          BSA::ERROR_NONE) {
+    throw std::runtime_error("failed to extract file from archive");
+  }
+
+  QFile extracted(tempDir.filePath(QString::fromStdString(file->getName())));
+  if (!extracted.open(QIODevice::ReadOnly)) {
+    throw std::runtime_error("failed to open extracted file");
+  }
+  QByteArray data = extracted.readAll();
+
+  // Archive::extract() writes an uncompressed file of a BSA (Oblivion to Skyrim SE)
+  // followed by getFileSize() more bytes read past it; drop them
+  const auto storedSize = static_cast<qsizetype>(file->getFileSize());
+  if (!archive.compressed(file) && data.size() > storedSize) {
+    data.truncate(data.size() - storedSize);
+  }
+
+  return data;
+}
+#endif
 
 OrganizerCore::OrganizerCore(Settings& settings)
     : m_UserInterface(nullptr), m_PluginContainer(nullptr), m_GamePlugin(nullptr),
@@ -1113,11 +1190,16 @@ bool OrganizerCore::previewFileWithAlternatives(QWidget* parent, QString fileNam
       auto archiveFile = directoryStructure()->searchFile(archiveName);
       if (archiveFile.get() != nullptr) {
         try {
+#ifdef MO2_WITH_LIBBSARCH
           libbsarch::bs_archive archiveLoader;
           archiveLoader.load_from_disk(archiveFile->getFullPath());
           libbsarch::memory_blob fileData =
               archiveLoader.extract_to_memory(fileName.toStdWString());
           QByteArray convertedFileData((char*)(fileData.data), fileData.size);
+#else
+          QByteArray convertedFileData =
+              readFileFromArchive(archiveFile->getFullPath(), fileName);
+#endif
           QWidget* wid = m_PluginContainer->previewGenerator().genArchivePreview(
               convertedFileData, filePath);
           if (wid == nullptr) {
