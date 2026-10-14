@@ -14,4 +14,40 @@ This repository holds the build scripts, CI, documentation and the upstream depe
 
 ## Building
 
-Build instructions are added together with the build system.
+The build environment is defined once, in [`build/Containerfile`](build/Containerfile)
+(Fedora 44: GCC, CMake, Ninja, Qt 6 incl. WebEngine/NetworkAuth/WebSockets, Boost, spdlog,
+fmt, lz4, zlib, gtest, fuse3, clang-tools-extra, Rust stable). CI uses the same file. If
+`fedora:44` is ever unavailable, use the latest stable Fedora tag and note it here.
+
+`build.sh` expects the application fork checked out next to this repository
+(`../modorganizer`, override with `MO2_SRC`). It builds into `build-out/` and installs into
+`install/`:
+
+```sh
+./build.sh                          # all implemented targets, in dependency order
+./build.sh --only uibase --tests    # one or more targets (repeatable), with ctest
+./build.sh --list                   # targets in build order
+```
+
+Targets not ported yet are skipped by the default run and rejected with `--only`.
+
+### With podman or docker
+
+```sh
+podman build -t mo2-linux-build -f build/Containerfile build/
+podman run --rm -v "$PWD/..:/work:Z" -w /work/ModOrganizerLinux mo2-linux-build ./build.sh --tests
+```
+
+### With distrobox (Bazzite)
+
+```sh
+podman build -t mo2-linux-build -f build/Containerfile build/
+distrobox create --name mo2-build --image localhost/mo2-linux-build
+distrobox enter mo2-build -- ./build.sh --tests
+```
+
+### Local environment
+
+No container is required: any environment that provides the dependencies listed in the
+Containerfile works. `build.sh` respects `CC`, `CXX` and `CMAKE_PREFIX_PATH` from the
+environment (it prepends `install/` to `CMAKE_PREFIX_PATH`).

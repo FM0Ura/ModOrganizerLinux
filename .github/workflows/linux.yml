@@ -1,0 +1,49 @@
+name: Linux
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out superproject
+        uses: actions/checkout@v4
+        with:
+          path: ModOrganizerLinux
+
+      # build.sh expects the application fork at ../modorganizer.
+      # Use the same branch name as this ref if the fork has it, else master.
+      - name: Pick fork branch
+        id: fork
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/FM0Ura/modorganizer "refs/heads/$BRANCH" >/dev/null; then
+            echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=master" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out application fork
+        uses: actions/checkout@v4
+        with:
+          repository: FM0Ura/modorganizer
+          ref: ${{ steps.fork.outputs.branch }}
+          path: modorganizer
+
+      - name: Build container image
+        run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
+
+      - name: Build and test
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+            mo2-linux-build ./build.sh --tests
+
+      - name: Upload install tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: mo2-linux-install
+          path: ModOrganizerLinux/install/
+          if-no-files-found: error
