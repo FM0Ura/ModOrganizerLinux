@@ -48,7 +48,7 @@ No Bazzite (plataforma de referência), o usuário consegue:
 |---|---|
 | `FM0Ura/ModOrganizerLinux` | Superprojeto: container de build, `build.sh`, manifests vcpkg para Linux, empacotamento, CI, documentação e specs |
 | `FM0Ura/modorganizer` | Fork do aplicativo MO2 com as mudanças multiplataforma |
-| Forks sob demanda | `uibase`, `archive`, `plugin_python`, plugins de jogo, `lootcli` — criados apenas quando precisarem de patch |
+| `deps/` (no superprojeto) | Dependências do upstream (`cmake_common`, `uibase`, `archive`, `bsatk`, `esptk`, `lootcli`, `dds-header`; depois `plugin_python` e plugins de jogo) importadas via `git subtree --squash` e modificadas no próprio superprojeto; `git subtree pull` traz atualizações do upstream |
 | `mo2-vfs` | Crate Rust do VFS; começa como subdiretório do superprojeto e pode virar repositório próprio |
 
 ### 2.2 Bloqueios conhecidos no código atual
@@ -56,7 +56,7 @@ No Bazzite (plataforma de referência), o usuário consegue:
 | Componente | Problema no Linux | Solução | Fase |
 |---|---|---|---|
 | USVFS | Só funciona no Windows (injeção de DLL) | `VfsConnector` + `mo2-vfs` (FUSE) | 1 (stub), 2 |
-| ~40 arquivos com Win32 (`env*`, `spawn`, `processrunner`, `loot`, `shared/util`…) | APIs inexistentes | Camada `platform/` | 1 |
+| ~40 arquivos com Win32 (`env*`, `spawn`, `processrunner`, `loot`, `shared/util`…) | APIs inexistentes | Implementações Linux do namespace `env` (`src/linux/`) | 1 |
 | `envfs` (varredura com `NtQueryDirectoryFile`) | API NT | Implementação com `openat`/`getdents64` | 1 |
 | `libbsarch` (Delphi) | Não existe para Linux | Desabilitado no Linux; leitura via `bsatk` | 1 |
 | `archive` | Carrega `7z.dll` | Carregar `7z.so` do 7-Zip oficial para Linux | 1 |
@@ -67,7 +67,7 @@ No Bazzite (plataforma de referência), o usuário consegue:
 
 | Fase | Entrega | Pronto quando |
 |---|---|---|
-| **1. Build nativo** | MO2 compila e abre no Linux; Win32 isolado em `platform/`; sem VFS | Gerencia instâncias, perfis, mods e instala arquivos no Bazzite; build Windows continua passando |
+| **1. Build nativo** | MO2 compila e abre no Linux com plugins mínimos (`game_bethesda`, `installer_quick`, `installer_manual`, `installer_fomod`); Win32 isolado em implementações Linux do namespace `env` (`src/linux/`); sem VFS | Gerencia instâncias, perfis, mods e instala arquivos no Bazzite; build Windows continua passando |
 | **2. VFS FUSE** | Crate `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; MO2 monta a visão virtual em diretório de teste |
 | **3. Steam/Proton** | Descoberta de jogos/prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods |
 | **4. Ecossistema** | Plugins de jogo, `plugin_python`, LOOT, handler `nxm://`, ferramentas | Critério de sucesso 1.1 atendido (exceto AppImage) |
@@ -102,7 +102,7 @@ Estas seções registram as decisões; cada fase terá spec própria.
 
 ### 3.3 Fase 4 — Ecossistema
 
-- Forks de `uibase` e plugins de jogo usando `platform/` e `steam/`.
+- Plugins de jogo usando o módulo `steam/` para detecção completa e caminhos dentro do prefixo; demais plugins (BAIN, previews, ferramentas).
 - `plugin_python` (pybind11 + Python embutido) portado.
 - `lootcli` compilado nativamente.
 - Handler `nxm://` via arquivo `.desktop` + `xdg-mime`, registrado na primeira execução.
@@ -119,9 +119,9 @@ Estas seções registram as decisões; cada fase terá spec própria.
 
 O executável `ModOrganizer` compila com GCC no Linux e abre a interface completa. É possível criar instância, gerenciar perfis, instalar/ativar/ordenar mods e ver a árvore de dados. **Não** há VFS nem execução de jogos nesta fase: “Executar” mostra uma mensagem informando que a funcionalidade chega na Fase 3. O build Windows continua funcionando.
 
-### 4.2 Camada `platform/`
+### 4.2 Camada de plataforma (`env` + `src/linux/`)
 
-Diretório novo `src/platform/` no fork `modorganizer`. Cada área tem um cabeçalho comum e implementações `*_win.cpp` / `*_linux.cpp`, selecionadas no CMake por `if(WIN32)`/`else()`. Nenhum `#ifdef _WIN32` espalhado pelo restante do código, exceto onde a mudança for de uma linha e um wrapper seria mais confuso que o `#ifdef`.
+O namespace `env` (`env*.h`) do MO2 já é, na prática, a camada de plataforma; ele é mantido como interface. As implementações Windows existentes permanecem nos arquivos atuais (compilados só no Windows) e as implementações Linux ficam em `src/linux/*_linux.cpp`, selecionadas no CMake por `if(WIN32)`/`else()`. Tipos Windows opacos que aparecem em cabeçalhos (`HANDLE`, `DWORD`, `FILETIME`) vêm do `uibase/win32compat.h` no Linux. Nenhum `#ifdef _WIN32` espalhado pelo restante do código, exceto onde a mudança for de uma linha e um wrapper seria mais confuso que o `#ifdef`.
 
 | Área | Arquivos atuais afetados | Implementação Linux |
 |---|---|---|
@@ -139,27 +139,31 @@ Diretório novo `src/platform/` no fork `modorganizer`. Cada área tem um cabeç
 
 A comunicação entre instâncias (`multiprocess.cpp`) já usa `QSharedMemory`/`QLocalServer` e não precisa mudar.
 
+### 4.2.1 Plugins mínimos na Fase 1
+
+Sem plugin de jogo não é possível criar instância, e sem plugins instaladores não é possível instalar mods. Por isso a Fase 1 inclui `game_bethesda` (todos os jogos Bethesda compilam; Skyrim SE é testado), `installer_quick`, `installer_manual` e `installer_fomod`, importados em `deps/`. Detecção do jogo: `findSteamGame` do `uibase` (bibliotecas Steam) ou caminho manual. Pastas `My Games`/`AppData` apontam para as pastas XDG do usuário até a Fase 3.
+
 ### 4.3 Dependências
 
 | Dependência | Ação na Fase 1 |
 |---|---|
 | Qt 6 (Widgets, WebEngine, WebSockets, NetworkAuth) | Pacotes do sistema no container (não via vcpkg) |
-| Boost, lz4, zlib | vcpkg, triplet `x64-linux` |
-| `mo2-cmake` | Fork se necessário: `mo2_configure_target` hoje assume MSVC (flags, PDB, deploy de DLLs) |
-| `mo2-uibase` | Fork: isolar Win32 com o mesmo padrão `platform/` |
-| `mo2-archive` + 7-Zip | Fork: carregar `7z.so` (7-Zip oficial ≥ 23 para Linux) |
+| Boost, lz4, zlib, spdlog, GoogleTest | Pacotes do sistema no container (no Linux não usamos vcpkg) |
+| `mo2-cmake` (`deps/cmake_common`) | Caminho GCC: `mo2_configure_target` hoje só define C++23 e flags para MSVC; deploy de Qt/PDB vira no-op no Linux |
+| `mo2-uibase` (`deps/uibase`) | Implementações Linux em arquivos `*_linux.cpp`; a API pública expõe tipos Windows (`DWORD`, `HANDLE`, `LPCWSTR`, `KNOWNFOLDERID`), mantidos no Linux por um `uibase/win32compat.h` para preservar compatibilidade de código-fonte com plugins |
+| `mo2-archive` (`deps/archive`) + 7-Zip | `dlopen` de `7z.so` compilado da fonte oficial do 7-Zip 26.01; tipos COM vêm de `Common/MyWindows.h` do próprio 7-Zip |
 | `mo2-bsatk`, `mo2-esptk`, `mo2-dds-header`, `mo2-lootcli-header` | Compilar no Linux; patches pontuais se necessário |
 | `mo2-libbsarch` | Não usado no Linux; código que depende dele protegido por opção CMake `MO2_WITH_LIBBSARCH` (ON no Windows, OFF no Linux) |
 | `usvfs` | Não usado no Linux |
 
-Os forks são referenciados por um registry vcpkg próprio (ou overlay ports) no superprojeto, preservando o registry oficial para o Windows.
+No Windows nada muda: o build continua usando vcpkg e o registry oficial do MO2. Por isso as mudanças no `modorganizer` precisam compilar também contra o `uibase` **upstream** no Windows (o CI Windows do fork usa o upstream).
 
 ### 4.4 Build
 
-- **Container:** `ModOrganizerLinux/build/Containerfile` baseado em `fedora:42` com GCC, CMake, Ninja, Qt 6 devel, Rust (`rustup`, para a Fase 2), vcpkg. Usável com `podman`/`docker` no CI e via `distrobox` no Bazzite.
-- **Script:** `ModOrganizerLinux/build.sh` — clona/atualiza os repositórios listados em `repos.toml` (url + branch), compila na ordem de dependência e instala em `./install/`.
-- **CMake:** novo preset `linux-gcc` em `CMakePresets.json` (Ninja, `x64-linux`, `-Wall -Wextra`). Presets Windows inalterados. No Linux: sem `WIN32_EXECUTABLE`, sem `.rc`/manifests, sem `Shlwapi`/`Bcrypt`/`Version`/`Dbghelp`.
-- **Instalação Linux:** layout `bin/ModOrganizer`, `lib/` (dependências), `share/modorganizer/` (stylesheets, tutorials, translations, resources) com `RPATH` relativo.
+- **Container:** `ModOrganizerLinux/build/Containerfile` baseado na mesma versão do Fedora usada pelo Bazzite atual (`fedora:44` na data deste documento) com GCC, CMake, Ninja, Qt 6 devel, Rust (`rustup`, para a Fase 2), Boost, spdlog, lz4, zlib e GoogleTest. Usável com `podman`/`docker` no CI e via `distrobox` no Bazzite.
+- **Script:** `ModOrganizerLinux/build.sh` — compila `deps/*` e o `modorganizer` (caminho passado por `MO2_SRC`, por padrão `../modorganizer`) na ordem de dependência e instala em `./install/`.
+- **CMake:** novo preset `linux-gcc` em `CMakePresets.json` (Ninja, sem vcpkg, `-Wall -Wextra`). Presets Windows inalterados. No Linux: sem `WIN32_EXECUTABLE`, sem `.rc`/manifests, sem `Shlwapi`/`Bcrypt`/`Version`/`Dbghelp`.
+- **Instalação Linux:** mesmo layout do Windows — `bin/ModOrganizer` com `plugins/`, `stylesheets/`, `tutorials/`, `translations/` e `resources/` ao lado — mais `lib/` para as bibliotecas, com `RPATH` relativo. Assim o código que localiza recursos via `applicationDirPath()` não muda.
 - **Caminhos de dados:** instâncias globais em `$XDG_DATA_HOME/ModOrganizer` (equivalente a `%LOCALAPPDATA%/ModOrganizer`); instâncias portáteis continuam funcionando ao lado do executável.
 
 ### 4.5 Comportamento de funcionalidades ainda indisponíveis
@@ -178,7 +182,7 @@ Os forks são referenciados por um registry vcpkg próprio (ou overlay ports) no
 
 ### 4.7 Testes
 
-- **Unitários (novos, GoogleTest):** implementações Linux de `platform/` — varredura de diretórios, conversão de caminhos, atalhos `.desktop`, lixeira, lista de processos.
+- **Unitários (novos, GoogleTest):** implementações Linux em `src/linux/` — varredura de diretórios, conversão de caminhos, atalhos `.desktop`, lixeira, lista de processos.
 - **CI Linux (GitHub Actions):** build no container + testes unitários + `ModOrganizer --help` executando sem erro (smoke test headless via `QT_QPA_PLATFORM=offscreen`).
 - **CI Windows:** build do fork com o preset `vs2022-windows` para garantir compatibilidade.
 - **Manual no Bazzite:** criar instância (Skyrim SE com caminho manual), criar perfil, instalar 3 mods de arquivos `.7z/.zip/.rar` (incluindo um FOMOD), reordenar, ver aba Data e conflitos, reabrir o MO2 e confirmar persistência.
@@ -196,8 +200,8 @@ Os forks são referenciados por um registry vcpkg próprio (ou overlay ports) no
 | Risco | Mitigação |
 |---|---|
 | `std::wstring` usado em todo o código (`DirectoryEntry` etc.) — `wchar_t` tem 4 bytes no Linux | Manter `wstring` na Fase 1 (funciona, só usa mais memória); medir no benchmark e avaliar migração para UTF-8/`QString` como otimização |
-| Comparação de caminhos case-insensitive no MO2 depende de APIs Windows | Implementar comparação case-insensitive em `platform/` com `QString::compare(..., Qt::CaseInsensitive)` / casefold Unicode |
-| Separador `\\` hard-coded em muitos lugares | Normalizar em `platform/` e corrigir pontos encontrados; teste que percorre a árvore de dados |
+| Comparação de caminhos case-insensitive no MO2 depende de APIs Windows | Implementar comparação case-insensitive em `src/linux/` com `QString::compare(..., Qt::CaseInsensitive)` / casefold Unicode |
+| Separador `\\` hard-coded em muitos lugares | Normalizar em `src/linux/` e corrigir pontos encontrados; teste que percorre a árvore de dados |
 | `mo2-cmake` muito acoplado ao MSVC | Fork com caminho Linux mínimo |
 | Qt WebEngine pesado/ausente em algumas distros | Fornecido no container e no AppImage |
 | Divergência com o upstream | Mudanças pequenas e isoladas; merge periódico do upstream documentado |
