@@ -26,10 +26,12 @@ set(Python_FIND_VIRTUALENV STANDARD)
 # many CMP0111 warnings from CMake
 #
 # NOCONFIG is the configuration of imported targets exported by packages built without
-# a CMAKE_BUILD_TYPE, which is how Linux distributions (e.g. Fedora's GTest) ship them
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release None NOCONFIG)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel None NOCONFIG)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel None NOCONFIG)
+# a CMAKE_BUILD_TYPE, which is how Linux distributions (e.g. Fedora's GTest) ship them;
+# the final empty entry selects the configuration-less IMPORTED_LOCATION, used by
+# targets created by find modules (e.g. OpenGL::OpenGL from FindOpenGL, linked by Qt)
+set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release None NOCONFIG "")
+set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel None NOCONFIG "")
+set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel None NOCONFIG "")
 
 # allow setting folder property on targets for better organization in VS
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
