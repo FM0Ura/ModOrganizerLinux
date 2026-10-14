@@ -21,8 +21,29 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef UNKNOWN_IMPL_H
 #define UNKNOWN_IMPL_H
 
+#ifdef _WIN32
+
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+
+// Empty on Windows
+#define ARCHIVE_NOTHROW
+
+#define ARCHIVE_ATOMIC_INCREMENT(ptr) ::InterlockedIncrement(ptr)
+#define ARCHIVE_ATOMIC_DECREMENT(ptr) ::InterlockedDecrement(ptr)
+
+#else
+
+#include "linux/win32_compat.h"
+
+// 7-Zip declares the methods of its interfaces with throw() (IDecl.h), and GCC wants
+// the overrides declared with it too (MSVC accepts them without).
+#define ARCHIVE_NOTHROW throw()
+
+#define ARCHIVE_ATOMIC_INCREMENT(ptr) __atomic_add_fetch((ptr), 1, __ATOMIC_ACQ_REL)
+#define ARCHIVE_ATOMIC_DECREMENT(ptr) __atomic_sub_fetch((ptr), 1, __ATOMIC_ACQ_REL)
+
+#endif
 
 /* This implements a common way of creating classes which implement one or more
  * COM interfaces.
@@ -63,12 +84,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 public:                                                                                \
   STDMETHOD_(ULONG, AddRef)()                                                          \
   {                                                                                    \
-    return ::InterlockedIncrement(&m_RefCount__);                                      \
+    return ARCHIVE_ATOMIC_INCREMENT(&m_RefCount__);                                    \
   }                                                                                    \
                                                                                        \
   STDMETHOD_(ULONG, Release)()                                                         \
   {                                                                                    \
-    ULONG res = ::InterlockedDecrement(&m_RefCount__);                                 \
+    ULONG res = ARCHIVE_ATOMIC_DECREMENT(&m_RefCount__);                               \
     if (res == 0) {                                                                    \
       delete this;                                                                     \
     }                                                                                  \

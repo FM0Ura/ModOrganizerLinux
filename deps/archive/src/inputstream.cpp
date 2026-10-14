@@ -19,7 +19,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "inputstream.h"
+#ifdef _WIN32
 #include <Unknwn.h>
+#else
+#include "linux/win32_compat.h"
+#endif
 
 static inline HRESULT ConvertBoolToHRESULT(bool result)
 {
@@ -42,7 +46,8 @@ bool InputStream::Open(std::filesystem::path const& filename)
   return m_File.Open(filename);
 }
 
-STDMETHODIMP InputStream::Read(void* data, UInt32 size, UInt32* processedSize)
+STDMETHODIMP InputStream::Read(void* data, UInt32 size,
+                               UInt32* processedSize) ARCHIVE_NOTHROW
 {
   UInt32 realProcessedSize;
   bool result = m_File.Read(data, size, realProcessedSize);
@@ -58,7 +63,8 @@ STDMETHODIMP InputStream::Read(void* data, UInt32 size, UInt32* processedSize)
   return HRESULT_FROM_WIN32(::GetLastError());
 }
 
-STDMETHODIMP InputStream::Seek(Int64 offset, UInt32 seekOrigin, UInt64* newPosition)
+STDMETHODIMP InputStream::Seek(Int64 offset, UInt32 seekOrigin,
+                               UInt64* newPosition) ARCHIVE_NOTHROW
 {
   UInt64 realNewPosition = offset;
   bool result            = m_File.Seek(offset, seekOrigin, realNewPosition);

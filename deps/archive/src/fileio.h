@@ -23,12 +23,20 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 // This code is adapted from 7z client code.
 
+#include <filesystem>
+#include <string>
+#include <string_view>
+
+#ifndef _WIN32
+
+// POSIX implementation of the classes below, plus the same helpers
+#include "linux/fileio_linux.h"
+
+#else
+
 #include <Windows.h>
 
 #include "7zip//Archive/IArchive.h"
-
-#include <filesystem>
-#include <string>
 
 namespace IO
 {
@@ -217,6 +225,25 @@ inline std::filesystem::path make_path(std::wstring const& pathstr)
   return fs::path{lprefix + pathstr_fixed};
 }
 
+/**
+ * @brief Convert a wide string, e.g. a path read from an archive, to a path
+ * object.
+ */
+inline std::filesystem::path to_path(std::wstring_view str)
+{
+  return std::filesystem::path{std::wstring{str}};
+}
+
+/**
+ * @brief Convert a path object to a wide string.
+ */
+inline std::wstring to_wstring(std::filesystem::path const& path)
+{
+  return path.native();
+}
+
 }  // namespace IO
+
+#endif  // _WIN32
 
 #endif

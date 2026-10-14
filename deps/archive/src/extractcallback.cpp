@@ -18,7 +18,11 @@ License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
+#ifdef _WIN32
 #include <Unknwn.h>
+#else
+#include "linux/win32_compat.h"
+#endif
 
 #include <filesystem>
 #include <format>
@@ -187,7 +191,7 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index,
 
     if (m_ProcessedFileInfo.isDir) {
       for (auto const& filename : filenames) {
-        auto fullpath = m_DirectoryPath / fs::path(filename).make_preferred();
+        auto fullpath = m_DirectoryPath / IO::to_path(filename).make_preferred();
         std::error_code ec;
         std::filesystem::create_directories(fullpath, ec);
         if (ec) {
@@ -198,7 +202,8 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index,
       }
     } else {
       for (auto const& filename : filenames) {
-        auto fullProcessedPath = m_DirectoryPath / fs::path(filename).make_preferred();
+        auto fullProcessedPath =
+            m_DirectoryPath / IO::to_path(filename).make_preferred();
         // If the filename contains a '/' we want to make the directory
         auto directoryPath = fullProcessedPath.parent_path();
         if (!fs::exists(directoryPath)) {
@@ -299,6 +304,10 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 operationResult) 
     // Also I'd like to convert the attributes to QT attributes but I'm not sure
     // if that's possible. Hence the conversions and strange string.
     for (auto& path : m_FullProcessedPaths) {
+#ifndef _WIN32
+      IO::SetFileAttributes(path, m_ProcessedFileInfo.Attrib,
+                            m_ProcessedFileInfo.isDir);
+#else
       std::wstring const fn = L"\\\\?\\" + path.native();
       // If the attributes are POSIX-based, fix that
       if (m_ProcessedFileInfo.Attrib & 0xF0000000)
@@ -306,13 +315,15 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 operationResult) 
 
       // Should probably log any errors here somehow
       ::SetFileAttributesW(fn.c_str(), m_ProcessedFileInfo.Attrib);
+#endif
     }
   }
 
   return S_OK;
 }
 
-STDMETHODIMP CArchiveExtractCallback::CryptoGetTextPassword(BSTR* passwordOut)
+STDMETHODIMP
+CArchiveExtractCallback::CryptoGetTextPassword(BSTR* passwordOut) ARCHIVE_NOTHROW
 {
   // if we've already got a password, don't ask again (and again...)
   if (m_Password->empty() && m_PasswordCallback) {

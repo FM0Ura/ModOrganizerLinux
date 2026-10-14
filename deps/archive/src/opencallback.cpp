@@ -19,12 +19,18 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "opencallback.h"
+#ifdef _WIN32
 #include <Unknwn.h>
+#else
+#include "linux/win32_compat.h"
+#endif
 
 #include "inputstream.h"
 #include "propertyvariant.h"
 
+#ifdef _WIN32
 #include <atlbase.h>
+#endif
 
 #include <format>
 #include <memory>
@@ -69,7 +75,8 @@ STDMETHODIMP CArchiveOpenCallback::SetCompleted(const UInt64* UNUSED(files),
  * archive it doesn't seem to be called. There is also another API which isn't
  * implemented.
  */
-STDMETHODIMP CArchiveOpenCallback::CryptoGetTextPassword(BSTR* passwordOut)
+STDMETHODIMP
+CArchiveOpenCallback::CryptoGetTextPassword(BSTR* passwordOut) ARCHIVE_NOTHROW
 {
   if (!m_PasswordCallback) {
     return E_ABORT;
@@ -81,7 +88,8 @@ STDMETHODIMP CArchiveOpenCallback::CryptoGetTextPassword(BSTR* passwordOut)
 
 /* -------------------- IArchiveOpenSetSubArchiveName -------------------- */
 /* I don't know what this does or how you call it. */
-STDMETHODIMP CArchiveOpenCallback::SetSubArchiveName(const wchar_t* name)
+STDMETHODIMP
+CArchiveOpenCallback::SetSubArchiveName(const wchar_t* name) ARCHIVE_NOTHROW
 {
   m_SubArchiveMode = true;
   m_SubArchiveName = name;
@@ -102,9 +110,9 @@ STDMETHODIMP CArchiveOpenCallback::GetProperty(PROPID propID,
     if (m_SubArchiveMode) {
       prop = m_SubArchiveName;
     } else {
-      // Note: Need to call .native(), otherwize we get a link error because we try to
-      // assign a fs::path to the variant.
-      prop = m_Path.filename().native();
+      // Note: Need to convert to a wstring, otherwize we get a link error because we
+      // try to assign a fs::path to the variant.
+      prop = IO::to_wstring(m_Path.filename());
     }
   } break;
 
@@ -149,7 +157,7 @@ STDMETHODIMP CArchiveOpenCallback::GetStream(const wchar_t* name,
 
   // `name` is just the filename, so build a path from the directory that
   // contained the last file
-  const auto path = m_Path.parent_path() / name;
+  const auto path = m_Path.parent_path() / IO::to_path(name);
 
   if (!exists(m_FileInfo.path()) || m_FileInfo.isDir()) {
     return S_FALSE;

@@ -44,8 +44,8 @@ public:
 
   bool Open(std::filesystem::path const& filename);
 
-  STDMETHOD(Read)(void* data, UInt32 size, UInt32* processedSize);
-  STDMETHOD(Seek)(Int64 offset, UInt32 seekOrigin, UInt64* newPosition);
+  STDMETHOD(Read)(void* data, UInt32 size, UInt32* processedSize) ARCHIVE_NOTHROW;
+  STDMETHOD(Seek)(Int64 offset, UInt32 seekOrigin, UInt64* newPosition) ARCHIVE_NOTHROW;
 
 private:
   IO::FileIn m_File;

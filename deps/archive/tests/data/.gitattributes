@@ -1,0 +1,3 @@
+# fixtures are binary; the script must keep LF line endings
+* binary
+make_fixtures.sh text eol=lf

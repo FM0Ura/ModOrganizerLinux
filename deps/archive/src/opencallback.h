@@ -53,12 +53,12 @@ public:
   Z7_IFACE_COM7_IMP(IArchiveOpenVolumeCallback)
 
   // ICryptoGetTextPassword interface
-  STDMETHOD(CryptoGetTextPassword)(BSTR* password);
+  STDMETHOD(CryptoGetTextPassword)(BSTR* password) ARCHIVE_NOTHROW;
   // Not implemented STDMETHOD(CryptoGetTextPassword2)(Int32 *passwordIsDefined, BSTR
   // *password);
 
   // IArchiveOpenSetSubArchiveName interface
-  STDMETHOD(SetSubArchiveName)(const wchar_t* name);
+  STDMETHOD(SetSubArchiveName)(const wchar_t* name) ARCHIVE_NOTHROW;
 
 private:
   Archive::PasswordCallback m_PasswordCallback;

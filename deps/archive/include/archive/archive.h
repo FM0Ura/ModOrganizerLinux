@@ -25,9 +25,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #if defined(MO2_ARCHIVE_BUILD_STATIC)
 #define DLLEXPORT
+#elif !defined(_WIN32)
+// the library is built with -fvisibility=hidden
+#define DLLEXPORT __attribute__((visibility("default")))
 #elif defined(MO2_ARCHIVE_BUILD_EXPORT)
 #define DLLEXPORT _declspec(dllexport)
 #else

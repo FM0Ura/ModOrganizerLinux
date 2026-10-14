@@ -21,7 +21,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef PROPERTYVARIANT_H
 #define PROPERTYVARIANT_H
 
+#ifdef _WIN32
 #include <PropIdl.h>
+#else
+#include "linux/win32_compat.h"
+#endif
 
 /** This class implements a wrapper round the PROPVARIANT structure which
  * makes it a little friendler to use and a little more C++ish

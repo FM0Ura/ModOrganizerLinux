@@ -21,6 +21,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef ARCHIVE_LIBRARY_H
 #define ARCHIVE_LIBRARY_H
 
+#ifdef _WIN32
+
 #include <Windows.h>
 
 /**
@@ -89,5 +91,96 @@ private:
   HMODULE m_Module;
   DWORD m_LastError;
 };
+
+#else  // _WIN32
+
+#include <dlfcn.h>
+
+#include <string>
+
+/**
+ * Very small wrapper around dlopen() and dlsym().
+ */
+class ALibrary
+{
+public:
+  /**
+   * @param path Path of the shared library. A path without a slash is searched
+   * by
+   *     dlopen() in the usual library directories.
+   */
+  ALibrary(const char* path) : m_Module{nullptr}
+  {
+    // RTLD_LOCAL: the symbols of the 7-Zip library must not interpose ours
+    m_Module = ::dlopen(path, RTLD_NOW | RTLD_LOCAL);
+    if (m_Module == nullptr) {
+      updateLastError();
+    }
+  }
+
+  ~ALibrary()
+  {
+    if (m_Module) {
+      ::dlclose(m_Module);
+    }
+  }
+
+  ALibrary(ALibrary const&)            = delete;
+  ALibrary& operator=(ALibrary const&) = delete;
+
+  /**
+   * @param Name of the function or variable.
+   *
+   * @return a pointer to the
+   * given function or variable, or nullptr if an error
+   *     occurred.
+   *
+   *
+   * @note T must be a pointer type, and no type checking is performed.
+   */
+  template <class T>
+  T resolve(const char* procName)
+  {
+    if (!m_Module) {
+      return nullptr;
+    }
+    void* proc = ::dlsym(m_Module, procName);
+    if (!proc) {
+      updateLastError();
+      return nullptr;
+    }
+    return reinterpret_cast<T>(proc);
+  }
+
+  /**
+   * @return the message of the last error that occurs with this object (from
+   * dlerror()),
+   *     or an empty string if no error occurred.
+   */
+  const std::string& getLastErrorMessage() const { return m_LastError; }
+
+  /**
+   * @return true if this library is open, false otherwize.
+   */
+  bool isOpen() const
+  {
+    // Note: The library is always open, unless it fails during construction.
+    return m_Module != nullptr;
+  }
+
+  operator bool() const { return isOpen(); }
+
+private:
+  void updateLastError()
+  {
+    const char* message = ::dlerror();
+    m_LastError         = message ? message : "unknown error";
+  }
+
+  void* m_Module;
+  std::string m_LastError;
+};
+
+#endif  // _WIN32
 
 #endif

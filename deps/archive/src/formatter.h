@@ -32,14 +32,33 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <stdexcept>
 #include <string>
 
+#ifndef _WIN32
+#include "linux/utf.h"
+#endif
+
+namespace ArchiveStrings
+{
+
+// Widen the given narrow string (system text such as exception messages): byte by
+// byte on Windows, decoded as UTF-8 on Linux.
+inline std::wstring widen(std::string const& s)
+{
+#ifdef _WIN32
+  return std::wstring(s.begin(), s.end());
+#else
+  return ArchiveUtf::fromUtf8(s);
+#endif
+}
+
+}  // namespace ArchiveStrings
+
 template <>
 struct std::formatter<std::string, wchar_t> : std::formatter<std::wstring, wchar_t>
 {
   template <typename FormatContext>
   auto format(std::string const& s, FormatContext& ctx) const
   {
-    return std::formatter<std::wstring, wchar_t>::format(
-        std::wstring(s.begin(), s.end()), ctx);
+    return std::formatter<std::wstring, wchar_t>::format(ArchiveStrings::widen(s), ctx);
   }
 };
 
@@ -70,7 +89,12 @@ struct std::formatter<std::filesystem::path, wchar_t>
   template <typename FormatContext>
   auto format(std::filesystem::path const& path, FormatContext& ctx) const
   {
+#ifdef _WIN32
     return std::formatter<std::wstring, wchar_t>::format(path.native(), ctx);
+#else
+    return std::formatter<std::wstring, wchar_t>::format(
+        ArchiveUtf::fromUtf8(path.native()), ctx);
+#endif
   }
 };
 

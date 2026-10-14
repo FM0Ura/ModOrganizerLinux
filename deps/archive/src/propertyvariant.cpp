@@ -20,7 +20,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "propertyvariant.h"
 
+#ifdef _WIN32
 #include <guiddef.h>
+#endif
 
 #include <stdexcept>
 #include <stdint.h>

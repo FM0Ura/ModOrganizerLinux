@@ -19,7 +19,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "archive.h"
+#ifdef _WIN32
 #include <Unknwn.h>
+#else
+#include "linux/win32_compat.h"
+#endif
 
 #include "extractcallback.h"
 #include "inputstream.h"
@@ -28,6 +32,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include "propertyvariant.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <filesystem>
 #include <map>
 #include <sstream>
 #include <stddef.h>
@@ -36,6 +42,49 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <vector>
 
 namespace PropID = NArchive::NHandlerPropID;
+
+namespace
+{
+
+// Path of the 7-Zip library to load.
+//
+// Windows: dlls/7zip.dll.
+//
+// Linux: the library named by the MO2_7Z_LIBRARY environment variable if set (used by
+// the tests), else 7z.so in <directory of the executable>/../lib if it exists, else
+// "7z.so" searched by the dynamic loader.
+std::string libraryPath()
+{
+#ifdef _WIN32
+  return "dlls/7zip.dll";
+#else
+  if (const char* path = std::getenv("MO2_7Z_LIBRARY"); path && *path) {
+    return path;
+  }
+
+  std::error_code ec;
+  const auto exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+  if (!ec) {
+    auto candidate = exe.parent_path().parent_path() / "lib" / "7z.so";
+    if (std::filesystem::exists(candidate, ec)) {
+      return candidate.string();
+    }
+  }
+  return "7z.so";
+#endif
+}
+
+// Lower-case extension of the given path, without the dot (empty if there is none).
+std::wstring lowerExtension(std::filesystem::path const& path)
+{
+  std::wstring ext = IO::to_wstring(path.extension());
+  if (!ext.empty()) {
+    ext.erase(0, 1);
+  }
+  return ArchiveStrings::towlower(ext);
+}
+
+}  // namespace
 
 class FileDataImpl : public FileData
 {
@@ -269,7 +318,7 @@ HRESULT ArchiveImpl::loadFormats()
 }
 
 ArchiveImpl::ArchiveImpl()
-    : m_Valid(false), m_LastError(Error::ERROR_NONE), m_Library("dlls/7zip.dll"),
+    : m_Valid(false), m_LastError(Error::ERROR_NONE), m_Library(libraryPath().c_str()),
       m_PasswordCallback{}
 {
   // Reset the log callback:
@@ -379,9 +428,8 @@ bool ArchiveImpl::open(std::wstring const& archiveName,
                         std::format(L"Opened {} using {} (from signature).",
                                     archiveName, signatureInfo.second.m_Name));
 
-          // Retrieve the extension (warning: .extension() contains the dot):
-          std::wstring ext =
-              ArchiveStrings::towlower(filepath.extension().native().substr(1));
+          // Retrieve the extension:
+          std::wstring ext = lowerExtension(filepath);
           std::wistringstream s(signatureInfo.second.m_Extensions);
           std::wstring t;
           bool found = false;
@@ -415,8 +463,7 @@ bool ArchiveImpl::open(std::wstring const& archiveName,
   {
     // determine archive type based on extension
     Formats const* formats = nullptr;
-    std::wstring ext =
-        ArchiveStrings::towlower(filepath.extension().native().substr(1));
+    std::wstring ext                   = lowerExtension(filepath);
     FormatMap::const_iterator map_iter = m_FormatMap.find(ext);
     if (map_iter != m_FormatMap.end()) {
       formats = &map_iter->second;
@@ -550,9 +597,14 @@ void ArchiveImpl::resetFileList()
   m_ArchivePtr->GetNumberOfItems(&numItems);
 
   for (UInt32 i = 0; i < numItems; ++i) {
-    m_FileList.push_back(new FileDataImpl(
-        readProperty<std::wstring>(i, kpidPath), readProperty<UInt64>(i, kpidSize),
-        readProperty<UInt64>(i, kpidCRC), readProperty<bool>(i, kpidIsDir)));
+    std::wstring path = readProperty<std::wstring>(i, kpidPath);
+#ifndef _WIN32
+    // archives made on Windows may use backslashes, which are not separators on Linux
+    std::replace(path.begin(), path.end(), L'\\', L'/');
+#endif
+    m_FileList.push_back(new FileDataImpl(path, readProperty<UInt64>(i, kpidSize),
+                                          readProperty<UInt64>(i, kpidCRC),
+                                          readProperty<bool>(i, kpidIsDir)));
   }
 }
 

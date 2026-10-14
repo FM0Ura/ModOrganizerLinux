@@ -29,7 +29,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include "7zip/Archive/IArchive.h"
 #include "7zip/IPassword.h"
 
+#ifdef _WIN32
 #include <atlbase.h>
+#else
+#include "linux/win32_compat.h"
+#endif
 
 #include "archive.h"
 #include "formatter.h"
@@ -65,7 +69,7 @@ public:
   Z7_IFACE_COM7_IMP(IArchiveExtractCallback)
 
   // ICryptoGetTextPassword
-  STDMETHOD(CryptoGetTextPassword)(BSTR* aPassword);
+  STDMETHOD(CryptoGetTextPassword)(BSTR* aPassword) ARCHIVE_NOTHROW;
 
 private:
   void reportError(const std::wstring& message);
