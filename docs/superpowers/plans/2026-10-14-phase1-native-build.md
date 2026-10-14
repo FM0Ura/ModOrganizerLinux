@@ -19,7 +19,7 @@
 - Nenhum `#include <windows.h>` fora de arquivos compilados apenas no Windows ou de blocos `#ifdef _WIN32`.
 - Formatação: `clang-format` com o `.clang-format` de cada repositório (o fork tem CI de lint).
 - No Linux não se usa vcpkg; dependências vêm do container (Fedora, versão igual à base atual do Bazzite — `fedora:44` na data da spec).
-- Versões do upstream fixadas pelas portas do registry `ModOrganizer2/vcpkg-registry` no baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee` (o usado pelo `modorganizer`); 7-Zip **26.01**.
+- Versões do upstream: cada dependência em `deps/` acompanha o `master` upstream (HEAD na data da atualização, commits exatos em `deps/README.md`), como o CI do MO2 (`build-with-mob-action`) — “`uibase` upstream” acima significa o `master` do `uibase`; exceção: `dds-header` segue a porta `mo2-dds-header` do registry (`DirectXTex` tag `jun2024`); 7-Zip **26.01**. (Antes da Task 7b: baseline `1316300c…` do `ModOrganizer2/vcpkg-registry`.)
 - Funcionalidades fora da Fase 1 nunca quebram: “Executar” mostra diálogo informativo; LOOT desabilitado sem `lootcli`; criação de BSA oculta; `selfupdater` desabilitado.
 - Instâncias globais: `QStandardPaths::AppLocalDataLocation` (já resolve para `$XDG_DATA_HOME/ModOrganizer` no Linux); instâncias portáteis continuam ao lado do executável.
 - Commits terminam com as linhas de atribuição da sessão; mensagens sem identificador de modelo.
@@ -177,6 +177,10 @@ O CI (GitHub Actions, container Fedora) é a referência de “passou”. Se o e
 - [ ] **Step 3:** Portar.
 - [ ] **Step 4:** Mesmo comando → PASS.
 - [ ] **Step 5:** Commit `deps/bsatk, deps/esptk: Linux support` e push.
+
+### Task 7b: re-fixar `deps/` no `master` upstream (inserida pelo controlador, decisão R9)
+
+O baseline do registry era antigo demais para o HEAD do fork (`4ba22f0`, 2026-10-05), que já usa API mais nova do upstream (`IPluginGame::blueprintPrefix()` do `uibase` `61451bd`; sobrecargas `std::filesystem::path` de `BSA::Archive::read/extract/extractAll`, PR #27 do `bsatk`). Todas as dependências foram atualizadas para o `master` upstream com `scripts/update-dep.sh <nome> master`, preservando as mudanças Linux (Tasks 3, 5, 6, 7); a nova regra está em Global Constraints e em `deps/README.md`.
 
 ### Task 8: `modorganizer` — CMake Linux, preset e esqueleto `src/linux/`
 

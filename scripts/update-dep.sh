@@ -7,7 +7,8 @@
 # wrapper around:
 #   git subtree pull --prefix deps/<name> <url> <ref> --squash
 #
-# Update deps/README.md (ref and version columns) in the same change.
+# Update deps/README.md (ref and date columns) in the same change. Dependencies
+# track upstream master: scripts/update-dep.sh <name> master
 set -euo pipefail
 
 # name -> upstream repository URL (keep in sync with deps/README.md)
