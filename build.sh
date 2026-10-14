@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Build the MO2 Linux port dependencies and application into ./install.
 #
-#   ./build.sh [--only <target>]... [--tests] [--list]
+#   ./build.sh [--only <target>]... [--allow-fail <target>]... [--tests] [--list]
+#
+# --allow-fail <target>: a failure of that target is reported but does not stop the
+# build or fail the run (used by CI for targets that are still being ported).
 #
 # Environment: MO2_SRC (default ../modorganizer) is the application fork.
 # Works inside the build container and in any environment that provides the
@@ -22,6 +25,7 @@ ALL_TARGETS=(
 )
 
 ONLY=()
+ALLOW_FAIL=()
 TESTS=0
 
 die() { echo "build.sh: $*" >&2; exit 1; }
@@ -138,15 +142,24 @@ build_lootcli() {
     cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON
 }
 
+# modorganizer is the application itself (the fork at $MO2_SRC), configured with its
+# linux-gcc preset (Ninja, RelWithDebInfo, no vcpkg); -B keeps the build tree out of
+# the fork. It installs bin/ModOrganizer with its resources next to it.
+build_modorganizer() {
+    cmake_build modorganizer "$MO2_SRC" --preset linux-gcc
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
     case "$1" in
         --only) (($# >= 2)) || die "--only needs a target"; ONLY+=("$2"); shift 2 ;;
         --only=*) ONLY+=("${1#--only=}"); shift ;;
+        --allow-fail) (($# >= 2)) || die "--allow-fail needs a target"; ALLOW_FAIL+=("$2"); shift 2 ;;
+        --allow-fail=*) ALLOW_FAIL+=("${1#--allow-fail=}"); shift ;;
         --tests) TESTS=1; shift ;;
         --list) printf '%s\n' "${ALL_TARGETS[@]}"; exit 0 ;;
-        -h|--help) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
@@ -155,9 +168,13 @@ for t in "${ONLY[@]}"; do
     is_known "$t" || die "unknown target: $t (see --list)"
     is_implemented "$t" || die "target $t not implemented yet"
 done
+for t in "${ALLOW_FAIL[@]}"; do
+    is_known "$t" || die "unknown target: $t (see --list)"
+done
 
 mkdir -p "$INSTALL"
 skipped=()
+failed=()
 for t in "${ALL_TARGETS[@]}"; do
     if ((${#ONLY[@]})); then
         [[ " ${ONLY[*]} " == *" $t "* ]] || continue
@@ -165,8 +182,21 @@ for t in "${ALL_TARGETS[@]}"; do
         skipped+=("$t"); continue
     fi
     log "target $t"
-    "$(fn_of "$t")"
+    if [[ " ${ALLOW_FAIL[*]} " == *" $t "* ]]; then
+        # run in a subshell outside any condition so that set -e still applies inside
+        set +e
+        ( set -e; "$(fn_of "$t")" )
+        rc=$?
+        set -e
+        if ((rc != 0)); then
+            log "target $t FAILED (exit $rc), allowed by --allow-fail; continuing"
+            failed+=("$t")
+        fi
+    else
+        "$(fn_of "$t")"
+    fi
 done
 ((${#skipped[@]})) && log "skipped (not implemented yet): ${skipped[*]}"
+((${#failed[@]})) && log "failed (allowed): ${failed[*]}"
 [[ ! -e $INSTALL/lib64 ]] || die "$INSTALL/lib64 exists: libraries must install into lib/"
 log "done; install prefix: $INSTALL"
