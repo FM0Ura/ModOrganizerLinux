@@ -49,7 +49,7 @@ endfunction()
 # \param:VARNAME name of the variable that will contain the path to Python
 function(mo2_find_python_executable VARNAME)
 	if (NOT DEFINED Python_EXECUTABLE)
-		find_package(Python ${MO2_PYTHON_VERSION} COMPONENTS Interpreter REQUIRED)
+		find_package(Python ${MO2_PYTHON_VERSION} EXACT COMPONENTS Interpreter REQUIRED)
 	endif()
 	set(${VARNAME} ${Python_EXECUTABLE} PARENT_SCOPE)
 endfunction()
@@ -193,27 +193,33 @@ function(mo2_deploy_qt)
 	mo2_find_qt_executable(windeployqt windeployqt)
 
 	set(args
-		"--no-translations \
-		--verbose 0 \
-		--webenginewidgets \
-		--websockets \
-		--openglwidgets \
-		--libdir dlls \
-		--no-compiler-runtime")
+		--no-translations
+		--verbose 0
+		--webenginewidgets
+		--websockets
+		--openglwidgets
+		--libdir dlls
+		--no-compiler-runtime)
+
+	if(MO2_QT_VERSION VERSION_LESS "6.10.0")
+        list(APPEND args --networkauth)
+    endif()
 
 	if(${DEPLOY_NOPLUGINS})
-		set(args "${args} --no-plugins")
+		list(APPEND args --no-plugins)
 	else()
-		set(args "${args} --plugindir qtplugins")
+		list(APPEND args --plugindir qtplugins)
 	endif()
+
+	string(REPLACE ";" " " deploy_qt_args "${args}")
 
 	set(bin "${CMAKE_INSTALL_PREFIX}/${DEPLOY_DIRECTORY}")
 
 	set(deploys "")
 	foreach(binary ${DEPLOY_BINARIES})
-		set(deploys "${deploys}
-			EXECUTE_PROCESS(
-				COMMAND ${windeployqt} ${args} ${binary}
+		string(APPEND deploys "
+			execute_process(
+				COMMAND \"${windeployqt}\" ${deploy_qt_args} \"${binary}\"
 				WORKING_DIRECTORY \"${bin}\")")
 	endforeach()
 
@@ -245,11 +251,11 @@ function(mo2_deploy_qt)
 
 	set(removals "")
 	foreach (qt6_qtquick_removal ${qt6_qtquick_to_remove})
-		set(removals "${removals}
+		string(APPEND removals "
 			file(REMOVE_RECURSE \"${bin}/QtQuick/${qt6_qtquick_removal}\")")
 	endforeach()
 	foreach (qt6_dll_removal ${qt6_qtdlls_to_remove})
-		set(removals "${removals}
+		string(APPEND removals "
 			file(REMOVE \"${bin}/dlls/Qt6${qt6_dll_removal}.dll\")")
 	endforeach()
 	install(CODE "${removals}")
@@ -259,14 +265,28 @@ function(mo2_deploy_qt)
 	if(NOT ${DEPLOY_NOPLUGINS})
 		set(qtwebengine_process_exe $<IF:$<CONFIG:Debug>,QtWebEngineProcessd.exe,QtWebEngineProcess.exe>)
 		install(CODE "
-			file(RENAME \"${bin}/dlls/${qtwebengine_process_exe}\" \"${bin}/${qtwebengine_process_exe}\")
-			file(RENAME \"${bin}/qtplugins/platforms\" \"${bin}/platforms\")
-			file(RENAME \"${bin}/qtplugins/styles\" \"${bin}/styles\")
-			file(RENAME \"${bin}/qtplugins/imageformats\" \"${bin}/dlls/imageformats\")
-			file(RENAME \"${bin}/qtplugins/tls\" \"${bin}/dlls/tls\")
+			if(EXISTS \"${bin}/dlls/${qtwebengine_process_exe}\")
+				message(STATUS \"[MO2] Moving ${qtwebengine_process_exe} to root...\")
+				file(RENAME \"${bin}/dlls/${qtwebengine_process_exe}\" \"${bin}/${qtwebengine_process_exe}\")
+			endif()
+
+			foreach(_dir platforms styles)
+				if(EXISTS \"${bin}/qtplugins/\${_dir}\")
+					file(REMOVE_RECURSE \"${bin}/\${_dir}\")
+					file(RENAME \"${bin}/qtplugins/\${_dir}\" \"${bin}/\${_dir}\")
+				endif()
+			endforeach()
+
+			foreach(_dir imageformats tls)
+				if(EXISTS \"${bin}/qtplugins/\${_dir}\")
+					file(REMOVE_RECURSE \"${bin}/dlls/\${_dir}\")
+					file(RENAME \"${bin}/qtplugins/\${_dir}\" \"${bin}/dlls/\${_dir}\")
+				endif()
+			endforeach()
+
 			file(REMOVE_RECURSE \"${bin}/qtplugins\")
-		")
-	endif()
+			")
+    endif()
 endfunction()
 
 #! mo2_add_lupdate : generate .ts files from the given sources
