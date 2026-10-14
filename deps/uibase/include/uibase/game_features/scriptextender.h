@@ -1,7 +1,11 @@
 #ifndef UIBASE_GAMEFEATURES_SCRIPTEXTENDER
 #define UIBASE_GAMEFEATURES_SCRIPTEXTENDER
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include "../win32compat.h"
+#endif
 
 #include <QString>
 #include <QStringList>

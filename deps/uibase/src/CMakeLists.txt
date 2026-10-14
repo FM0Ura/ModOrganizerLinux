@@ -33,6 +33,10 @@ set(root_headers
 	../include/uibase/versioning.h
 	../include/uibase/versioninfo.h
 )
+if (NOT WIN32)
+	# Win32 types and constants used by the public headers
+	list(APPEND root_headers ../include/uibase/win32compat.h)
+endif()
 set(interface_headers
 	../include/uibase/ifiletree.h
 	../include/uibase/ifiletree_utils.h
@@ -105,7 +109,6 @@ mo2_target_sources(uibase
 	${root_headers}
 	delayedfilewriter.cpp
 	diagnosisreport.cpp
-	errorcodes.cpp
 	eventfilter.cpp
 	executableinfo.cpp
 	filesystemutilities.cpp
@@ -116,11 +119,9 @@ mo2_target_sources(uibase
 	nxmurl.cpp
 	pch.cpp
 	pluginrequirements.cpp
-	registry.cpp
 	report.cpp
 	safewritefile.cpp
 	scopeguard.cpp
-	steamutility.cpp
 	strings.cpp
 	utility.cpp
 	versioning.cpp
@@ -161,6 +162,35 @@ mo2_target_sources(uibase
 	filterwidget.cpp
 )
 
+# Win32-only implementations; on other systems src/linux provides the same functions
+# (and the Win32-only parts of shared files are compiled under _WIN32)
+if (WIN32)
+	mo2_target_sources(uibase
+		FOLDER src
+		PRIVATE
+		errorcodes.cpp
+		registry.cpp
+		steamutility.cpp
+	)
+else()
+	mo2_target_sources(uibase
+		FOLDER src/linux
+		PRIVATE
+		linux/errorcodes_linux.cpp
+		linux/peversion_linux.cpp
+		linux/peversion_linux.h
+		linux/registry_linux.cpp
+		linux/report_linux.cpp
+		linux/shell_linux.cpp
+		linux/steamutility_linux.cpp
+		linux/taskprogressmanager_linux.cpp
+		linux/trash_linux.cpp
+		linux/trash_linux.h
+		linux/utility_linux.cpp
+		linux/win32_private.h
+	)
+endif()
+
 mo2_target_sources(uibase FOLDER src/formatters	PRIVATE ${formatters_header})
 mo2_target_sources(uibase FOLDER src/game_features	PRIVATE ${game_features_header})
 
@@ -170,8 +200,6 @@ target_sources(uibase
 		questionboxmemory.ui
 		taskdialog.ui
 		textviewer.ui
-
-		version.rc
 
 		${root_headers}
 		pch.h
@@ -190,11 +218,24 @@ target_sources(uibase
 
 set_target_properties(uibase PROPERTIES DEBUG_POSTFIX d)
 
+if (WIN32)
+	target_sources(uibase PRIVATE version.rc)
+endif()
+
 # TODO: remove this after fixing UIBase #include<> directives
-target_include_directories(uibase PRIVATE
-	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/uibase>
-	$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/uibase/game_features>
-)
+if (WIN32)
+	target_include_directories(uibase PRIVATE
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/uibase>
+		$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/uibase/game_features>
+	)
+else()
+	# for "..." includes only: as -I directories, uibase's strings.h would replace the
+	# system <strings.h> (included by <string.h>)
+	target_compile_options(uibase PRIVATE
+		"-iquote${PROJECT_SOURCE_DIR}/include/uibase"
+		"-iquote${PROJECT_SOURCE_DIR}/include/uibase/game_features"
+	)
+endif()
 
 add_library(mo2::uibase ALIAS uibase)
 
@@ -202,11 +243,20 @@ target_compile_definitions(uibase PRIVATE -DUIBASE_EXPORT SPDLOG_USE_STD_FORMAT)
 
 target_link_libraries(uibase
 	PUBLIC Qt6::Widgets Qt6::Network Qt6::QuickWidgets
-	PRIVATE spdlog::spdlog_header_only Qt6::Qml Qt6::Quick Version)
+	PRIVATE spdlog::spdlog_header_only Qt6::Qml Qt6::Quick)
+
+if (WIN32)
+	target_link_libraries(uibase PRIVATE Version)
+else()
+	# pch.h and some headers use MSVC's #pragma warning
+	target_compile_options(uibase PRIVATE -Wno-unknown-pragmas)
+endif()
 
 # installation
 install(TARGETS uibase EXPORT uibaseTargets FILE_SET HEADERS)
-install(FILES $<TARGET_PDB_FILE:uibase> DESTINATION pdb)
+if (WIN32)
+	install(FILES $<TARGET_PDB_FILE:uibase> DESTINATION pdb)
+endif()
 install(EXPORT uibaseTargets
 	FILE mo2-uibase-targets.cmake
 	NAMESPACE mo2::

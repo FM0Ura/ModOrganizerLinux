@@ -26,7 +26,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include "utility.h"
 #include <QComboBox>
 #include <QRadioButton>
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 namespace MOBase
 {
@@ -56,6 +58,7 @@ void criticalOnTop(const QString& message)
   mb.exec();
 }
 
+#ifdef _WIN32
 void reportError(const QString& message)
 {
   log::error("{}", message);
@@ -71,6 +74,7 @@ void reportError(const QString& message)
                   QObject::tr("Error").toStdWString().c_str(), MB_ICONERROR | MB_OK);
   }
 }
+#endif  // _WIN32
 
 TaskDialogButton::TaskDialogButton(QString t, QString d, QMessageBox::StandardButton b)
     : text(std::move(t)), description(std::move(d)), button(b)

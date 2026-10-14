@@ -1,0 +1,3 @@
+# version.exe is a binary fixture; the generator script keeps LF line endings
+*.exe binary
+make_version_exe.sh text eol=lf

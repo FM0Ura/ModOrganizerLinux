@@ -32,8 +32,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <QtDebug>
 #include <memory>
 #include <sstream>
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#else
+#include "linux/win32_private.h"
+#endif
 #include <format>
 
 #define FO_RECYCLE 0x1003
@@ -55,8 +59,10 @@ bool removeDir(const QString& dirName)
           return false;
         }
       } else {
+#ifdef _WIN32
         ::SetFileAttributesW(ToWString(info.absoluteFilePath()).c_str(),
                              FILE_ATTRIBUTE_NORMAL);
+#endif
         QFile file(info.absoluteFilePath());
         if (!file.remove()) {
           reportError(QObject::tr("removal of \"%1\" failed: %2")
@@ -111,6 +117,7 @@ bool copyDir(const QString& sourceName, const QString& destinationName, bool mer
   return true;
 }
 
+#ifdef _WIN32
 static DWORD TranslateError(int error)
 {
   switch (error) {
@@ -287,11 +294,14 @@ bool shellDelete(const QStringList& fileNames, bool recycle, QWidget* dialog)
   const UINT op = static_cast<UINT>(recycle ? FO_RECYCLE : FO_DELETE);
   return shellOp(fileNames, QStringList(), dialog, op, false);
 }
+#endif  // _WIN32
 
 namespace shell
 {
 
+#ifdef _WIN32
   static QString g_urlHandler;
+#endif
 
   Result::Result(bool success, DWORD error, QString message, HANDLE process)
       : m_success(success), m_error(error), m_message(std::move(message)),
@@ -353,6 +363,7 @@ namespace shell
     }
   }
 
+#ifdef _WIN32
   QString formatError(int i)
   {
     switch (i) {
@@ -483,6 +494,8 @@ namespace shell
     }
   }
 
+#endif  // _WIN32
+
   Result Explore(const QString& path)
   {
     return Explore(QFileInfo(path));
@@ -493,6 +506,7 @@ namespace shell
     return Explore(QFileInfo(dir.absolutePath()));
   }
 
+#ifdef _WIN32
   Result Open(const QString& path)
   {
     const auto ws_path = path.toStdWString();
@@ -658,6 +672,7 @@ namespace shell
 
     return Result::makeSuccess();
   }
+#endif  // _WIN32
 
 }  // namespace shell
 
@@ -742,6 +757,7 @@ QString ToQString(const std::wstring& source)
   return QString::fromStdWString(source);
 }
 
+#ifdef _WIN32
 QString ToString(const SYSTEMTIME& time)
 {
   char dateBuffer[100];
@@ -753,6 +769,7 @@ QString ToString(const SYSTEMTIME& time)
                  size);
   return QString::fromLocal8Bit(dateBuffer) + " " + QString::fromLocal8Bit(timeBuffer);
 }
+#endif  // _WIN32
 
 static int naturalCompareI(const QString& a, const QString& b)
 {
@@ -781,6 +798,7 @@ int naturalCompare(const QString& a, const QString& b, Qt::CaseSensitivity cs)
   return c.compare(a, b);
 }
 
+#ifdef _WIN32
 struct CoTaskMemFreer
 {
   void operator()(void* p) { ::CoTaskMemFree(p); }
@@ -828,6 +846,7 @@ QDir getKnownFolder(KNOWNFOLDERID id, const QString& what)
 
   return QString::fromWCharArray(path.get());
 }
+#endif  // _WIN32
 
 QString getDesktopDirectory()
 {
@@ -927,6 +946,7 @@ void removeOldFiles(const QString& path, const QString& pattern, int numToKeep,
   }
 }
 
+#ifdef _WIN32
 QIcon iconForExecutable(const QString& filePath)
 {
   HICON winIcon;
@@ -1014,6 +1034,7 @@ QString getProductVersion(QString const& filepath)
 
   return QString::fromWCharArray((LPCWSTR)lpb);
 }
+#endif  // _WIN32
 
 void deleteChildWidgets(QWidget* w)
 {
@@ -1037,6 +1058,7 @@ void trimWString(std::wstring& s)
           s.end());
 }
 
+#ifdef _WIN32
 std::wstring getMessage(DWORD id, HMODULE mod)
 {
   wchar_t* message = nullptr;
@@ -1065,6 +1087,7 @@ std::wstring getMessage(DWORD id, HMODULE mod)
 
   return s;
 }
+#endif  // _WIN32
 
 std::wstring formatMessage(DWORD id, const std::wstring& message)
 {
@@ -1082,6 +1105,7 @@ std::wstring formatMessage(DWORD id, const std::wstring& message)
   return s;
 }
 
+#ifdef _WIN32
 std::wstring formatSystemMessage(DWORD id)
 {
   return formatMessage(id, getMessage(id, 0));
@@ -1097,6 +1121,7 @@ QString windowsErrorString(DWORD errorCode)
 {
   return QString::fromStdWString(formatSystemMessage(errorCode));
 }
+#endif  // _WIN32
 
 QString localizedSize(unsigned long long bytes, const QString& B, const QString& KB,
                       const QString& MB, const QString& GB, const QString& TB)

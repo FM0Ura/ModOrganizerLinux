@@ -19,7 +19,11 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #define REGISTRY_H
 
 #include "dllimport.h"
+#ifdef _WIN32
 #include <Windows.h>
+#else
+#include "win32compat.h"
+#endif
 
 namespace MOBase
 {

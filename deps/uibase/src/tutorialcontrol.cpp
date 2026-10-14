@@ -86,6 +86,10 @@ void TutorialControl::expose(const QString& widgetName, QObject* widget)
 
 static QString canonicalPath(const QString& path)
 {
+#ifndef _WIN32
+  const QString canonical = QFileInfo(path).canonicalFilePath();
+  return canonical.isEmpty() ? path : canonical;
+#else
   std::unique_ptr<wchar_t[]> buffer(new wchar_t[32768]);
   DWORD res = ::GetShortPathNameW((wchar_t*)path.utf16(), buffer.get(), 32768);
   if (res == 0) {
@@ -96,6 +100,7 @@ static QString canonicalPath(const QString& path)
     return path;
   }
   return QString::fromWCharArray(buffer.get());
+#endif
 }
 
 void TutorialControl::startTutorial(const QString& tutorial)

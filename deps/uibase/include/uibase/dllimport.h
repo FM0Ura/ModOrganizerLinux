@@ -24,7 +24,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 namespace MOBase
 {
 
-#if defined(UIBASE_EXPORT)
+#if !defined(_WIN32)
+// GCC/Clang: uibase is built with hidden visibility, exported symbols are marked
+// default; consumers see the same declarations (type info, vtables, ...)
+#if defined(_NODLL)
+#define QDLLEXPORT
+#else
+#define QDLLEXPORT __attribute__((visibility("default")))
+#endif
+#elif defined(UIBASE_EXPORT)
 #define QDLLEXPORT __declspec(dllexport)
 #elif defined(_NODLL)
 #define QDLLEXPORT

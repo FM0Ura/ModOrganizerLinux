@@ -295,6 +295,7 @@ void Logger::createLogger(const std::string& name)
 {
   m_sinks.reset(new spdlog::sinks::dist_sink<std::mutex>);
 
+#ifdef _WIN32
   DWORD console_mode;
   if (::GetConsoleMode(::GetStdHandle(STD_ERROR_HANDLE), &console_mode) != 0) {
     using sink_type = spdlog::sinks::wincolor_stderr_sink_mt;
@@ -309,6 +310,10 @@ void Logger::createLogger(const std::string& name)
 
     addSink(m_console);
   }
+#else
+  m_console.reset(new spdlog::sinks::stderr_color_sink_mt);
+  addSink(m_console);
+#endif
 
   m_logger.reset(new spdlog::logger(name, m_sinks));
 }

@@ -28,8 +28,16 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <QTextStream>
 #include <QUrl>
 #include <QVariant>
+#ifdef _WIN32
 #include <ShlObj.h>
 #include <Windows.h>
+#else
+#include "win32compat.h"
+#include <QFile>
+#include <cctype>
+#include <fstream>
+#include <memory>
+#endif
 #include <algorithm>
 #include <set>
 #include <vector>
@@ -181,7 +189,9 @@ namespace shell
       void operator()(HANDLE h)
       {
         if (h != INVALID_HANDLE_VALUE) {
+#ifdef _WIN32
           ::CloseHandle(h);
+#endif
         }
       }
     };
@@ -602,6 +612,25 @@ private:
 template <class F>
 bool forEachLineInFile(const QString& filePath, F&& f)
 {
+#ifndef _WIN32
+  std::ifstream in(QFile::encodeName(filePath).constData(),
+                   std::ios::binary | std::ios::ate);
+  if (!in) {
+    return false;
+  }
+
+  const std::streamoff fileSize = in.tellg();
+  if (fileSize < 0) {
+    return false;
+  }
+
+  auto buffer           = std::make_unique<char[]>(static_cast<std::size_t>(fileSize));
+  std::size_t byteCount = static_cast<std::size_t>(fileSize);
+  in.seekg(0);
+  if (!in.read(buffer.get(), static_cast<std::streamsize>(byteCount))) {
+    return false;
+  }
+#else
   HANDLE h =
       ::CreateFileW(reinterpret_cast<const wchar_t*>(filePath.utf16()), GENERIC_READ,
                     FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
@@ -624,6 +653,7 @@ bool forEachLineInFile(const QString& filePath, F&& f)
   if (!::ReadFile(h, buffer.get(), byteCount, &byteCount, nullptr)) {
     return false;
   }
+#endif
 
   const char* lineStart = buffer.get();
   const char* p         = lineStart;

@@ -51,6 +51,7 @@ quint32 TaskProgressManager::getId()
   return m_NextId++;
 }
 
+#ifdef _WIN32
 void TaskProgressManager::showProgress()
 {
   if (!m_Percentages.empty()) {
@@ -110,6 +111,8 @@ bool TaskProgressManager::tryCreateTaskbar()
   }
   return false;
 }
+
+#endif  // _WIN32
 
 TaskProgressManager::TaskProgressManager()
     : m_NextId(1), m_CreateTries(10), m_WinId(nullptr), m_Taskbar(nullptr)

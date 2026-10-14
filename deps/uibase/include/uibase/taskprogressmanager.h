@@ -6,9 +6,15 @@
 #include <QObject>
 #include <QTime>
 #include <QTimer>
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 #include <map>
+#ifdef _WIN32
 #include <shobjidl.h>
+#else
+#include "win32compat.h"
+#endif
 
 namespace MOBase
 {

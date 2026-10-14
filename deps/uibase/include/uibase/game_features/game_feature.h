@@ -12,14 +12,23 @@ namespace MOBase
 class GameFeature
 {
 public:
-  GameFeature()          = default;
+  GameFeature() = default;
+#ifdef _WIN32
   virtual ~GameFeature() = 0 {}
+#else
+  // standard C++: a pure virtual function cannot be defined in the class
+  virtual ~GameFeature() = 0;
+#endif
 
   /**
    * @brief Retrieve the type index of the main game feature this feature extends.
    */
   virtual const std::type_info& typeInfo() const = 0;
 };
+
+#ifndef _WIN32
+inline GameFeature::~GameFeature() {}
+#endif
 
 namespace details
 {
