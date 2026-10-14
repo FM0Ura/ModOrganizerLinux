@@ -7,14 +7,28 @@ include(${CMAKE_CURRENT_LIST_DIR}/mo2_utils.cmake)
 #
 # \param:WARNINGS level of warnings, possible values are ON/All, OFF, or 1, 2, 3, 4
 #    for corresponding /W flags (ON is All) (default ON)
+#    with GCC/Clang: OFF adds nothing, 1/2/3 add -Wall, 4 and ON add -Wall -Wextra,
+#    All adds -Wall -Wextra -Wpedantic
 # \param:EXTERNAL enable warnings for external libraries, possible values are
-#   the same as warnings, but ON is 3 (default 1)
+#   the same as warnings, but ON is 3 (default 1) - ignored with GCC/Clang, which
+#   already silence warnings coming from system headers
 #
 function(mo2_configure_warnings TARGET)
 	cmake_parse_arguments(MO2 "" "WARNINGS;EXTERNAL" "" ${ARGN})
 
 	mo2_set_if_not_defined(MO2_WARNINGS ON)
 	mo2_set_if_not_defined(MO2_EXTERNAL 1)
+
+	if (NOT MSVC)
+		if (${MO2_WARNINGS} STREQUAL "ON" OR ${MO2_WARNINGS} STREQUAL "4")
+			target_compile_options(${TARGET} PRIVATE -Wall -Wextra)
+		elseif (${MO2_WARNINGS} STREQUAL "All")
+			target_compile_options(${TARGET} PRIVATE -Wall -Wextra -Wpedantic)
+		elseif (NOT ${MO2_WARNINGS} STREQUAL "OFF")
+			target_compile_options(${TARGET} PRIVATE -Wall)
+		endif()
+		return()
+	endif()
 
 	if (${MO2_WARNINGS} STREQUAL "ON")
 		set(MO2_WARNINGS "All")
@@ -198,6 +212,34 @@ function(mo2_configure_msvc TARGET)
 
 endfunction()
 
+#! mo2_configure_gcc : set flags for C++ target with GCC (or any non-MSVC compiler)
+#
+# - C++23 without compiler extensions
+# - position independent code
+# - hidden symbol visibility for shared libraries and modules (symbols must be
+#   exported explicitly)
+#
+# warnings are handled by mo2_configure_warnings.
+#
+function(mo2_configure_gcc TARGET)
+
+	if (MSVC)
+		return()
+	endif()
+
+	set_target_properties(${TARGET} PROPERTIES
+		CXX_STANDARD 23
+		CXX_STANDARD_REQUIRED ON
+		CXX_EXTENSIONS OFF
+		POSITION_INDEPENDENT_CODE ON)
+
+	get_target_property(_mo2_type ${TARGET} TYPE)
+	if (_mo2_type STREQUAL "SHARED_LIBRARY" OR _mo2_type STREQUAL "MODULE_LIBRARY")
+		set_target_properties(${TARGET} PROPERTIES CXX_VISIBILITY_PRESET hidden)
+	endif()
+
+endfunction()
+
 #! mo2_configure_target : do basic configuration for a MO2 C++ target
 #
 # this functions does many things:
@@ -235,6 +277,7 @@ function(mo2_configure_target TARGET)
 
 	mo2_configure_warnings(${TARGET} ${ARGN})
 	mo2_configure_msvc(${TARGET} ${ARGN})
+	mo2_configure_gcc(${TARGET} ${ARGN})
 
 	if (NOT MO2_NO_SOURCES)
 		mo2_configure_sources(${TARGET} ${ARGN})
@@ -254,7 +297,10 @@ function(mo2_configure_target TARGET)
 
 	mo2_find_git_hash(GIT_COMMIT_HASH)
 	target_compile_definitions(
-		${TARGET} PRIVATE NOMINMAX QT_MESSAGELOGCONTEXT GITID="${GIT_COMMIT_HASH}")
+		${TARGET} PRIVATE QT_MESSAGELOGCONTEXT GITID="${GIT_COMMIT_HASH}")
+	if (WIN32)
+		target_compile_definitions(${TARGET} PRIVATE NOMINMAX)
+	endif()
 
 	if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 		target_precompile_headers(${PROJECT_NAME}
@@ -301,15 +347,18 @@ function(mo2_configure_tests TARGET)
 		WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 	set(${TARGET}_gtests ${${TARGET}_gtests} PARENT_SCOPE)
 
-	mo2_deploy_qt_for_tests(
-		TARGET ${TARGET}
-		BINARIES "$<FILTER:$<TARGET_RUNTIME_DLLS:${TARGET}>,EXCLUDE,^.*[/\\]Qt[^/\\]*[.]dll>")
+	# Windows only: on Linux the build tree RPATH finds the libraries
+	if (WIN32)
+		mo2_deploy_qt_for_tests(
+			TARGET ${TARGET}
+			BINARIES "$<FILTER:$<TARGET_RUNTIME_DLLS:${TARGET}>,EXCLUDE,^.*[/\\]Qt[^/\\]*[.]dll>")
 
-	set_tests_properties(${${TARGET}_gtests}
-		PROPERTIES
-		ENVIRONMENT_MODIFICATION
-		"PATH=path_list_prepend:$<JOIN:$<TARGET_RUNTIME_DLL_DIRS:${TARGET}>,\;>"
-	)
+		set_tests_properties(${${TARGET}_gtests}
+			PROPERTIES
+			ENVIRONMENT_MODIFICATION
+			"PATH=path_list_prepend:$<JOIN:$<TARGET_RUNTIME_DLL_DIRS:${TARGET}>,\;>"
+		)
+	endif()
 endfunction()
 
 #! mo2_configure_plugin : configure a target as a MO2 C++ plugin
@@ -333,13 +382,20 @@ endfunction()
 function(mo2_install_plugin TARGET)
 	cmake_parse_arguments(MO2 "FOLDER" "" "" ${ARGN})
 
+	# a plugin is a DLL (RUNTIME) on Windows and a shared object (LIBRARY) elsewhere,
+	# both are installed in the same place
 	if (${MO2_FOLDER})
-		install(TARGETS ${TARGET} RUNTIME DESTINATION ${MO2_INSTALL_BIN}/plugins/$<TARGET_FILE_BASE_NAME:${TARGET}>)
+		install(TARGETS ${TARGET}
+			RUNTIME DESTINATION ${MO2_INSTALL_BIN}/plugins/$<TARGET_FILE_BASE_NAME:${TARGET}>
+			LIBRARY DESTINATION ${MO2_INSTALL_BIN}/plugins/$<TARGET_FILE_BASE_NAME:${TARGET}>)
 	else()
-		install(TARGETS ${TARGET} RUNTIME DESTINATION ${MO2_INSTALL_BIN}/plugins)
+		install(TARGETS ${TARGET}
+			RUNTIME DESTINATION ${MO2_INSTALL_BIN}/plugins
+			LIBRARY DESTINATION ${MO2_INSTALL_BIN}/plugins)
 	endif()
 
-	if (NOT MO2_INSTALL_IS_BIN)
+	# import library and PDB only exist on Windows
+	if (WIN32 AND NOT MO2_INSTALL_IS_BIN)
 		install(TARGETS ${TARGET} ARCHIVE DESTINATION lib)
 		# install PDB if possible
 		install(FILES $<TARGET_PDB_FILE:${TARGET}> DESTINATION pdb OPTIONAL)

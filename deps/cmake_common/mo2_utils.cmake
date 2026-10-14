@@ -73,12 +73,16 @@ function(mo2_find_qt_executable VARNAME EXECUTABLE)
 
 	# retrieve the absolute path to qmake and then use that path to find
 	# the windeployqt and macdeployqt binaries
-	get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
-	get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
+	set(_qt_bin_dir "")
+	if (TARGET Qt6::qmake)
+		get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
+		get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
+	endif()
 
 	# need to use a custom varname per executable to use the cache
-	find_program(QT_${EXECUTABLE} ${EXECUTABLE} HINTS "${_qt_bin_dir}")
-	if(WIN32 AND NOT QT_${EXECUTABLE})
+	# (some Linux distributions install the tools as <name>-qt6 in PATH)
+	find_program(QT_${EXECUTABLE} NAMES ${EXECUTABLE} ${EXECUTABLE}-qt6 HINTS "${_qt_bin_dir}")
+	if(NOT QT_${EXECUTABLE} AND (WIN32 OR EXECUTABLE MATCHES "^l(update|release)$"))
 		message(FATAL_ERROR "${EXECUTABLE} not found")
 	endif()
 
@@ -87,13 +91,17 @@ endfunction()
 
 #! mo2_set_project_to_run_from_install : set a target to run from a given executable
 #
-# this function is only meaningful for VS generator
+# this function is only meaningful for VS generator, it does nothing on other platforms
 #
 # \param:TARGET name of the target
 # \param:EXECUTABLE full path to the executable
 # \param:WORKDIR working directory (optional, default is the directory of the executable)
 #
 function(mo2_set_project_to_run_from_install TARGET)
+	if (NOT WIN32)
+		return()
+	endif()
+
 	cmake_parse_arguments(MO2 "" "EXECUTABLE;WORKDIR" "" ${ARGN})
 
     # extract directory
@@ -152,10 +160,16 @@ endfunction()
 #
 # unlike mo2_deploy_qt(), this function does not perform any cleaning
 #
+# this function does nothing on non-Windows platforms (Qt comes from the system)
+#
 # \param:TARGET name of the target to deploy for
 # \param:BINARIES names of the binaries to deploy from
 #
 function(mo2_deploy_qt_for_tests)
+	if (NOT WIN32)
+		return()
+	endif()
+
 	cmake_parse_arguments(DEPLOY "" "TARGET" "BINARIES" ${ARGN})
 
 	mo2_find_qt_executable(windeployqt windeployqt)
@@ -180,12 +194,18 @@ endfunction()
 #
 # this function attach install() entries that deploy Qt for the given binaries
 #
+# this function does nothing on non-Windows platforms (Qt comes from the system)
+#
 # \param:NOPLUGINS do not deploy Qt plugins
 # \param:DIRECTORY directory, relative to CMAKE_INSTALL_PREFIX, to deploy to, default
 #   to ${MO2_INSTALL_BIN}
 # \param:BINARIES names of the binaries (in the install path) to deploy from
 #
 function(mo2_deploy_qt)
+	if (NOT WIN32)
+		return()
+	endif()
+
 	cmake_parse_arguments(DEPLOY "NOPLUGINS" "DIRECTORY" "BINARIES" ${ARGN})
 
 	mo2_set_if_not_defined(DEPLOY_DIRECTORY "${MO2_INSTALL_BIN}")
