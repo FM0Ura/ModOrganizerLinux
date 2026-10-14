@@ -16,6 +16,13 @@ endif()
 
 add_subdirectory(src)
 
+# unit tests of the parts of the application that build without the whole of it; they
+# exercise the Linux implementations (src/linux), so they are Linux-only for now
+if (BUILD_TESTING AND NOT WIN32)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
+
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT organizer)
 
 if (WIN32)

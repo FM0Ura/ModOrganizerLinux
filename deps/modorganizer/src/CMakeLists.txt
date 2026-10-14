@@ -16,7 +16,30 @@ if (WIN32)
 	find_package(usvfs CONFIG REQUIRED)
 endif()
 
+if (NOT WIN32)
+	# replaced by -idirafter below
+	set(MO2_CMAKE_DEPRECATED_UIBASE_INCLUDE OFF)
+endif()
+
 find_package(mo2-uibase CONFIG REQUIRED)
+
+# the sources include the uibase headers without their uibase/ prefix (<log.h>, ...),
+# see MO2_CMAKE_DEPRECATED_UIBASE_INCLUDE in the top-level CMakeLists.txt; on Linux, the
+# directories are searched after the system ones: uibase's strings.h would hide the
+# system <strings.h>, which glibc's <string.h> includes in an extern "C" block (the
+# MOBase functions of uibase's strings.h would then get C linkage); moc only takes -I
+set(_organizer_uibase_include_options)
+set(_organizer_uibase_moc_options)
+if (NOT WIN32)
+	# the same directories as the mo2-uibase package adds with
+	# MO2_CMAKE_DEPRECATED_UIBASE_INCLUDE (<prefix>/lib/cmake/mo2-uibase/../../..)
+	get_filename_component(_uibase_prefix "${mo2-uibase_DIR}/../../.." ABSOLUTE)
+	foreach(_dir uibase uibase/game_features)
+		list(APPEND _organizer_uibase_include_options
+			"SHELL:-idirafter ${_uibase_prefix}/include/${_dir}")
+		list(APPEND _organizer_uibase_moc_options "-I${_uibase_prefix}/include/${_dir}")
+	endforeach()
+endif()
 find_package(mo2-archive CONFIG REQUIRED)
 find_package(mo2-lootcli-header CONFIG REQUIRED)
 find_package(mo2-bsatk CONFIG REQUIRED)
@@ -55,6 +78,19 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 # - Windows: everything except src/linux/,
 # - Linux: src/linux/<name>_linux.cpp replace the Windows-only files below, resource
 #   scripts and manifests are Windows-only.
+#
+# On Linux, the data tree (shared/ file register) and the filesystem part of env are
+# built as a static library, organizer_datatree, that the application links: the unit
+# tests (tests/) link it too, without the rest of the application.
+set(_organizer_datatree_sources
+	shared/directoryentry.cpp
+	shared/fileentry.cpp
+	shared/fileregister.cpp
+	shared/filesorigin.cpp
+	shared/originconnection.cpp
+	linux/envfs_linux.cpp
+	linux/util_linux.cpp)
+
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)
 foreach(_source IN LISTS _organizer_sources)
@@ -64,14 +100,30 @@ foreach(_source IN LISTS _organizer_sources)
 			continue()
 		endif()
 	else()
-		if (_relative MATCHES "^(env[a-z]*|spawn|usvfsconnector|shared/windows_error)\\.cpp$"
-				OR _relative MATCHES "\\.(rc|manifest)$")
+		if (_relative MATCHES "^(env[a-z]*|spawn|usvfsconnector|shared/windows_error|shared/util)\\.cpp$"
+				OR _relative MATCHES "\\.(rc|manifest)$"
+				OR _relative IN_LIST _organizer_datatree_sources)
 			continue()
 		endif()
 	endif()
 	list(APPEND _organizer_platform_sources ${_source})
 endforeach()
 set_property(TARGET organizer PROPERTY SOURCES ${_organizer_platform_sources})
+
+if (NOT WIN32)
+	add_library(organizer_datatree STATIC ${_organizer_datatree_sources})
+	mo2_configure_target(organizer_datatree
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+	target_precompile_headers(organizer_datatree PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
+	target_include_directories(organizer_datatree PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+	# public: the headers of the data tree need them, and so does the precompiled
+	# header that the tests reuse
+	target_link_libraries(organizer_datatree PUBLIC
+		mo2::uibase mo2::bsatk ${_organizer_boost}
+		Qt6::WebEngineWidgets Qt6::WebSockets Qt6::NetworkAuth)
+	target_compile_options(organizer_datatree PUBLIC ${_organizer_uibase_include_options})
+	target_link_libraries(organizer PRIVATE organizer_datatree)
+endif()
 
 # we add translations "manually" to handle MO2_INSTALL_IS_BIN
 mo2_add_translations(organizer
@@ -89,6 +141,9 @@ else()
 	# MSVC finds "header.h" included from the generated ui_*.h files in the directory of
 	# the source that includes them, GCC only through the include path
 	target_include_directories(organizer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+	target_compile_options(organizer PRIVATE ${_organizer_uibase_include_options})
+	set_property(TARGET organizer APPEND PROPERTY
+		AUTOMOC_MOC_OPTIONS ${_organizer_uibase_moc_options})
 	target_link_libraries(organizer PRIVATE ${CMAKE_DL_LIBS})
 endif()
 

@@ -2,7 +2,19 @@
 #define ENV_ENVFS_H
 
 #include "thread_utils.h"
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <list>
+#include <memory>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <vector>
+
+#ifndef _WIN32
+#include <uibase/win32compat.h>  // FILETIME
+#endif
 
 namespace env
 {

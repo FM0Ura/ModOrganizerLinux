@@ -23,7 +23,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "filesorigin.h"
 #include "originconnection.h"
 #include "util.h"
+#ifdef _WIN32
 #include "windows_error.h"
+#endif
 #include <filesystem>
 #include <log.h>
 #include <utility.h>
@@ -52,6 +54,7 @@ void elapsedImpl(std::chrono::nanoseconds& out, F&& f)
 #define elapsed(OUT, F) (F)();
 // #define elapsed(OUT, F) elapsedImpl(OUT, F);
 
+#ifdef _WIN32
 static bool SupportOptimizedFind()
 {
   // large fetch and basic info for FindFirstFileEx is supported on win server 2008 r2,
@@ -69,11 +72,12 @@ static bool SupportOptimizedFind()
   return (::VerifyVersionInfo(&versionInfo, VER_MAJORVERSION | VER_MINORVERSION,
                               mask) == TRUE);
 }
+#endif
 
 bool DirCompareByName::operator()(const DirectoryEntry* lhs,
                                   const DirectoryEntry* rhs) const
 {
-  return _wcsicmp(lhs->getName().c_str(), rhs->getName().c_str()) < 0;
+  return caseInsensitiveCompare(lhs->getName(), rhs->getName()) < 0;
 }
 
 DirectoryEntry::DirectoryEntry(std::wstring name, DirectoryEntry* parent, int originID)
@@ -170,7 +174,7 @@ void DirectoryEntry::addFromAllBSAs(const std::wstring& originName,
 {
   for (const auto& archive : archives) {
     const std::filesystem::path archivePath(archive);
-    const auto filename = archivePath.filename().native();
+    const auto filename = archivePath.filename().wstring();
 
     if (!enabledArchives.contains(filename)) {
       continue;
@@ -182,7 +186,7 @@ void DirectoryEntry::addFromAllBSAs(const std::wstring& originName,
 
     for (auto plugin : loadOrder) {
       const auto pluginNameLc =
-          ToLowerCopy(std::filesystem::path(plugin).stem().native());
+          ToLowerCopy(std::filesystem::path(plugin).stem().wstring());
 
       if (filenameLc.starts_with(pluginNameLc + L" - ") ||
           filenameLc.starts_with(pluginNameLc + L".")) {
@@ -193,7 +197,7 @@ void DirectoryEntry::addFromAllBSAs(const std::wstring& originName,
       }
     }
 
-    addFromBSA(originName, directory, archivePath.native(), priority, order, stats);
+    addFromBSA(originName, directory, archivePath.wstring(), priority, order, stats);
   }
 }
 
@@ -203,7 +207,7 @@ void DirectoryEntry::addFromBSA(const std::wstring& originName,
                                 int order, DirectoryStats& stats)
 {
   FilesOrigin& origin    = createOrigin(originName, directory, priority, stats);
-  const auto archiveName = std::filesystem::path(archivePath).filename().native();
+  const auto archiveName = std::filesystem::path(archivePath).filename().wstring();
 
   if (containsArchive(archiveName)) {
     return;
@@ -461,7 +465,7 @@ void DirectoryEntry::removeDir(const std::wstring& path)
     for (auto iter = m_SubDirectories.begin(); iter != m_SubDirectories.end(); ++iter) {
       DirectoryEntry* entry = *iter;
 
-      if (CaseInsensitiveEqual(entry->getName(), path)) {
+      if (caseInsensitiveEqual(entry->getName(), path)) {
         entry->removeDirRecursive();
         removeDirectoryFromList(iter);
         delete entry;
@@ -906,7 +910,11 @@ void DirectoryEntry::dump(const std::wstring& file) const
 {
   try {
     std::FILE* f = nullptr;
-    auto e       = _wfopen_s(&f, file.c_str(), L"wb");
+#ifdef _WIN32
+    auto e = _wfopen_s(&f, file.c_str(), L"wb");
+#else
+    auto e = (f = std::fopen(std::filesystem::path(file).c_str(), "wb")) ? 0 : errno;
+#endif
 
     if (e != 0 || !f) {
       throw DumpFailed(std::format("failed to open, {} ({})", std::strerror(e), e));

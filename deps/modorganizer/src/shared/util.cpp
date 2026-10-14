@@ -152,6 +152,26 @@ bool CaseInsensitiveEqual(const std::wstring& lhs, const std::wstring& rhs)
                     });
 }
 
+bool caseInsensitiveEqual(std::wstring_view lhs, std::wstring_view rhs)
+{
+  return (lhs.length() == rhs.length()) &&
+         std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                    [](wchar_t lhs, wchar_t rhs) -> bool {
+                      return std::tolower(lhs, loc) == std::tolower(rhs, loc);
+                    });
+}
+
+int caseInsensitiveCompare(std::wstring_view lhs, std::wstring_view rhs)
+{
+  // _wcsicmp() on views, which are not null-terminated
+  const int r = _wcsnicmp(lhs.data(), rhs.data(), std::min(lhs.size(), rhs.size()));
+  if (r != 0 || lhs.size() == rhs.size()) {
+    return r;
+  }
+
+  return lhs.size() < rhs.size() ? -1 : 1;
+}
+
 VS_FIXEDFILEINFO GetFileVersion(const std::wstring& fileName)
 {
   DWORD handle = 0UL;

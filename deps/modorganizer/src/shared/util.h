@@ -22,6 +22,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 #include <uibase/log.h>
 #include <uibase/versioning.h>
@@ -48,6 +49,13 @@ std::wstring ToLowerCopy(const std::wstring& text);
 std::wstring ToLowerCopy(std::wstring_view text);
 
 bool CaseInsensitiveEqual(const std::wstring& lhs, const std::wstring& rhs);
+
+// case-insensitive comparisons of file names; on Linux, two names are equal if and
+// only if their ToLowerCopy() are equal
+bool caseInsensitiveEqual(std::wstring_view lhs, std::wstring_view rhs);
+
+// < 0, 0 or > 0, like _wcsicmp()
+int caseInsensitiveCompare(std::wstring_view lhs, std::wstring_view rhs);
 
 MOBase::Version createVersionInfo();
 QString getUsvfsVersionString();
