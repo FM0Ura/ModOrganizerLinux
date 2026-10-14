@@ -17,7 +17,7 @@ BUILD_OUT="$ROOT/build-out"
 # Build order. Each target <t> is built by a function build_<t> (dashes become
 # underscores). A target without such a function is "not implemented yet".
 ALL_TARGETS=(
-    7zip cmake_common cmake-smoke uibase archive bsatk esptk lootcli dds-header
+    7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk lootcli
     modorganizer game_bethesda installer_quick installer_manual installer_fomod
 )
 
@@ -36,6 +36,8 @@ export CMAKE_PREFIX_PATH="$INSTALL${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
 
 # cmake_build <target> <source-dir> [extra configure args...]
 # Generic CMake target: configure, build, (ctest with --tests), install.
+# CMAKE_INSTALL_LIBDIR is pinned to lib: Fedora would default to lib64, but the
+# install tree keeps every library in lib/ (the application's RPATH is $ORIGIN/../lib).
 cmake_build() {
     local name="$1" src="$2"; shift 2
     local bdir="$BUILD_OUT/$name" testing=OFF
@@ -45,6 +47,7 @@ cmake_build() {
     cmake -S "$src" -B "$bdir" -G Ninja \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DCMAKE_INSTALL_PREFIX="$INSTALL" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH//:/;}" \
         -DBUILD_TESTING="$testing" "$@"
     log "build $name"
@@ -97,6 +100,44 @@ build_archive() {
     cmake_build archive "$ROOT/deps/archive"
 }
 
+# dds-header: the vcpkg port mo2-dds-header installs DDS.h into include/DDS and a
+# hand-written config exporting mo2::dds-header. DDS.h comes from the vendored DirectXTex
+# (CRLF in the working tree, so it is normalised and checked against the port's SHA-512).
+# Windows gets dxgiformat.h from the SDK, where DDS.h users expect it; on Linux the
+# package ships a replacement next to DDS.h (build/dds-header/dxgiformat.h).
+DDS_H_SHA512=49ED2C454A39D59EBAE06F2E96E814246754C83ECE074E052A8872F7E16FA7C9E00FEC3B1F1757E09AE9FC1D7C7AFCF7C845D377A3E8EC876E7F7D5CEDB1487A
+build_dds_header() {
+    local src="$ROOT/deps/dds-header/DirectXTex/DDS.h" dest="$INSTALL/include/DDS" sum
+    [[ -f $src ]] || die "DDS.h not found: $src"
+    mkdir -p "$dest" "$INSTALL/share/mo2-dds-header"
+    tr -d '\r' < "$src" > "$dest/DDS.h"
+    sum="$(sha512sum "$dest/DDS.h" | cut -d' ' -f1)"
+    [[ ${sum^^} == "$DDS_H_SHA512" ]] || die "DDS.h does not match the mo2-dds-header port (sha512 $sum)"
+    install -m 0644 "$ROOT/build/dds-header/dxgiformat.h" "$dest/"
+    install -m 0644 "$ROOT/build/dds-header/mo2-dds-header-config.cmake" "$INSTALL/share/mo2-dds-header/"
+}
+
+# bsatk reads/extracts BSA archives; with --tests its GoogleTest suite runs against a
+# synthetic Skyrim SE archive. It needs find_package(lz4 CONFIG), which distribution
+# packages do not provide: install a small config for the system lz4 first.
+build_bsatk() {
+    mkdir -p "$INSTALL/lib/cmake/lz4"
+    install -m 0644 "$ROOT/build/lz4/lz4Config.cmake" "$INSTALL/lib/cmake/lz4/"
+    cmake_build bsatk "$ROOT/deps/bsatk"
+}
+
+# esptk reads plugin headers; with --tests its GoogleTest suite runs against synthetic plugins.
+build_esptk() {
+    cmake_build esptk "$ROOT/deps/esptk"
+}
+
+# lootcli: only the header package mo2-lootcli-header (mo2::lootcli-header) is built, like
+# the vcpkg port. The lootcli executable needs Windows-only libloot and is skipped by
+# making Qt6 invisible to the project (its CMake builds the executable only if Qt6 is found).
+build_lootcli() {
+    cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
@@ -127,4 +168,5 @@ for t in "${ALL_TARGETS[@]}"; do
     "$(fn_of "$t")"
 done
 ((${#skipped[@]})) && log "skipped (not implemented yet): ${skipped[*]}"
+[[ ! -e $INSTALL/lib64 ]] || die "$INSTALL/lib64 exists: libraries must install into lib/"
 log "done; install prefix: $INSTALL"

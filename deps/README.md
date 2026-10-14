@@ -30,10 +30,12 @@ Full hashes for the plugin pins: `c2b25978e094513701e7f1d94b28c192f5bc849a`,
 - **`dds-header`**: the vcpkg port `mo2-dds-header` downloads one file,
   `DirectXTex/DDS.h`, from the `jun2024` tag of Microsoft's DirectXTex. There is no
   repository dedicated to it, so the whole DirectXTex tag is imported (about 4 MB).
-  Only `deps/dds-header/DirectXTex/DDS.h` is used; consumers must add
-  `deps/dds-header/DirectXTex` to their include path (the registry's
-  `mo2::dds-header` target points at the directory holding `DDS.h`). The header is
-  byte-identical to the file the port downloads (SHA-512 `49ED2C45...`). Upstream's
+  Only `deps/dds-header/DirectXTex/DDS.h` is used: `./build.sh --only dds-header`
+  installs it like the port does (`include/DDS/DDS.h` plus the config exporting
+  `mo2::dds-header`, from `build/dds-header/`), together with a `dxgiformat.h`
+  replacing the Windows SDK header that DDS.h users expect. The header is
+  byte-identical to the file the port downloads (SHA-512 `49ED2C45...`, checked by
+  the build). Upstream's
   `.gitattributes` forces CRLF for `*.h` in the working tree; the committed blob is LF.
   DirectXTex's own `CMakeLists.txt` is not meant to be built.
 - **`cmake_common`** has no `CMakeLists.txt`: it only ships CMake modules
