@@ -57,6 +57,18 @@ bool caseInsensitiveEqual(std::wstring_view lhs, std::wstring_view rhs);
 // < 0, 0 or > 0, like _wcsicmp()
 int caseInsensitiveCompare(std::wstring_view lhs, std::wstring_view rhs);
 
+// paths stored in user files (modlist.txt, meta.ini, installer entries, ...) and the
+// virtual paths of the data tree use backslashes; this converts them to the separator
+// of the system before they are used as paths on the disk: backslashes become slashes
+// on Linux, and it does nothing on Windows
+inline QString normalizeSeparators(QString path)
+{
+#ifndef _WIN32
+  path.replace(u'\\', u'/');
+#endif
+  return path;
+}
+
 MOBase::Version createVersionInfo();
 QString getUsvfsVersionString();
 

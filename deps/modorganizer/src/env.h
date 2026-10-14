@@ -12,6 +12,7 @@ class SecurityProduct;
 class WindowsInfo;
 class Metrics;
 
+#ifdef _WIN32
 // used by DesktopDCPtr, calls ReleaseDC(0, dc) as the deleter
 //
 struct DesktopDCReleaser
@@ -74,6 +75,7 @@ struct COMReleaser
 
 template <class T>
 using COMPtr = std::unique_ptr<T, COMReleaser>;
+#endif  // _WIN32
 
 // used by MallocPtr, calls std::free() as the deleter
 //
@@ -85,6 +87,7 @@ struct MallocFreer
 template <class T>
 using MallocPtr = std::unique_ptr<T, MallocFreer>;
 
+#ifdef _WIN32
 // used by LocalPtr, calls LocalFree() as the deleter
 //
 template <class T>
@@ -110,6 +113,7 @@ struct CoTaskMemFreer
 
 template <class T>
 using CoTaskMemPtr = std::unique_ptr<T, CoTaskMemFreer<T>>;
+#endif  // _WIN32
 
 // creates a console in the constructor and destroys it in the destructor,
 // also redirects standard streams

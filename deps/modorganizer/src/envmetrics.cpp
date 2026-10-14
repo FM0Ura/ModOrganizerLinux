@@ -1,9 +1,13 @@
 #include "envmetrics.h"
 #include "env.h"
 #include <QScreen>
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 #include <log.h>
+#ifdef _WIN32
 #include <shellscalingapi.h>
+#endif
 #include <utility.h>
 
 namespace env
@@ -11,6 +15,7 @@ namespace env
 
 using namespace MOBase;
 
+#ifdef _WIN32
 // fallback for windows 7
 //
 int getDesktopDpi()
@@ -126,6 +131,10 @@ int getDpi(const QString& monitorDevice)
   // dpiX and dpiY are always identical, as per the documentation
   return dpiX;
 }
+#else
+// envmetrics_linux.cpp
+int getDpi(const QString& monitorDevice);
+#endif  // _WIN32
 
 Display::Display(QString adapter, QString monitorDevice, bool primary)
     : m_adapter(std::move(adapter)), m_monitorDevice(std::move(monitorDevice)),
@@ -181,6 +190,7 @@ QString Display::toString() const
       .arg(m_primary ? " (primary)" : "");
 }
 
+#ifdef _WIN32
 void Display::getSettings()
 {
   DEVMODEW dm = {};
@@ -207,6 +217,7 @@ void Display::getSettings()
     m_resY = dm.dmPelsHeight;
   }
 }
+#endif  // _WIN32
 
 Metrics::Metrics()
 {
@@ -229,6 +240,7 @@ QRect Metrics::desktopGeometry() const
   return r;
 }
 
+#ifdef _WIN32
 void Metrics::getDisplays()
 {
   // don't bother if it goes over 100
@@ -253,5 +265,6 @@ void Metrics::getDisplays()
                             (device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE));
   }
 }
+#endif  // _WIN32
 
 }  // namespace env

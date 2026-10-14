@@ -15,6 +15,7 @@ namespace env
 
 using namespace MOBase;
 
+#ifdef _WIN32
 Console::Console() : m_hasConsole(false), m_in(nullptr), m_out(nullptr), m_err(nullptr)
 {
   // try to attach to parent
@@ -61,11 +62,13 @@ Console::~Console()
     FreeConsole();
   }
 }
+#endif  // _WIN32
 
 ModuleNotification::ModuleNotification(QObject* o, std::function<void(Module)> f)
     : m_cookie(nullptr), m_object(o), m_f(std::move(f))
 {}
 
+#ifdef _WIN32
 ModuleNotification::~ModuleNotification()
 {
   if (!m_cookie) {
@@ -95,6 +98,7 @@ ModuleNotification::~ModuleNotification()
     log::error("failed to unregister for module notifications, error {}", r);
   }
 }
+#endif  // _WIN32
 
 void ModuleNotification::setCookie(void* c)
 {
@@ -174,6 +178,7 @@ const Metrics& Environment::metrics() const
   return *m_metrics;
 }
 
+#ifdef _WIN32
 QString Environment::timezone() const
 {
   TIME_ZONE_INFORMATION tz = {};
@@ -305,6 +310,7 @@ Environment::onModuleLoaded(QObject* o, std::function<void(Module)> f)
 
   return context;
 }
+#endif  // _WIN32
 
 void Environment::dump(const Settings& s) const
 {
@@ -390,14 +396,14 @@ QString path()
 QString appendToPath(const QString& s)
 {
   auto old = path();
-  set("PATH", old + ";" + s);
+  set("PATH", old + QDir::listSeparator() + s);
   return old;
 }
 
 QString prependToPath(const QString& s)
 {
   auto old = path();
-  set("PATH", s + ";" + old);
+  set("PATH", s + QDir::listSeparator() + old);
   return old;
 }
 
@@ -406,6 +412,7 @@ void setPath(const QString& s)
   set("PATH", s);
 }
 
+#ifdef _WIN32
 QString get(const QString& name)
 {
   std::size_t bufferSize = 4000;
@@ -441,6 +448,7 @@ void set(const QString& n, const QString& v)
 {
   ::SetEnvironmentVariableW(n.toStdWString().c_str(), v.toStdWString().c_str());
 }
+#endif  // _WIN32
 
 Service::Service(QString name) : Service(std::move(name), StartType::None, Status::None)
 {}
@@ -515,6 +523,7 @@ QString toString(Service::Status st)
   }
 }
 
+#ifdef _WIN32
 Service::StartType getServiceStartType(SC_HANDLE s, const QString& name)
 {
   DWORD needed = 0;
@@ -731,6 +740,7 @@ QString formatCommandLine(const QFileInfo& targetInfo, const QString& cmd)
 
   return s.trimmed();
 }
+#endif  // _WIN32
 
 std::pair<QString, QString> splitExeAndArguments(const QString& cmd)
 {
@@ -760,6 +770,7 @@ std::pair<QString, QString> splitExeAndArguments(const QString& cmd)
   return {std::move(exe), std::move(args)};
 }
 
+#ifdef _WIN32
 Association getAssociation(const QFileInfo& targetInfo)
 {
   log::debug("getting association for '{}', extension is '.{}'",
@@ -1169,6 +1180,7 @@ HandlePtr dumpFile(const wchar_t* dir)
 
   return {};
 }
+#endif  // _WIN32
 
 CoreDumpTypes coreDumpTypeFromString(const std::string& s)
 {
@@ -1197,6 +1209,7 @@ std::string toString(CoreDumpTypes type)
   }
 }
 
+#ifdef _WIN32
 bool createMiniDump(const wchar_t* dir, HANDLE process, CoreDumpTypes type)
 {
   const DWORD pid = GetProcessId(process);
@@ -1268,5 +1281,6 @@ bool coredumpOther(CoreDumpTypes type)
 
   return createMiniDump(nullptr, handle.get(), type);
 }
+#endif  // _WIN32
 
 }  // namespace env

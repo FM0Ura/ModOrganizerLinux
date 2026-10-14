@@ -13,6 +13,7 @@ using namespace MOBase;
 // while adding to the startup time
 constexpr bool UseMD5 = false;
 
+#ifdef _WIN32
 Module::Module(QString path, std::size_t fileSize)
     : m_path(std::move(path)), m_fileSize(fileSize)
 {
@@ -26,6 +27,7 @@ Module::Module(QString path, std::size_t fileSize)
     m_md5 = getMD5();
   }
 }
+#endif  // _WIN32
 
 const QString& Module::path() const
 {
@@ -107,6 +109,7 @@ QString Module::toString() const
   return sl.join(", ");
 }
 
+#ifdef _WIN32
 Module::FileInfo Module::getFileInfo() const
 {
   const auto wspath = m_path.toStdWString();
@@ -313,6 +316,7 @@ bool Module::interesting() const
 
   return true;
 }
+#endif  // _WIN32
 
 QString Module::getMD5() const
 {
@@ -347,7 +351,9 @@ QString Module::getMD5() const
 
 Process::Process() : Process(0, 0, {}) {}
 
+#ifdef _WIN32
 Process::Process(HANDLE h) : Process(::GetProcessId(h), 0, {}) {}
+#endif  // _WIN32
 
 Process::Process(DWORD pid, DWORD ppid, QString name)
     : m_pid(pid), m_ppid(ppid), m_name(std::move(name))
@@ -381,6 +387,7 @@ const QString& Process::name() const
   return *m_name;
 }
 
+#ifdef _WIN32
 HandlePtr Process::openHandleForWait() const
 {
   const auto rights =
@@ -408,6 +415,7 @@ bool Process::canAccess() const
 
   return true;
 }
+#endif  // _WIN32
 
 void Process::addChild(Process p)
 {
@@ -424,6 +432,7 @@ const std::vector<Process>& Process::children() const
   return m_children;
 }
 
+#ifdef _WIN32
 std::vector<Module> getLoadedModules()
 {
   HandlePtr snapshot(CreateToolhelp32Snapshot(TH32CS_SNAPMODULE32 | TH32CS_SNAPMODULE,
@@ -527,6 +536,7 @@ std::vector<Process> getRunningProcesses()
 
   return v;
 }
+#endif  // _WIN32
 
 void findChildren(Process& parent, const std::vector<Process>& processes)
 {
@@ -540,6 +550,7 @@ void findChildren(Process& parent, const std::vector<Process>& processes)
   }
 }
 
+#ifdef _WIN32
 Process getProcessTreeFromProcess(HANDLE h)
 {
   Process root;
@@ -610,6 +621,7 @@ std::vector<DWORD> processesInJob(HANDLE h)
 
   return {};
 }
+#endif  // _WIN32
 
 void findChildProcesses(Process& parent, std::vector<Process>& processes)
 {
@@ -631,6 +643,7 @@ void findChildProcesses(Process& parent, std::vector<Process>& processes)
   }
 }
 
+#ifdef _WIN32
 Process getProcessTreeFromJob(HANDLE h)
 {
   const auto ids = processesInJob(h);
@@ -787,5 +800,6 @@ DWORD getProcessParentID(HANDLE handle)
 {
   return getProcessParentID(GetProcessId(handle));
 }
+#endif  // _WIN32
 
 }  // namespace env

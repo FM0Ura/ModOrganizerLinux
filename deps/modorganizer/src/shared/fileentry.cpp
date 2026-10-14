@@ -5,6 +5,14 @@
 namespace MOShared
 {
 
+// getFullPath() and getRelativePath() are paths on the disk (the latter relative to
+// the origin), with the separator of the system
+#ifdef _WIN32
+static const wchar_t* const PathSeparator = L"\\";
+#else
+static const wchar_t* const PathSeparator = L"/";
+#endif
+
 FileEntry::FileEntry()
     : m_Index(InvalidFileIndex), m_Name(), m_Origin(-1), m_Parent(nullptr),
       m_FileSize(NoFileSize), m_CompressedFileSize(NoFileSize)
@@ -225,7 +233,7 @@ std::wstring FileEntry::getFullPath(OriginID originID) const
   // all intermediate directories
   recurseParents(result, m_Parent);
 
-  return result + L"\\" + m_Name;
+  return result + PathSeparator + m_Name;
 }
 
 std::wstring FileEntry::getRelativePath() const
@@ -235,7 +243,7 @@ std::wstring FileEntry::getRelativePath() const
   // all intermediate directories
   recurseParents(result, m_Parent);
 
-  return result + L"\\" + m_Name;
+  return result + PathSeparator + m_Name;
 }
 
 bool FileEntry::recurseParents(std::wstring& path, const DirectoryEntry* parent) const
@@ -245,7 +253,7 @@ bool FileEntry::recurseParents(std::wstring& path, const DirectoryEntry* parent)
   } else {
     // don't append the topmost parent because it is the virtual data-root
     if (recurseParents(path, parent->getParent())) {
-      path.append(L"\\").append(parent->getName());
+      path.append(PathSeparator).append(parent->getName());
     }
 
     return true;

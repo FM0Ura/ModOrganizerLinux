@@ -8,6 +8,9 @@
 namespace env
 {
 
+// the shell context menu of files; on Linux, a menu with the actions of
+// ShellMenu::addActions()
+//
 class ShellMenu
 {
 public:
@@ -23,13 +26,20 @@ public:
   int fileCount() const;
 
   void exec(const QPoint& pos);
+#ifdef _WIN32
   HMENU getMenu();
   bool wndProc(HWND hwnd, UINT m, WPARAM wp, LPARAM lp, LRESULT* out);
   void invoke(const QPoint& p, int cmd);
+#else
+  // adds the actions for the files to the given menu: open, open the folder, copy
+  // the path
+  void addActions(QMenu& menu);
+#endif
 
 private:
   QMainWindow* m_mw;
   std::vector<QFileInfo> m_files;
+#ifdef _WIN32
   COMPtr<IContextMenu> m_cm;
   COMPtr<IContextMenu2> m_cm2;
   COMPtr<IContextMenu3> m_cm3;
@@ -49,6 +59,7 @@ private:
   HMenuPtr createDummyMenu(const QString& what);
 
   void onMenuSelect(HWND hwnd, HMENU hmenu, int item, HMENU hmenuPopup, UINT flags);
+#endif
 };
 
 class ShellMenuCollection
@@ -73,9 +84,11 @@ private:
   std::vector<MenuInfo> m_menus;
   MenuInfo* m_active;
 
+#ifdef _WIN32
   bool wndProc(HWND hwnd, UINT m, WPARAM wp, LPARAM lp, LRESULT* out);
 
   void onMenuSelect(HWND hwnd, HMENU hmenu, int item, HMENU hmenuPopup, UINT flags);
+#endif
 };
 
 }  // namespace env

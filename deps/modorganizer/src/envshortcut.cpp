@@ -11,6 +11,7 @@ namespace env
 
 using namespace MOBase;
 
+#ifdef _WIN32
 class ShellLinkException
 {
 public:
@@ -127,6 +128,7 @@ private:
     return COMPtr<IPersistFile>(static_cast<IPersistFile*>(file));
   }
 };
+#endif  // _WIN32
 
 Shortcut::Shortcut() : m_iconIndex(0) {}
 
@@ -206,6 +208,7 @@ bool Shortcut::toggle(Locations loc)
   }
 }
 
+#ifdef _WIN32
 bool Shortcut::add(Locations loc)
 {
   log::debug("adding shortcut to {}:\n"
@@ -275,6 +278,7 @@ bool Shortcut::remove(Locations loc)
 
   return true;
 }
+#endif  // _WIN32
 
 QString Shortcut::shortcutPath(Locations loc) const
 {
@@ -291,6 +295,7 @@ QString Shortcut::shortcutPath(Locations loc) const
   return dir + QDir::separator() + file;
 }
 
+#ifdef _WIN32
 QString Shortcut::shortcutDirectory(Locations loc) const
 {
   QString dir;
@@ -325,6 +330,7 @@ QString Shortcut::shortcutFilename() const
 
   return m_name + ".lnk";
 }
+#endif  // _WIN32
 
 QString toString(Shortcut::Locations loc)
 {

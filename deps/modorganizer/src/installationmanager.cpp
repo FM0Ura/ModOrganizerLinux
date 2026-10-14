@@ -33,6 +33,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "report.h"
 #include "selectiondialog.h"
 #include "settings.h"
+#include "shared/util.h"
 #include <scopeguard.h>
 #include <utility.h>
 
@@ -280,7 +281,7 @@ QStringList InstallationManager::extractFiles(
   QStringList result;
 
   for (auto& entry : files) {
-    auto path = entry->path();
+    auto path = normalizeSeparators(entry->path());
     result.append(QDir::tempPath().append("/").append(path));
     m_TempFilesToDelete.insert(path);
   }
@@ -376,7 +377,7 @@ QString InstallationManager::generateBackupName(const QString& directoryName) co
 InstallationResult InstallationManager::testOverwrite(GuessedValue<QString>& modName)
 {
   QString targetDirectory =
-      QDir::fromNativeSeparators(m_ModsDirectory + "\\" + modName);
+      normalizeSeparators(QDir::fromNativeSeparators(m_ModsDirectory + "\\" + modName));
 
   // this is only returned on success
   InstallationResult result{IPluginInstaller::RESULT_SUCCESS};
@@ -506,8 +507,8 @@ InstallationResult InstallationManager::doInstall(ModInstallationInfo& info)
 
   // Copy the created files:
   for (auto& p : m_CreatedFiles) {
-    QString destPath =
-        QDir::cleanPath(targetDirectory + QDir::separator() + p.first->path());
+    QString destPath = QDir::cleanPath(targetDirectory + QDir::separator() +
+                                       normalizeSeparators(p.first->path()));
     log::debug("Moving {} to {}.", p.second, destPath);
 
     // We need to remove the path if it exists:

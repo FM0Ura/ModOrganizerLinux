@@ -9,6 +9,7 @@ namespace env
 
 using namespace MOBase;
 
+#ifdef _WIN32
 WindowsInfo::WindowsInfo()
 {
   // loading ntdll.dll, the functions will be found with GetProcAddress()
@@ -25,6 +26,7 @@ WindowsInfo::WindowsInfo()
   m_release  = getRelease();
   m_elevated = getElevated();
 }
+#endif  // _WIN32
 
 bool WindowsInfo::compatibilityMode() const
 {
@@ -105,6 +107,7 @@ QString WindowsInfo::toString() const
   return sl.join(", ");
 }
 
+#ifdef _WIN32
 WindowsInfo::Version WindowsInfo::getReportedVersion(HINSTANCE ntdll) const
 {
   // windows has been deprecating pretty much all the functions having to do
@@ -229,5 +232,6 @@ std::optional<bool> WindowsInfo::getElevated() const
 
   return (e.TokenIsElevated != 0);
 }
+#endif  // _WIN32
 
 }  // namespace env

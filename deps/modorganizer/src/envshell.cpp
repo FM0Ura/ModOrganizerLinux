@@ -3,7 +3,9 @@
 
 #include <log.h>
 #include <utility.h>
+#ifdef _WIN32
 #include <windowsx.h>
+#endif
 
 #include "envshell.h"
 
@@ -12,6 +14,7 @@ namespace env
 
 using namespace MOBase;
 
+#ifdef _WIN32
 const int QCM_FIRST = 1;
 const int QCM_LAST  = 0x7ff;
 
@@ -156,6 +159,7 @@ HRESULT IContextMenu_GetCommandString(IContextMenu* pcm, UINT_PTR idCmd, UINT uF
 
   return hr;
 }
+#endif  // _WIN32
 
 ShellMenu::ShellMenu(QMainWindow* mw) : m_mw(mw) {}
 
@@ -169,6 +173,7 @@ int ShellMenu::fileCount() const
   return static_cast<int>(m_files.size());
 }
 
+#ifdef _WIN32
 void ShellMenu::exec(const QPoint& pos)
 {
   HMENU menu = getMenu();
@@ -485,6 +490,7 @@ void ShellMenu::invoke(const QPoint& p, int cmd)
     throw MenuFailed(r, std::format("InvokeCommand failed, verb={}", cmd));
   }
 }
+#endif  // _WIN32
 
 ShellMenuCollection::ShellMenuCollection(QMainWindow* mw) : m_mw(mw), m_active(nullptr)
 {}
@@ -499,6 +505,7 @@ void ShellMenuCollection::add(QString name, ShellMenu m)
   m_menus.push_back({name, std::move(m)});
 }
 
+#ifdef _WIN32
 void ShellMenuCollection::exec(const QPoint& pos)
 {
   HMENU menu = ::CreatePopupMenu();
@@ -620,5 +627,6 @@ void ShellMenuCollection::onMenuSelect(HWND hwnd, HMENU hmenu, int item,
     }
   }
 }
+#endif  // _WIN32
 
 }  // namespace env

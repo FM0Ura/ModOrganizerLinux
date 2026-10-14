@@ -2,10 +2,12 @@
 
 #include <QCoreApplication>
 
+#include <cstdlib>
 #include <cstring>
 
 #include <uibase/log.h>
 
+#include "instancemanager.h"
 #include "shared/fileregisterfwd.h"
 
 // the tests link the data tree without the rest of the application; these are defined
@@ -18,6 +20,18 @@ void setExceptionHandlers() {}
 MOShared::DirectoryStats::DirectoryStats()
 {
   std::memset(static_cast<void*>(this), 0, sizeof(DirectoryStats));
+}
+
+// instancemanager.cpp, used by the constructor of env::Shortcut from an executable of
+// the current instance, which the tests don't use
+InstanceManager& InstanceManager::singleton()
+{
+  std::abort();
+}
+
+std::shared_ptr<Instance> InstanceManager::currentInstance() const
+{
+  return {};
 }
 
 int main(int argc, char** argv)

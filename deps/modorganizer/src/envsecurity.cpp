@@ -4,6 +4,7 @@
 #include <log.h>
 #include <utility.h>
 
+#ifdef _WIN32
 #include <Wbemidl.h>
 #include <comdef.h>
 #include <netfw.h>
@@ -14,12 +15,14 @@
 #include <aclapi.h>
 #include <sddl.h>
 #pragma comment(lib, "advapi32.lib")
+#endif  // _WIN32
 
 namespace env
 {
 
 using namespace MOBase;
 
+#ifdef _WIN32
 class WMI
 {
 public:
@@ -140,6 +143,7 @@ private:
     return COMPtr<IEnumWbemClassObject>(rawEnumerator);
   }
 };
+#endif  // _WIN32
 
 SecurityProduct::SecurityProduct(QUuid guid, QString name, int provider, bool active,
                                  bool upToDate)
@@ -195,6 +199,7 @@ QString SecurityProduct::toString() const
   return s;
 }
 
+#ifdef _WIN32
 QString SecurityProduct::providerToString() const
 {
   QStringList ps;
@@ -722,4 +727,5 @@ FileSecurity getFileSecurity(const QString& path)
 
   return fs;
 }
+#endif  // _WIN32
 }  // namespace env

@@ -9,15 +9,23 @@ namespace env
 
 // used by HandlePtr, calls CloseHandle() as the deleter
 //
+// on Linux, the HANDLE of a process is its pid,
+// reinterpret_cast<HANDLE>(static_cast<std::intptr_t>(pid)), and there is nothing to
+// close
+//
 struct HandleCloser
 {
   using pointer = HANDLE;
 
   void operator()(HANDLE h)
   {
+#ifdef _WIN32
     if (h != INVALID_HANDLE_VALUE) {
       ::CloseHandle(h);
     }
+#else
+    (void)h;
+#endif
   }
 };
 
@@ -74,6 +82,7 @@ public:
   QString toString() const;
 
 private:
+#ifdef _WIN32
   // contains the information from the version resource
   //
   struct FileInfo
@@ -81,6 +90,7 @@ private:
     VS_FIXEDFILEINFO ffi;
     QString fileDescription;
   };
+#endif
 
   QString m_path;
   std::size_t m_fileSize;
@@ -89,6 +99,7 @@ private:
   QString m_versionString;
   QString m_md5;
 
+#ifdef _WIN32
   // returns information from the version resource
   //
   FileInfo getFileInfo() const;
@@ -101,11 +112,13 @@ private:
   // creation date on the file
   //
   QDateTime getTimestamp(const VS_FIXEDFILEINFO& fi) const;
+#endif
 
   // returns the md5 hash unless the path contains "\windows\"
   //
   QString getMD5() const;
 
+#ifdef _WIN32
   // gets VS_FIXEDFILEINFO from the file version info buffer
   //
   VS_FIXEDFILEINFO getFixedFileInfo(std::byte* buffer) const;
@@ -113,6 +126,7 @@ private:
   // gets FileVersion from the file version info buffer
   //
   QString getFileDescription(std::byte* buffer) const;
+#endif
 };
 
 // represents one process
@@ -150,7 +164,8 @@ private:
 std::vector<Process> getRunningProcesses();
 std::vector<Module> getLoadedModules();
 
-// works for both jobs and processes
+// works for both jobs and processes; on Linux, there are no jobs and `h` is the pid
+// of a process (see HandleCloser)
 //
 Process getProcessTree(HANDLE h);
 

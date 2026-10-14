@@ -24,6 +24,11 @@ bool coredump(const wchar_t* dir, CoreDumpTypes type);
 //
 bool coredumpOther(CoreDumpTypes type);
 
+#ifndef _WIN32
+// on SIGSEGV, SIGABRT, ..., logs a backtrace and lets the system write a core dump
+void setCrashHandlers();
+#endif
+
 }  // namespace env
 
 #endif  // MODORGANIZER_ENVDUMP_INCLUDED

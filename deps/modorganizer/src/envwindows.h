@@ -9,6 +9,9 @@ namespace env
 
 // a variety of information on windows
 //
+// on Linux: the version is the version of the kernel, the BuildLab entry is the name
+// of the distribution and the process is elevated when it runs as root
+//
 class WindowsInfo
 {
 public:
@@ -75,6 +78,7 @@ private:
   Release m_release;
   std::optional<bool> m_elevated;
 
+#ifdef _WIN32
   // uses RtlGetVersion() to get the version number as reported by Windows
   //
   Version getReportedVersion(HINSTANCE ntdll) const;
@@ -82,6 +86,7 @@ private:
   // uses RtlGetNtVersionNumbers() to get the real version number
   //
   Version getRealVersion(HINSTANCE ntdll) const;
+#endif
 
   // gets various information from the registry
   //

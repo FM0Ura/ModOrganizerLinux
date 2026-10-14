@@ -77,11 +77,14 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 # ones for the current platform only:
 # - Windows: everything except src/linux/,
 # - Linux: src/linux/<name>_linux.cpp replace the Windows-only files below, resource
-#   scripts and manifests are Windows-only.
+#   scripts and manifests are Windows-only; the other env*.cpp are built on both
+#   platforms, with their Win32 functions in #ifdef _WIN32 blocks, and
+#   src/linux/env*_linux.cpp implement those functions on Linux.
 #
 # On Linux, the data tree (shared/ file register) and the filesystem part of env are
-# built as a static library, organizer_datatree, that the application links: the unit
-# tests (tests/) link it too, without the rest of the application.
+# built as a static library, organizer_datatree, and the rest of env, except env.cpp
+# (which needs the settings), as organizer_env; the application links both and so do
+# the unit tests (tests/), without the rest of the application.
 set(_organizer_datatree_sources
 	shared/directoryentry.cpp
 	shared/fileentry.cpp
@@ -90,6 +93,21 @@ set(_organizer_datatree_sources
 	shared/originconnection.cpp
 	linux/envfs_linux.cpp
 	linux/util_linux.cpp)
+
+set(_organizer_env_sources
+	envmetrics.cpp
+	envmodule.cpp
+	envsecurity.cpp
+	envshell.cpp
+	envshortcut.cpp
+	envwindows.cpp
+	linux/envdump_linux.cpp
+	linux/envmetrics_linux.cpp
+	linux/envmodule_linux.cpp
+	linux/envsecurity_linux.cpp
+	linux/envshell_linux.cpp
+	linux/envshortcut_linux.cpp
+	linux/envwindows_linux.cpp)
 
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)
@@ -100,9 +118,10 @@ foreach(_source IN LISTS _organizer_sources)
 			continue()
 		endif()
 	else()
-		if (_relative MATCHES "^(env[a-z]*|spawn|usvfsconnector|shared/windows_error|shared/util)\\.cpp$"
+		if (_relative MATCHES "^(envfs|spawn|usvfsconnector|shared/windows_error|shared/util)\\.cpp$"
 				OR _relative MATCHES "\\.(rc|manifest)$"
-				OR _relative IN_LIST _organizer_datatree_sources)
+				OR _relative IN_LIST _organizer_datatree_sources
+				OR _relative IN_LIST _organizer_env_sources)
 			continue()
 		endif()
 	endif()
@@ -122,7 +141,14 @@ if (NOT WIN32)
 		mo2::uibase mo2::bsatk ${_organizer_boost}
 		Qt6::WebEngineWidgets Qt6::WebSockets Qt6::NetworkAuth)
 	target_compile_options(organizer_datatree PUBLIC ${_organizer_uibase_include_options})
-	target_link_libraries(organizer PRIVATE organizer_datatree)
+
+	add_library(organizer_env STATIC ${_organizer_env_sources})
+	mo2_configure_target(organizer_env
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+	target_precompile_headers(organizer_env REUSE_FROM organizer_datatree)
+	target_link_libraries(organizer_env PUBLIC organizer_datatree)
+
+	target_link_libraries(organizer PRIVATE organizer_env organizer_datatree)
 endif()
 
 # we add translations "manually" to handle MO2_INSTALL_IS_BIN

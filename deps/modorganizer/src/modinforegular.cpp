@@ -7,6 +7,7 @@
 #include "plugincontainer.h"
 #include "report.h"
 #include "settings.h"
+#include "shared/util.h"
 #include <iplugingame.h>
 
 #include <QApplication>
@@ -104,6 +105,9 @@ void ModInfoRegular::readMeta()
   m_Repository       = metaFile.value("repository", "Nexus").toString();
   m_Converted        = metaFile.value("converted", false).toBool();
   m_Validated        = metaFile.value("validated", false).toBool();
+
+  // a path, maybe relative to the downloads directory
+  m_InstallationFile = normalizeSeparators(m_InstallationFile);
 
   // this handles changes to how the URL works after 2.2.0
   //
@@ -969,7 +973,9 @@ std::vector<QString> ModInfoRegular::getIniTweaks() const
   for (int i = 0; i < numTweaks; ++i) {
     metaFile.setArrayIndex(i);
     QString filename =
-        absolutePath().append("/INI Tweaks/").append(metaFile.value("name").toString());
+        absolutePath()
+            .append("/INI Tweaks/")
+            .append(normalizeSeparators(metaFile.value("name").toString()));
     result.push_back(filename);
   }
   metaFile.endArray();
