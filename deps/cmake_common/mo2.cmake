@@ -24,9 +24,12 @@ set(Python_FIND_VIRTUALENV STANDARD)
 
 # this set the imported location of targets for missing configurations - this silents
 # many CMP0111 warnings from CMake
-set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release None)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel None)
-set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel None)
+#
+# NOCONFIG is the configuration of imported targets exported by packages built without
+# a CMAKE_BUILD_TYPE, which is how Linux distributions (e.g. Fedora's GTest) ship them
+set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL MinSizeRel RelWithDebInfo Release None NOCONFIG)
+set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel None NOCONFIG)
+set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release RelWithDebInfo MinSizeRel None NOCONFIG)
 
 # allow setting folder property on targets for better organization in VS
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
