@@ -86,6 +86,12 @@ build_cmake_smoke() {
     log "cmake-smoke: $out"
 }
 
+# uibase is the plugin API / shared UI library; with --tests its GoogleTest suite runs
+# (upstream tests and the Linux implementations of the Win32-backed functions).
+build_uibase() {
+    cmake_build uibase "$ROOT/deps/uibase"
+}
+
 # archive is the 7-Zip wrapper; with --tests its GoogleTest suite runs against 7z.so.
 build_archive() {
     cmake_build archive "$ROOT/deps/archive"
