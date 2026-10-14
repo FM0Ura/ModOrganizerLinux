@@ -51,8 +51,13 @@ Totals: 154 objects (sources, moc, rcc), **104 failed**, 50 built; 70 distinct e
 Excluded from the Linux build by `src/CMakeLists.txt`; their symbols will be missing at
 link time until the Linux files exist.
 
-- [ ] `env.cpp`, `envmetrics.cpp`, `envmodule.cpp`, `envsecurity.cpp`, `envshell.cpp`,
-  `envshortcut.cpp`, `envwindows.cpp` → Task 10
+- [x] `env.cpp`, `envmetrics.cpp`, `envmodule.cpp`, `envsecurity.cpp`, `envshell.cpp`,
+  `envshortcut.cpp`, `envwindows.cpp` → Task 10: built on both platforms with their
+  Win32 functions in `#ifdef _WIN32` blocks, the Linux ones in
+  `src/linux/env*_linux.cpp` (crash dumps of `envdump.h`: `envdump_linux.cpp`); all
+  `env::` symbols are defined on Linux. `env.cpp` itself still stops at `settings.h`
+  (usvfs, Task 11), like the other sources that include it (checked by compiling it
+  with an empty `usvfs/usvfsparameters.h`: no other error).
 - [x] `envfs.cpp` → Task 9 (`src/linux/envfs_linux.cpp`)
 - [ ] `spawn.cpp`, `usvfsconnector.cpp` → Task 11
 - [ ] `shared/windows_error.cpp` → Task 12
@@ -72,3 +77,20 @@ system `<strings.h>` and gave the `MOBase` string functions C linkage in every s
 the unticked items above (`installationmanager.h` 46, `settings.h` 29,
 `settingsutilities.cpp`, `filetreeitem.cpp`, `loot.h`, `mainwindow.h`, `qdirfiletree.cpp`,
 `iconfetcher.cpp`, `spawn.h`, `multiprocess.cpp`, `messagedialog.cpp`, `browserview.cpp`).
+
+## After Task 10
+
+The environment layer except `env.cpp`/`env_linux.cpp` (`envmetrics`, `envmodule`,
+`envsecurity`, `envshell`, `envshortcut`, `envwindows` and their `*_linux.cpp`, plus
+`envdump_linux.cpp`) is the static library `organizer_env`, linked by the application
+and by `organizer_tests` (19 tests). The paths of the data tree
+(`FileEntry::getFullPath()`, `getRelativePath()`) use the separator of the system,
+and `MOShared::normalizeSeparators()` (`shared/util.h`) converts the backslashes of
+paths from user files. `ninja -k 0` after Task 10: 149 objects for the application,
+**96 failed** (one more than after Task 9: `env.cpp` is now built and stops at
+`settings.h`); the first errors are the same unticked items as above.
+
+Path call sites left to the tasks that port their files (Win32 code around them):
+`pluginlist.cpp` (~829, `CreateFile` on the origin path + `\` + plugin name, Task
+12), `mainwindow.cpp` (~2527, `FindFirstFileW` on the origin path + `\` + file, Task
+12), `organizercore.cpp` `fileMapping()` (VFS mappings joined with `\`, Task 11).
