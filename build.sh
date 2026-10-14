@@ -17,7 +17,7 @@ BUILD_OUT="$ROOT/build-out"
 # Build order. Each target <t> is built by a function build_<t> (dashes become
 # underscores). A target without such a function is "not implemented yet".
 ALL_TARGETS=(
-    7zip cmake_common uibase archive bsatk esptk lootcli dds-header
+    7zip cmake_common cmake-smoke uibase archive bsatk esptk lootcli dds-header
     modorganizer game_bethesda installer_quick installer_manual installer_fomod
 )
 
@@ -45,7 +45,7 @@ cmake_build() {
     cmake -S "$src" -B "$bdir" -G Ninja \
         -DCMAKE_BUILD_TYPE=RelWithDebInfo \
         -DCMAKE_INSTALL_PREFIX="$INSTALL" \
-        -DCMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH" \
+        -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH//:/;}" \
         -DBUILD_TESTING="$testing" "$@"
     log "build $name"
     cmake --build "$bdir"
@@ -63,9 +63,22 @@ cmake_build() {
 build_cmake_common() {
     local dest="$INSTALL/share/mo2-cmake" f
     mkdir -p "$dest"
-    for f in mo2_cpp mo2_python mo2_utils mo2_versions mo2 mo2-cmake-config; do
-        install -m 0644 "$ROOT/deps/cmake_common/$f.cmake" "$dest/$f.cmake"
+    for f in "$ROOT"/deps/cmake_common/*.cmake; do
+        install -m 0644 "$f" "$dest/"
     done
+}
+
+# cmake-smoke consumes the installed cmake_common modules (find_package(mo2-cmake)) to
+# build a tiny C++23 project; the executable must run and print "ok".
+build_cmake_smoke() {
+    # throwaway install prefix: the smoke project must not leave files in $INSTALL
+    cmake_build cmake-smoke "$ROOT/tests/cmake-smoke" \
+        -DCMAKE_INSTALL_PREFIX="$BUILD_OUT/cmake-smoke-install"
+    local out
+    log "run cmake-smoke"
+    out="$("$BUILD_OUT/cmake-smoke/smoke_main")" || die "cmake-smoke executable failed"
+    [[ $out == ok ]] || die "cmake-smoke printed '$out', expected 'ok'"
+    log "cmake-smoke: $out"
 }
 
 # --- driver -----------------------------------------------------------------
