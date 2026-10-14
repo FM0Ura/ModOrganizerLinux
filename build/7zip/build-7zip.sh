@@ -12,6 +12,7 @@
 # Produces:
 #   $INSTALL/lib/7z.so
 #   $INSTALL/include/7zip/{C,CPP}/**.h
+#   $INSTALL/share/7zip/src/MyWindows.cpp   (see below)
 #   $INSTALL/lib/cmake/7zip/7zip-config.cmake   (find_package(7zip CONFIG))
 #   $INSTALL/share/licenses/7zip/License.txt
 set -euo pipefail
@@ -72,6 +73,13 @@ INC="$INSTALL/include/7zip"
 rm -rf "$INC"
 mkdir -p "$INC"
 (cd "$SRC" && find C CPP -name '*.h' -print0 | tar --null -T - -cf -) | tar -C "$INC" -xf -
+
+# CPP/Common/MyWindows.cpp implements, on non-Windows systems, the Win32/COM functions
+# that 7-Zip's headers declare (SysAllocString, VariantClear, GetLastError, ...). It is
+# not exported by 7z.so, so a consumer that talks to 7z.so through its COM interfaces
+# (deps/archive) compiles this one file itself; the package exposes it as
+# 7zip_MYWINDOWS_SOURCE.
+install -D -m 0644 "$SRC/CPP/Common/MyWindows.cpp" "$INSTALL/share/7zip/src/MyWindows.cpp"
 
 install -D -m 0644 "$HERE/7zip-config.cmake" "$INSTALL/lib/cmake/7zip/7zip-config.cmake"
 install -D -m 0644 "$HERE/7zip-config-version.cmake" "$INSTALL/lib/cmake/7zip/7zip-config-version.cmake"

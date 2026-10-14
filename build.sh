@@ -86,6 +86,11 @@ build_cmake_smoke() {
     log "cmake-smoke: $out"
 }
 
+# archive is the 7-Zip wrapper; with --tests its GoogleTest suite runs against 7z.so.
+build_archive() {
+    cmake_build archive "$ROOT/deps/archive"
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
