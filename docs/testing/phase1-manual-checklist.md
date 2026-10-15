@@ -44,6 +44,21 @@ não aparecer no Wayland, rode com `env QT_QPA_PLATFORM=xcb`:
 - [ ] A janela do MO2 abre (primeira execução: assistente de criação de instância).
   Esperado: sem crash; o terminal pode mostrar avisos do Qt, sem `Segmentation fault`.
 
+Se algo der errado logo na abertura:
+
+- **Nunca rode o MO2 como root nem com `sudo`.** O Qt WebEngine (a janela principal) se
+  recusa a rodar como root, e uma execução como root deixa arquivos em `/tmp` que depois
+  impedem a execução como usuário normal (próximo item).
+- **Crash logo depois de escolher a instância** (a janela principal usa o Qt WebEngine):
+  rode de novo com a aceleração de GPU desligada:
+  `distrobox enter mo2-run -- env QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu ~/mo2-phase1/bin/ModOrganizer`.
+  Em placa **NVIDIA**, crie o distrobox com `--nvidia` (acrescente a opção ao
+  `distrobox create` do passo 1).
+- **Erro "SHM error ... permission denied"** ao abrir: uma execução anterior como root/sudo
+  deixou arquivos `/tmp/qipc_*` pertencentes ao root. Confira com `ls -l /tmp/qipc_*` (os do
+  MO2 se chamam `qipc_sharedmemory_mo<hash>` e `qipc_systemsem_mo<hash>`), remova-os com
+  `sudo rm /tmp/qipc_sharedmemory_mo* /tmp/qipc_systemsem_mo*` e rode como usuário normal.
+
 Se a barra de menus estiver escondida, aperte **Alt** para mostrá-la.
 
 Para o teste você precisa de: o Skyrim Special Edition instalado no Steam (ou apenas a
@@ -57,6 +72,8 @@ com instalador FOMOD. Dois dos mods devem conter uma pasta `Textures` (maiúscul
 - [ ] Na página do jogo, escolher o botão **Skyrim Special Edition**.
   Esperado: se o jogo estiver numa biblioteca Steam reconhecida, o botão mostra o caminho
   dele; senão mostra "No installation found".
+- [ ] Se aparecer a página de edição do jogo (**Steam**, **GOG**, **Epic Games**), escolher
+  **Steam**. (Selecionar uma edição avança sozinho para a próxima página.)
 - [ ] (Se a detecção automática falhar) clicar em **"Browse..."** e escolher a pasta do jogo.
   Esperado: aceita a pasta que contém `SkyrimSE.exe` e segue em frente.
 - [ ] Avançar com **"Next >"** pelas demais páginas até o resumo e clicar em **"Finish"**.

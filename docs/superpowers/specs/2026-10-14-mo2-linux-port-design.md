@@ -195,6 +195,15 @@ No Windows nada muda: o build continua usando vcpkg e o registry oficial do MO2.
 4. Linha de base de desempenho registrada.
 5. Nenhum `#include <windows.h>` fora de arquivos `*_win.cpp` ou blocos `#ifdef _WIN32` justificados.
 
+> **Status note (fim da Fase 1) — alcance real do critério 3 (CI Windows).** O workflow
+> `windows.yml` compila o fork do aplicativo contra as dependências do **`master` upstream**
+> (via `mob`), não contra os subtrees de `deps/`. Os nossos patches em `deps/` (`uibase`,
+> `archive`, `bsatk`, `esptk`, `cmake_common`, `game_bethesda`, `installers`) foram verificados
+> para Windows apenas por revisão com `unifdef -D_WIN32` (a visão Windows dos arquivos não
+> muda); nunca foram compilados no Windows. Portanto "CI Windows verde" garante só que o
+> fork continua compilando contra o `uibase` upstream. Próxima fase: uma execução do `mob`
+> que substitua as dependências pelos nossos subtrees.
+
 ### 4.9 Riscos
 
 | Risco | Mitigação |

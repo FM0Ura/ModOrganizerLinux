@@ -26,7 +26,12 @@ Done:
 - Linux CI builds everything, runs the unit tests, the plugin-load harness and a headless
   smoke test of the application, and uploads `install/` as the artifact `mo2-linux-install`.
 - Windows CI (builds the fork against upstream `uibase`) runs only for commits whose message
-  contains `[windows-ci]`, or on manual dispatch.
+  contains `[windows-ci]`, or on manual dispatch. It builds the fork against the dependencies
+  of upstream `master` (via `mob`), **not** against our patched copies in `deps/` (`uibase`,
+  `archive`, `bsatk`, `esptk`, `cmake_common`, `game_bethesda`, installers). Those patches have
+  only been checked for Windows by an `unifdef -D_WIN32` review (the Windows view of each file
+  is unchanged) and have never been compiled on Windows. Next phase: a `mob` run that overrides
+  the dependencies with our subtrees.
 - Performance baseline: [benchmarks/results/2026-10-phase1-baseline.md](benchmarks/results/2026-10-phase1-baseline.md).
 
 Limitations of Phase 1:
@@ -41,6 +46,9 @@ Limitations of Phase 1:
   extra libraries listed in `libraryfolders.vdf`; otherwise give the game path by hand.
 - No Python plugins and no `nxm://` link handler until Phase 4.
 - RAR extraction is verified manually only (no automated fixture).
+- "Remove mod" / "remove download" send files to the trash only when the instance is on the same
+  filesystem as the home trash (`~/.local/share/Trash`). On another disk the operation fails
+  safely with "failed to delete" and nothing is deleted.
 - No AppImage yet (Phase 5): the binary links against the system Qt 6, so it must run in a
   Fedora 44 environment (see below), not directly on the Bazzite host.
 
@@ -88,6 +96,11 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
    `QT_QPA_PLATFORM` não é necessário em um desktop (só para execução sem tela). Se a janela
    não aparecer no Wayland, tente
    `distrobox enter mo2-run -- env QT_QPA_PLATFORM=xcb ~/mo2-phase1/bin/ModOrganizer`.
+
+Problemas na abertura: nunca rode o MO2 como root/`sudo`; se ele travar logo depois de escolher
+a instância, use `env QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` antes do binário (e, em placa
+NVIDIA, crie o distrobox com `--nvidia`); se aparecer "SHM error ... permission denied", remova
+os `/tmp/qipc_*_mo*` deixados por uma execução anterior como root. Detalhes no checklist.
 
 Alternativa: compilar você mesmo. Isso só funciona no distrobox criado com a imagem do
 `build/Containerfile` (a rota `fedora:44` + `dnf` acima não tem gcc, cmake, ninja nem Rust) e
