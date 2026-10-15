@@ -15,3 +15,9 @@ mo2_add_subdirectories(
     FOLDER games
     GLOB src/games/*
 )
+
+# Linux only: the tests check the Linux game detection
+if (BUILD_TESTING AND NOT WIN32)
+	enable_testing()
+	add_subdirectory(tests)
+endif()

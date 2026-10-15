@@ -1,6 +1,8 @@
 #include "gamebryodataarchives.h"
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include <registry.h>
 #include <utility.h>

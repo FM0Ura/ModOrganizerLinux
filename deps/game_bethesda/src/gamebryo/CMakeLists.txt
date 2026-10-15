@@ -40,7 +40,19 @@ mo2_configure_target(game_gamebryo
 	TRANSLATIONS ON
 	EXTRA_TRANSLATIONS ${CMAKE_CURRENT_LIST_DIR}/../creation)
 mo2_default_source_group()
-target_link_libraries(game_gamebryo PUBLIC mo2::uibase PRIVATE ZLIB::ZLIB lz4::lz4 Dbghelp)
+target_link_libraries(game_gamebryo PUBLIC mo2::uibase PRIVATE ZLIB::ZLIB lz4::lz4 $<$<PLATFORM_ID:Windows>:Dbghelp>)
 target_include_directories(game_gamebryo PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Linux: the Win32 types and functions of the shared sources (linux/win32compat_linux.h,
+# included before every source of the targets that link game_gamebryo) and the Linux
+# implementations of the Win32 parts of GameGamebryo
+if (NOT WIN32)
+	target_sources(game_gamebryo PRIVATE
+		linux/gamegamebryo_linux.cpp
+		linux/win32compat_linux.cpp
+		linux/win32compat_linux.h)
+	target_compile_options(game_gamebryo PUBLIC
+		"SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/linux/win32compat_linux.h")
+endif()
 
 install(FILES $<TARGET_FILE:game_gamebryo> DESTINATION lib)

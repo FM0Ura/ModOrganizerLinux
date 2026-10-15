@@ -4,7 +4,9 @@
 #include "gamebryosavegame.h"
 #include <QDataStream>
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 class GameStarfield;
 

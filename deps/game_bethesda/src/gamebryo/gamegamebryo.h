@@ -15,8 +15,10 @@ class UnmanagedMods;
 
 #include <QObject>
 #include <QString>
+#ifdef _WIN32
 #include <ShlObj.h>
 #include <dbghelp.h>
+#endif
 #include <ipluginfilemapper.h>
 #include <iplugingame.h>
 #include <memory>

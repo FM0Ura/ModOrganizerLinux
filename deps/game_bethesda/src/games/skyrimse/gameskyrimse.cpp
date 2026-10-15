@@ -14,6 +14,9 @@
 #include <gamebryosavegameinfo.h>
 #include <pluginsetting.h>
 #include <utility.h>
+#ifndef _WIN32
+#include <steamutility.h>
+#endif
 
 #include <QCoreApplication>
 #include <QDir>
@@ -63,6 +66,10 @@ void GameSkyrimSE::detectGame()
 
 QString GameSkyrimSE::identifyGamePath() const
 {
+#ifndef _WIN32
+  if (auto steam = MOBase::findSteamGame(gameName(), binaryName()); !steam.isEmpty())
+    return steam;
+#endif
   QMap<QString, QString> paths = {
       {"Software\\Bethesda Softworks\\" + gameName(), "Installed Path"},
       {"Software\\GOG.com\\Games\\1162721350", "path"},

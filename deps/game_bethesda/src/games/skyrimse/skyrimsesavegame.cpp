@@ -1,6 +1,8 @@
-#include "skyrimSEsavegame.h"
+#include "skyrimsesavegame.h"
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 SkyrimSESaveGame::SkyrimSESaveGame(QString const& fileName, GameSkyrimSE const* game)
     : GamebryoSaveGame(fileName, game, true)

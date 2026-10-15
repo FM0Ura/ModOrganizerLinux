@@ -20,7 +20,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "dummybsa.h"
 #include <QFile>
 #define WIN32_LEAN_AND_MEAN
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 static void writeUlong(unsigned char* buffer, int offset, unsigned long value)
 {

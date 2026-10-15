@@ -25,11 +25,15 @@
 #include <QtDebug>
 #include <QtGlobal>
 
+#ifdef _WIN32
 #include <Knownfolders.h>
 #include <Shlobj.h>
 #include <Windows.h>
 #include <winreg.h>
 #include <winver.h>
+#else
+#include "steamutility.h"
+#endif
 
 #include <optional>
 #include <string>
@@ -69,7 +73,11 @@ QDir GameGamebryo::gameDirectory() const
 
 QDir GameGamebryo::dataDirectory() const
 {
+#ifdef _WIN32
   return gameDirectory().absoluteFilePath("data");
+#else
+  return gameDirectory().absoluteFilePath("Data");  // case-sensitive file systems
+#endif
 }
 
 void GameGamebryo::setGamePath(const QString& path)
@@ -153,6 +161,7 @@ QString GameGamebryo::getLauncherName() const
   return gameShortName() + "Launcher.exe";
 }
 
+#ifdef _WIN32
 WORD GameGamebryo::getArch(QString const& program) const
 {
   WORD arch = 0;
@@ -202,6 +211,7 @@ cleanup:  // release all of our handles
     CloseHandle(hMapping);
   return arch;
 }
+#endif
 
 QFileInfo GameGamebryo::findInGameFolder(const QString& relativePath) const
 {
@@ -210,6 +220,10 @@ QFileInfo GameGamebryo::findInGameFolder(const QString& relativePath) const
 
 QString GameGamebryo::identifyGamePath() const
 {
+#ifndef _WIN32
+  if (auto steam = MOBase::findSteamGame(gameName(), binaryName()); !steam.isEmpty())
+    return steam;
+#endif
   QString path = "Software\\Bethesda Softworks\\" + gameShortName();
   return findInRegistry(HKEY_LOCAL_MACHINE, path.toStdWString().c_str(),
                         L"Installed Path");
@@ -313,6 +327,7 @@ MappingType GameGamebryo::mappings() const
   return result;
 }
 
+#ifdef _WIN32
 std::unique_ptr<BYTE[]> GameGamebryo::getRegValue(HKEY key, LPCWSTR path, LPCWSTR value,
                                                   DWORD flags, LPDWORD type = nullptr)
 {
@@ -382,6 +397,7 @@ QString GameGamebryo::getSpecialPath(const QString& name)
     return base;
   }
 }
+#endif
 
 QString GameGamebryo::determineMyGamesPath(const QString& gameName)
 {

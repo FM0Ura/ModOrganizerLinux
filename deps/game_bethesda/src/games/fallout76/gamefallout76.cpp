@@ -1,4 +1,4 @@
-#include "gameFallout76.h"
+#include "gamefallout76.h"
 
 #include "fallout76dataarchives.h"
 #include "fallout76moddatachecker.h"

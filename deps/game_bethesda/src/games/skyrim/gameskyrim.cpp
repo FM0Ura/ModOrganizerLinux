@@ -22,8 +22,10 @@
 
 #include <QtDebug>
 
+#ifdef _WIN32
 #include <Windows.h>
 #include <winver.h>
+#endif
 
 #include <exception>
 #include <memory>

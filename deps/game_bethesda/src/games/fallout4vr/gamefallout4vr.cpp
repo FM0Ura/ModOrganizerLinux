@@ -1,4 +1,4 @@
-#include "gameFallout4vr.h"
+#include "gamefallout4vr.h"
 
 #include "fallout4vrdataarchives.h"
 #include "fallout4vrgameplugins.h"

@@ -1,6 +1,8 @@
 #include "enderalsesavegame.h"
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 EnderalSESaveGame::EnderalSESaveGame(QString const& fileName, GameEnderalSE const* game)
     : GamebryoSaveGame(fileName, game, true)

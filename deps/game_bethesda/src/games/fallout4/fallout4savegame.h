@@ -3,7 +3,9 @@
 
 #include "gamebryosavegame.h"
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 class GameFallout4;
 

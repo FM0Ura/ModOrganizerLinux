@@ -1,7 +1,9 @@
 #ifndef FALLOUT76SAVEGAME_H
 #define FALLOUT76SAVEGAME_H
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include "gamebryosavegame.h"
 

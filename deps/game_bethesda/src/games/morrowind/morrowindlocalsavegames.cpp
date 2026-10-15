@@ -21,7 +21,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #include <iprofile.h>
 #include <stddef.h>
 #include <string>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 MorrowindLocalSavegames::MorrowindLocalSavegames(const MOBase::IPluginGame* game)
     : m_GamePlugin(game)

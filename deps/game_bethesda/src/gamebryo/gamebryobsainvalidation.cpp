@@ -10,7 +10,9 @@
 #include <QDir>
 #include <QStringList>
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 GamebryoBSAInvalidation::GamebryoBSAInvalidation(MOBase::DataArchives* dataArchives,
                                                  const QString& iniFilename,

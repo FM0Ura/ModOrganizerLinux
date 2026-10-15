@@ -1,6 +1,8 @@
 #include "fo4londonsavegame.h"
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include "gamefo4london.h"
 

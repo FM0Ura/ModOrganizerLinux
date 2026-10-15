@@ -1,6 +1,8 @@
 #include "morrowindgameplugins.h"
 #include "registry.h"
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 #include <imodinterface.h>
 #include <iplugingame.h>
 #include <ipluginlist.h>

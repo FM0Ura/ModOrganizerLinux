@@ -18,5 +18,5 @@ add_library(game_skyrim SHARED
 )
 mo2_configure_plugin(game_skyrim NO_SOURCES WARNINGS 4)
 mo2_default_source_group()
-target_link_libraries(game_skyrim PRIVATE game_gamebryo Version)
+target_link_libraries(game_skyrim PRIVATE game_gamebryo $<$<PLATFORM_ID:Windows>:Version>)
 mo2_install_plugin(game_skyrim)

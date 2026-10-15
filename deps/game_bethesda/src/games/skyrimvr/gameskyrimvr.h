@@ -9,7 +9,7 @@
 class GameSkyrimVR : public GameGamebryo
 {
   Q_OBJECT
-  Q_PLUGIN_METADATA(IID "com.soundcontactstudio.GameSkyrimVR" FILE "gameskyrimVR.json")
+  Q_PLUGIN_METADATA(IID "com.soundcontactstudio.GameSkyrimVR" FILE "gameskyrimvr.json")
 
 public:
   GameSkyrimVR();
