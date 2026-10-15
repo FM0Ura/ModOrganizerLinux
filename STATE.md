@@ -3,8 +3,8 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-15
-**Fase atual:** 1 — Build nativo · **Status:** ✅ concluída (teste manual aprovado no Bazzite) · **Próxima:** Fase 2 — VFS FUSE
-**Branch de trabalho (ambos os repositórios):** `claude/serene-maxwell-1dyrbg`
+**Fase atual:** 2 — VFS FUSE · **Status:** 🚧 iniciada · **Anterior:** Fase 1 — Build nativo ✅
+**Branch de trabalho (ambos os repositórios):** `fase-2-vfs-fuse` (Fase 1 em `claude/serene-maxwell-1dyrbg`)
 
 ## Repositórios
 
@@ -51,8 +51,8 @@ Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura
 
 ## Próximos passos
 
-1. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
-2. Escrever a spec e o plano da próxima etapa.
+1. ✅ Decidido (2026-10-15): seguir para a Fase 2 (VFS FUSE), na branch `fase-2-vfs-fuse`.
+2. Escrever a spec e o plano da Fase 2.
 3. Resolver a pendência de compilar os `deps/` com nossos patches no Windows (ver abaixo).
 
 ## Limitações conhecidas da Fase 1
