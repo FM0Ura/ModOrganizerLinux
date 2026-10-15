@@ -13,3 +13,11 @@ measured by `benchmarks/run.sh`. Each run appends a section below.
 - **peak_rss_kib = 339656**
 - first run (before the timed ones): 10290.8 ms; page cache dropped before the first run
 - files registered: 178073
+
+### Caveats (apply to every number above)
+
+- The timed region excludes tree teardown: the real refresh destroys the old tree inside its
+  timer, so the application's refresh takes somewhat longer than `refresh_ms_median`.
+- Only loose files are covered; no BSA/archive parsing is part of the measurement.
+- The data is synthetic (see `benchmarks/gen_instance.py`); real instances differ in file
+  sizes, name lengths and conflict ratio.
