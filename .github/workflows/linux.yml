@@ -37,13 +37,19 @@ jobs:
       - name: Build container image
         run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
 
-      # The application does not compile on Linux yet (the port is in progress, see
-      # docs/superpowers/plans/phase1-compile-errors.md): its failure is reported in the
-      # log but does not fail the job. Drop --allow-fail once it builds.
+      # --tests also runs the unit tests of every target and the smoke test of the
+      # application (build.sh smoke_modorganizer)
       - name: Build and test
         run: |
           docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
-            mo2-linux-build ./build.sh --tests --allow-fail modorganizer
+            mo2-linux-build ./build.sh --tests
+
+      # the installed application starts headless and prints its usage
+      - name: Smoke test
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+            -e QT_QPA_PLATFORM=offscreen mo2-linux-build \
+            bash -c 'set -o pipefail; install/bin/ModOrganizer --help 2>&1 | tee /tmp/smoke.txt && grep -q instance /tmp/smoke.txt'
 
       - name: Upload install tree
         uses: actions/upload-artifact@v4

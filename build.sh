@@ -154,9 +154,24 @@ build_lootcli() {
 
 # modorganizer is the application itself (the fork at $MO2_SRC), configured with its
 # linux-gcc preset (Ninja, RelWithDebInfo, no vcpkg); -B keeps the build tree out of
-# the fork. It installs bin/ModOrganizer with its resources next to it.
+# the fork. It installs bin/ModOrganizer with its resources next to it; with --tests,
+# the installed executable must then pass the smoke test.
 build_modorganizer() {
     cmake_build modorganizer "$MO2_SRC" --preset linux-gcc
+    [[ $TESTS == 1 ]] && smoke_modorganizer
+    return 0
+}
+
+# smoke test: `ModOrganizer --help` runs headless (offscreen Qt platform), exits with 0
+# and prints the usage, which mentions the --instance option
+smoke_modorganizer() {
+    local out rc=0
+    log "smoke test: ModOrganizer --help"
+    out="$(QT_QPA_PLATFORM=offscreen "$INSTALL/bin/ModOrganizer" --help 2>&1)" || rc=$?
+    printf '%s\n' "$out"
+    ((rc == 0)) || die "ModOrganizer --help exited with $rc"
+    [[ $out == *instance* ]] || die "ModOrganizer --help did not print the usage"
+    log "smoke test passed"
 }
 
 # With --tests, the unit tests of the application (organizer_tests: the data tree and
