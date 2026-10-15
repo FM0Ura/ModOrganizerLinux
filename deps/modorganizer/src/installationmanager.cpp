@@ -51,7 +51,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QTextDocument>
 #include <QtConcurrent/QtConcurrentRun>
 
+#ifdef _WIN32
 #include <Shellapi.h>
+#endif
 
 #include <boost/assign.hpp>
 #include <boost/scoped_ptr.hpp>

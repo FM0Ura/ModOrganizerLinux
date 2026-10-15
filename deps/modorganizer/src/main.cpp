@@ -12,8 +12,10 @@
 
 using namespace MOBase;
 
+#ifdef _WIN32
 thread_local LPTOP_LEVEL_EXCEPTION_FILTER g_prevExceptionFilter = nullptr;
 thread_local std::terminate_handler g_prevTerminateHandler      = nullptr;
+#endif
 
 int run(int argc, char* argv[]);
 
@@ -142,6 +144,7 @@ int run(int argc, char* argv[])
   }
 }
 
+#ifdef _WIN32
 LONG WINAPI onUnhandledException(_EXCEPTION_POINTERS* ptrs)
 {
   const auto path = OrganizerCore::getGlobalCoreDumpPath();
@@ -189,3 +192,4 @@ void setExceptionHandlers()
   g_prevExceptionFilter  = SetUnhandledExceptionFilter(onUnhandledException);
   g_prevTerminateHandler = std::set_terminate(onTerminate);
 }
+#endif  // _WIN32, setExceptionHandlers() is in src/linux/main_linux.cpp on Linux

@@ -809,6 +809,7 @@ void PluginList::saveTo(const QString& lockedOrderFileName) const
   writeLockedOrder(lockedOrderFileName);
 }
 
+#ifdef _WIN32
 bool PluginList::saveLoadOrder(DirectoryEntry& directoryStructure)
 {
   if (m_GamePlugin->loadOrderMechanism() != IPluginGame::LoadOrderMechanism::FileTime) {
@@ -865,6 +866,7 @@ bool PluginList::saveLoadOrder(DirectoryEntry& directoryStructure)
   }
   return true;
 }
+#endif  // _WIN32, saveLoadOrder() is in src/linux/pluginlist_linux.cpp on Linux
 
 int PluginList::enabledCount() const
 {

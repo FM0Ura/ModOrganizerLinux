@@ -78,9 +78,21 @@ void checkDuplicateShortcuts(const QMenu& m);
 inline FILETIME ToFILETIME(std::filesystem::file_time_type t)
 {
   FILETIME ft;
+#ifdef _WIN32
   static_assert(sizeof(t) == sizeof(ft));
 
   std::memcpy(&ft, &t, sizeof(FILETIME));
+#else
+  // the file clock is not in 100 ns intervals since 1601-01-01 UTC on Linux
+  const auto v = static_cast<std::uint64_t>(
+      std::chrono::duration_cast<
+          std::chrono::duration<std::int64_t, std::ratio<1, 10'000'000>>>(
+          std::chrono::file_clock::to_sys(t).time_since_epoch())
+          .count() +
+      116'444'736'000'000'000LL);
+  ft.dwLowDateTime  = static_cast<DWORD>(v & 0xffffffff);
+  ft.dwHighDateTime = static_cast<DWORD>(v >> 32);
+#endif
   return ft;
 }
 

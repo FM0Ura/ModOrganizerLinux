@@ -76,13 +76,17 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 # mo2_configure_target() adds every source file under src/; keep the platform-specific
 # ones for the current platform only:
 # - Windows: everything except src/linux/,
-# - Linux: src/linux/<name>_linux.cpp replace the Windows-only files below, resource
-#   scripts and manifests are Windows-only; the other env*.cpp are built on both
-#   platforms, with their Win32 functions in #ifdef _WIN32 blocks, and
-#   src/linux/env*_linux.cpp implement those functions on Linux.
+# - Linux: src/linux/<name>_linux.cpp replace the Windows-only files below (and the
+#   header of usvfsconnector.cpp, for moc), resource scripts and manifests are
+#   Windows-only; the files that mix shared and Win32 code (env*.cpp, shared/util.cpp,
+#   main.cpp, pluginlist.cpp, ...) are built on both platforms, with their Win32
+#   functions in #ifdef _WIN32 blocks, and src/linux/<name>_linux.cpp implement those
+#   functions on Linux; src/linux/win32compat_linux.h (included by pch.h) has the few
+#   Win32 functions that the shared code calls directly.
 #
-# On Linux, the data tree (shared/ file register) and the filesystem part of env are
-# built as a static library, organizer_datatree, and the rest of env, except env.cpp
+# On Linux, the data tree (shared/ file register), the filesystem part of env and the
+# Win32 replacements of util_linux.cpp and win32compat_linux.cpp are built as a static
+# library, organizer_datatree, and the rest of env, except env.cpp
 # (which needs the settings), as organizer_env, the file tree of archives used by
 # the installation as organizer_archivetree, and the Linux parts of running programs
 # (the virtual file system connector, spawn and the availability of LOOT) as
@@ -95,7 +99,8 @@ set(_organizer_datatree_sources
 	shared/filesorigin.cpp
 	shared/originconnection.cpp
 	linux/envfs_linux.cpp
-	linux/util_linux.cpp)
+	linux/util_linux.cpp
+	linux/win32compat_linux.cpp)
 
 set(_organizer_env_sources
 	envmetrics.cpp
@@ -126,7 +131,8 @@ foreach(_source IN LISTS _organizer_sources)
 			continue()
 		endif()
 	else()
-		if (_relative MATCHES "^(envfs|spawn|usvfsconnector|shared/windows_error|shared/util)\\.cpp$"
+		if (_relative MATCHES "^(envfs|spawn|usvfsconnector|shared/windows_error)\\.cpp$"
+				OR _relative STREQUAL "usvfsconnector.h"
 				OR _relative MATCHES "\\.(rc|manifest)$"
 				OR _relative IN_LIST _organizer_datatree_sources
 				OR _relative IN_LIST _organizer_env_sources
@@ -151,6 +157,26 @@ if (NOT WIN32)
 		mo2::uibase mo2::bsatk ${_organizer_boost}
 		Qt6::WebEngineWidgets Qt6::WebSockets Qt6::NetworkAuth)
 	target_compile_options(organizer_datatree PUBLIC ${_organizer_uibase_include_options})
+
+	# the version of Mod Organizer, from version.rc like on Windows (where it is read
+	# from the resources of the executable), for createVersionInfo() in util_linux.cpp
+	file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.rc" _organizer_version_line
+		REGEX "^#define VER_FILEVERSION_STR ")
+	string(REGEX MATCH "\"([^\"\\\\]*)" _ "${_organizer_version_line}")
+	set(_organizer_version "${CMAKE_MATCH_1}")
+	file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.rc" _organizer_fileflags_line
+		REGEX "^FILEFLAGS ")
+	if (_organizer_fileflags_line MATCHES "VS_FF_PRERELEASE")
+		set(_organizer_prerelease 1)
+	else()
+		set(_organizer_prerelease 0)
+	endif()
+	if (NOT _organizer_version)
+		message(FATAL_ERROR "no VER_FILEVERSION_STR in version.rc")
+	endif()
+	target_compile_definitions(organizer_datatree PUBLIC
+		MO2_VERSION_STRING="${_organizer_version}"
+		MO2_VERSION_PRERELEASE=${_organizer_prerelease})
 
 	add_library(organizer_env STATIC ${_organizer_env_sources})
 	mo2_configure_target(organizer_env

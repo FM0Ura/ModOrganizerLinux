@@ -1,14 +1,17 @@
-// Linux implementations of the platform-specific functions of shared/util.h (the
-// Windows ones are in shared/util.cpp, which is not built on Linux).
+// Linux implementations of the Win32-only functions of shared/util.cpp (in its _WIN32
+// block); the rest of shared/util.cpp is built on both platforms, in the application.
+//
+// These are built with the data tree (organizer_datatree), which uses the string and
+// case functions without the rest of the application; ToLowerCopy(std::wstring_view)
+// is in the _WIN32 block of shared/util.cpp for the same reason.
 //
 // Strings: std::string is UTF-8 and std::wstring is UTF-32 on Linux. Lowercase uses
 // the simple (one character to one character) Unicode mapping, like CharLowerBuffW()
 // on Windows, independently of the locale.
 //
-// Not here yet (shared/util.cpp, see docs/superpowers/plans/phase1-compile-errors.md
-// in the superproject): createVersionInfo(), checkDuplicateShortcuts(),
-// ExitModOrganizer(), ModOrganizerCanCloseNow(), ModOrganizerExiting(),
-// ResetExitFlag() and isNxmLink().
+// The version of Mod Organizer comes from version.rc, read by CMake
+// (MO2_VERSION_STRING, MO2_VERSION_PRERELEASE), instead of the resources of the
+// executable.
 
 #include "../shared/util.h"
 
@@ -16,6 +19,9 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <optional>
+#include <variant>
+#include <vector>
 
 #include <QByteArray>
 #include <QChar>
@@ -152,6 +158,44 @@ int caseInsensitiveCompare(std::wstring_view lhs, std::wstring_view rhs)
   }
 
   return (lhs.size() < rhs.size()) ? -1 : 1;
+}
+
+MOBase::Version createVersionInfo()
+{
+  using MOBase::Version;
+
+  const QString versionString = QString::fromUtf8(MO2_VERSION_STRING);
+  std::optional<Version::ReleaseType> releaseType;
+
+  if (MO2_VERSION_PRERELEASE) {
+    // like on Windows: a pre-release with letters in its version string is parsed,
+    // without letters it is a development build
+    const bool hasLetters =
+        std::any_of(versionString.begin(), versionString.end(), [](QChar c) {
+          return c.isLetter();
+        });
+
+    if (hasLetters) {
+      return Version::parse(versionString, Version::ParseMode::MO2);
+    }
+
+    releaseType = Version::Development;
+  }
+
+  // the numbers of VER_FILEVERSION, which are the ones of VER_FILEVERSION_STR
+  int numbers[4]    = {};
+  const auto pieces = versionString.split(u'.');
+  for (qsizetype i = 0; i < pieces.size() && i < 4; ++i) {
+    numbers[i] = pieces[i].toInt();
+  }
+
+  std::vector<std::variant<int, Version::ReleaseType>> prereleases;
+  if (releaseType) {
+    prereleases.push_back(*releaseType);
+  }
+
+  return Version(numbers[0], numbers[1], numbers[2], numbers[3],
+                 std::move(prereleases));
 }
 
 QString getUsvfsVersionString()

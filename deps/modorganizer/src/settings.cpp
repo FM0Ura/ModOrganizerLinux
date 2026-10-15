@@ -263,7 +263,8 @@ std::size_t Settings::refreshThreadCount() const
 
 void Settings::setRefreshThreadCount(std::size_t n) const
 {
-  return set(m_Settings, "Settings", "refresh_thread_count", n);
+  return set(m_Settings, "Settings", "refresh_thread_count",
+             static_cast<qulonglong>(n));
 }
 
 std::optional<QVersionNumber> Settings::version() const
@@ -2469,7 +2470,7 @@ std::chrono::seconds DiagnosticsSettings::spawnDelay() const
 
 void DiagnosticsSettings::setSpawnDelay(std::chrono::seconds t)
 {
-  set(m_Settings, "Settings", "spawn_delay", t.count());
+  set(m_Settings, "Settings", "spawn_delay", static_cast<qlonglong>(t.count()));
 }
 
 void GlobalSettings::updateRegistryKey()

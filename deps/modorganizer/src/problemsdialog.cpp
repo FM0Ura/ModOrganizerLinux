@@ -2,7 +2,9 @@
 #include "organizercore.h"
 #include "ui_problemsdialog.h"
 #include <QPushButton>
+#ifdef _WIN32
 #include <Shellapi.h>
+#endif
 #include <iplugin.h>
 #include <iplugindiagnose.h>
 #include <utility.h>

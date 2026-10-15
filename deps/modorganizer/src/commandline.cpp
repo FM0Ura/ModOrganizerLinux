@@ -59,7 +59,11 @@ CommandLine::CommandLine() : m_command(nullptr)
 std::optional<int> CommandLine::process(const std::wstring& line)
 {
   try {
+#ifdef _WIN32
     auto args = po::split_winmain(line);
+#else
+    auto args = po::split_unix(line);  // see GetCommandLineW() in win32compat_linux.h
+#endif
     if (!args.empty()) {
       // remove program name
       args.erase(args.begin());
@@ -642,6 +646,7 @@ std::optional<int> LaunchCommand::runEarly()
   return SpawnWaitProcess(arg[1].c_str(), args);
 }
 
+#ifdef _WIN32
 int LaunchCommand::SpawnWaitProcess(LPCWSTR workingDirectory, LPCWSTR commandLine)
 {
   PROCESS_INFORMATION pi{0};
@@ -667,6 +672,7 @@ int LaunchCommand::SpawnWaitProcess(LPCWSTR workingDirectory, LPCWSTR commandLin
   CloseHandle(pi.hProcess);
   return static_cast<int>(exitCode);
 }
+#endif  // _WIN32, SpawnWaitProcess() is in src/linux/commandline_linux.cpp on Linux
 
 // Parses the first parseArgCount arguments of the current process command line and
 // returns them in parsedArgs, the rest of the command line is returned untouched.

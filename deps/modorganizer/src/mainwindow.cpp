@@ -33,6 +33,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "executableinfo.h"
 #include "executableslist.h"
 #include "filedialogmemory.h"
+#include "filetree.h"
 #include "filterlist.h"
 #include "guessedvalue.h"
 #include "imodinterface.h"
@@ -112,7 +113,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QEvent>
-#include <QFIleIconProvider>
+#include <QFileIconProvider>
 #include <QFileDialog>
 #include <QFont>
 #include <QFuture>
@@ -172,7 +173,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <boost/thread.hpp>
 #endif
 
+#ifdef _WIN32
 #include <shlobj.h>
+#endif
 
 #include <exception>
 #include <functional>
@@ -2528,12 +2531,23 @@ void MainWindow::fileMoved(const QString& filePath, const QString& oldOriginName
         FilesOrigin& newOrigin = m_OrganizerCore.directoryStructure()->getOriginByName(
             ToWString(newOriginName));
 
+#ifdef _WIN32
         QString fullNewPath = ToQString(newOrigin.getPath()) + "\\" + filePath;
         WIN32_FIND_DATAW findData;
         HANDLE hFind;
         hFind = ::FindFirstFileW(ToWString(fullNewPath).c_str(), &findData);
         filePtr->addOrigin(newOrigin.getID(), findData.ftCreationTime, L"", -1);
         FindClose(hFind);
+#else
+        // no creation time on Linux, the last modification time like the data tree
+        const auto fullNewPath =
+            normalizeSeparators(ToQString(newOrigin.getPath()) + "/" + filePath);
+        std::error_code ec;
+        const auto time =
+            std::filesystem::last_write_time(fullNewPath.toStdString(), ec);
+        filePtr->addOrigin(newOrigin.getID(), ec ? FILETIME{} : ToFILETIME(time), L"",
+                           -1);
+#endif
       }
       if (m_OrganizerCore.directoryStructure()->originExists(
               ToWString(oldOriginName))) {
@@ -3940,7 +3954,7 @@ void MainWindow::on_restoreModsButton_clicked()
       const auto e = GetLastError();
       QMessageBox::critical(this, tr("Restore failed"),
                             tr("Failed to restore the backup. Errorcode: %1")
-                                .arg(formatSystemMessage(e)));
+                                .arg(QString::fromStdWString(formatSystemMessage(e))));
     }
     m_OrganizerCore.refresh(false);
   }

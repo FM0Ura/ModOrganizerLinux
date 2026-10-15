@@ -45,7 +45,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QStringList>  // for QStringList
 #include <QtGlobal>     // for qUtf8Printable
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include <assert.h>  // for assert
 #include <limits.h>  // for UINT_MAX, INT_MAX, etc

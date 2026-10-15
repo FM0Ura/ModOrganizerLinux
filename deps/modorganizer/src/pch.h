@@ -49,6 +49,8 @@
 #include <windowsx.h>
 #else
 #include <uibase/win32compat.h>
+
+#include "linux/win32compat_linux.h"
 #endif
 
 // boost

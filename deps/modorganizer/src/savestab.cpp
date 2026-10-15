@@ -1,6 +1,7 @@
 #include "savestab.h"
 #include "activatemodsdialog.h"
 #include "organizercore.h"
+#include "shared/util.h"
 #include "ui_mainwindow.h"
 #include <iplugingame.h>
 #include <isavegameinfowidget.h>
@@ -146,8 +147,9 @@ QDir SavesTab::currentSavesDir() const
     wchar_t path[MAX_PATH];
     if (::GetPrivateProfileStringW(L"General", L"SLocalSavePath", L"", path, MAX_PATH,
                                    iniPath.toStdWString().c_str())) {
+      // the INI file has a Windows path
       savesDir.setPath(m_core.managedGame()->documentsDirectory().absoluteFilePath(
-          QString::fromWCharArray(path)));
+          MOShared::normalizeSeparators(QString::fromWCharArray(path))));
     } else {
       savesDir = m_core.managedGame()->savesDirectory();
     }

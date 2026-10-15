@@ -368,9 +368,16 @@ void initLogging()
     LogModel::instance().add(e);
   });
 
+#ifdef _WIN32
   log::getDefault().addToBlacklist(std::string("\\") + getenv("USERNAME"),
                                    "\\USERNAME");
   log::getDefault().addToBlacklist(std::string("/") + getenv("USERNAME"), "/USERNAME");
+#else
+  // there is no USERNAME on Linux, and the home directory is /home/<USER>
+  if (const char* user = getenv("USER")) {
+    log::getDefault().addToBlacklist(std::string("/") + user, "/USERNAME");
+  }
+#endif
 
   qInstallMessageHandler(qtLogCallback);
 }
@@ -401,6 +408,10 @@ bool setLogDirectory(const QString& dir)
   }
 
   log::getDefault().setFile(MOBase::log::File::single(logFile.toStdWString()));
+
+#ifndef _WIN32
+  env::setCrashHandlers(QFileInfo(logFile).dir().filePath("crash.log").toStdString());
+#endif
 
   return true;
 }

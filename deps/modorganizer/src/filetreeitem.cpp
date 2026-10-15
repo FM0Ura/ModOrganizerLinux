@@ -12,6 +12,7 @@ namespace fs = std::filesystem;
 
 constexpr bool AlwaysSortDirectoriesFirst = true;
 
+#ifdef _WIN32
 const QString& directoryFileType()
 {
   static const QString name = [] {
@@ -103,6 +104,11 @@ const QString& cachedFileType(const std::wstring& file, bool isOnFilesystem)
 
   return map.emplace(sv, s).first->second;
 }
+#else
+// in src/linux/filetreeitem_linux.cpp
+const QString& directoryFileType();
+const QString& cachedFileType(const std::wstring& file, bool isOnFilesystem);
+#endif
 
 FileTreeItem::FileTreeItem(FileTreeModel* model, FileTreeItem* parent,
                            std::wstring dataRelativeParentPath, bool isDirectory,

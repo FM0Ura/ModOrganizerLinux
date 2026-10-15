@@ -22,14 +22,17 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "../mainwindow.h"
 #include "windows_error.h"
 #include <uibase/log.h>
+#ifdef _WIN32
 #include <usvfs/usvfs.h>
 #include <usvfs/usvfs_version.h>
+#endif
 
 using namespace MOBase;
 
 namespace MOShared
 {
 
+#ifdef _WIN32
 bool FileExists(const std::string& filename)
 {
   DWORD dwAttrib = ::GetFileAttributesA(filename.c_str());
@@ -319,6 +322,7 @@ void SetThisThreadName(const QString& s)
     SetThreadDescription(GetCurrentThread(), s.toStdWString().c_str());
   }
 }
+#endif  // _WIN32, Linux: src/linux/util_linux.cpp, built with the data tree
 
 char shortcutChar(const QAction* a)
 {

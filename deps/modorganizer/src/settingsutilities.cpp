@@ -210,6 +210,7 @@ QString credentialName(const QString& key)
   return "ModOrganizer2_" + key;
 }
 
+#ifdef _WIN32
 bool deleteWindowsCredential(const QString& key)
 {
   const auto credName = credentialName(key);
@@ -309,6 +310,11 @@ QString getWindowsCredential(const QString& key)
 
   return value;
 }
+#else
+// in src/linux/settingsutilities_linux.cpp
+bool deleteWindowsCredential(const QString& key);
+bool addWindowsCredential(const QString& key, const QString& data);
+#endif
 
 bool setWindowsCredential(const QString& key, const QString& data)
 {
