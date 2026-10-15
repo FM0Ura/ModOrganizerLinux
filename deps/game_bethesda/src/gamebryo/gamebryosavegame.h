@@ -184,8 +184,8 @@ protected:
 
   private:
     QFile m_File;
-    uint64_t m_NextChunk;
-    uint64_t m_UncompressedSize;
+    unsigned long long m_NextChunk;
+    unsigned long long m_UncompressedSize;
     bool m_HasFieldMarkers;
     StringType m_PluginString;
     StringFormat m_PluginStringFormat;
@@ -239,39 +239,7 @@ protected:
   virtual std::unique_ptr<DataFields> fetchDataFields() const = 0;
 };
 #ifndef _WIN32
-
-// GCC has no explicit specializations in class scope
-template <>
-void GamebryoSaveGame::FileWrapper::read<QString>(QString& value);
-
-// the saves store 32-bit longs (the long of Windows); long is 64-bit on Linux
-template <>
-inline void GamebryoSaveGame::FileWrapper::read<unsigned long>(unsigned long& value)
-{
-  std::uint32_t v;
-  read(v);
-  value = v;
-}
-
-template <>
-inline void GamebryoSaveGame::FileWrapper::read<long>(long& value)
-{
-  std::int32_t v;
-  read(v);
-  value = v;
-}
-
-template <>
-inline void GamebryoSaveGame::FileWrapper::skip<unsigned long>(int count)
-{
-  skip<std::uint32_t>(count);
-}
-
-template <>
-inline void GamebryoSaveGame::FileWrapper::skip<long>(int count)
-{
-  skip<std::int32_t>(count);
-}
+#include "linux/gamebryosavegame_linux.h"
 #endif
 
 #endif  // GAMEBRYOSAVEGAME_H

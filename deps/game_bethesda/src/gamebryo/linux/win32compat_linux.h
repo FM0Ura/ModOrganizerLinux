@@ -20,7 +20,7 @@
 using WCHAR     = wchar_t;
 using PWSTR     = wchar_t*;
 using LPVOID    = void*;
-using ULONGLONG = std::uint64_t;
+using ULONGLONG = unsigned long long;
 
 // the shared sources name the structure tag (struct _SYSTEMTIME), like Windows
 #define _SYSTEMTIME SYSTEMTIME

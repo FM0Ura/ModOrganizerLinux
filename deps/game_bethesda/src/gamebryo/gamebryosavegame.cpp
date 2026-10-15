@@ -472,7 +472,7 @@ uint64_t GamebryoSaveGame::FileWrapper::readLong(int bytesToIgnore)
   if (m_CompressionType == 0) {
     if (bytesToIgnore > 0)  // Just to make certain
       skip<char>(bytesToIgnore);
-    uint64_t size;
+    unsigned long long size;
     read(size);
     return size;
   } else if (m_CompressionType == 1 || m_CompressionType == 2) {

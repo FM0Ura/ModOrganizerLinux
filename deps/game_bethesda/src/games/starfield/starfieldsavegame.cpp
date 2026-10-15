@@ -31,8 +31,8 @@ StarfieldSaveGame::StarfieldSaveGame(QString const& fileName, GameStarfield cons
 void StarfieldSaveGame::getData(FileWrapper& file) const
 {
   file.skip<uint32_t>();  // header version
-  file.skip<uint64_t>();  // chunk compressed size array start location
-  file.skip<uint64_t>();  // unknown (0?)
+  file.skip<unsigned long long>();  // chunk compressed size array start location
+  file.skip<unsigned long long>();  // unknown (0?)
   file.setCompressionType(1);
   /*
    * Parse following variables then begin decompressing data

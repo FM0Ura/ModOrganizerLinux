@@ -49,6 +49,7 @@ target_include_directories(game_gamebryo PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if (NOT WIN32)
 	target_sources(game_gamebryo PRIVATE
 		linux/gamegamebryo_linux.cpp
+		linux/gamebryosavegame_linux.h
 		linux/win32compat_linux.cpp
 		linux/win32compat_linux.h)
 	target_compile_options(game_gamebryo PUBLIC
