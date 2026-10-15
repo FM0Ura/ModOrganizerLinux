@@ -32,7 +32,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <uibase/tutorabledialog.h>
 
 #define WIN32_LEAN_AND_MEAN
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include "archivetree.h"
 

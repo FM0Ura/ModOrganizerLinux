@@ -22,7 +22,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QDialog>
 #include <QtPlugin>
 
+#ifdef _WIN32
 #include <Shellapi.h>
+#endif
 
 #include <uibase/game_features/igamefeatures.h>
 #include <uibase/game_features/moddatachecker.h>
@@ -92,6 +94,7 @@ void InstallerManual::openFile(const FileTreeEntry* entry)
 {
   QString tempName = manager()->extractFile(entry->shared_from_this());
 
+#ifdef _WIN32
   SHELLEXECUTEINFOW execInfo;
   memset(&execInfo, 0, sizeof(SHELLEXECUTEINFOW));
   execInfo.cbSize        = sizeof(SHELLEXECUTEINFOW);
@@ -103,6 +106,9 @@ void InstallerManual::openFile(const FileTreeEntry* entry)
   if (!::ShellExecuteExW(&execInfo)) {
     qCritical("failed to spawn %s: %d", qUtf8Printable(tempName), ::GetLastError());
   }
+#else
+  MOBase::shell::Open(tempName);  // logs failures
+#endif
 }
 
 IPluginInstaller::EInstallResult
