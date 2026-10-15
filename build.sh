@@ -162,15 +162,12 @@ build_modorganizer() {
     return 0
 }
 
-# smoke test: `ModOrganizer --help` runs headless (offscreen Qt platform), exits with 0
-# and prints the usage, which mentions the --instance option
+# smoke test (tests/smoke/modorganizer-smoke.sh, also run by CI): `ModOrganizer --help`
+# prints the usage, and the application started headless with a fresh HOME gets past
+# its QApplication to the instance selection (it loads the plugins) without crashing
 smoke_modorganizer() {
-    local out rc=0
-    log "smoke test: ModOrganizer --help"
-    out="$(QT_QPA_PLATFORM=offscreen "$INSTALL/bin/ModOrganizer" --help 2>&1)" || rc=$?
-    printf '%s\n' "$out"
-    ((rc == 0)) || die "ModOrganizer --help exited with $rc"
-    [[ $out == *instance* ]] || die "ModOrganizer --help did not print the usage"
+    log "smoke test: ModOrganizer"
+    "$ROOT/tests/smoke/modorganizer-smoke.sh" "$INSTALL" || die "smoke test failed"
     log "smoke test passed"
 }
 
