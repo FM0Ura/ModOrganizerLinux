@@ -6,9 +6,9 @@ name: Windows
 # The fork branch follows the same-name rule as linux.yml: the branch of this ref if
 # the fork has it, else master; workflow_dispatch can name another fork ref.
 
+# Runs on demand only (checkpoints: end of Phase 1 Task 12 and end of each phase),
+# because a run takes 17-33 minutes.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
     inputs:
       fork-ref:
