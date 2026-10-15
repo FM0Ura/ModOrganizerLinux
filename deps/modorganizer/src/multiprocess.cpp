@@ -13,6 +13,12 @@ MOMultiProcess::MOMultiProcess(bool allowMultiple, QObject* parent)
     : QObject(parent), m_Ephemeral(false), m_OwnsSM(false)
 {
   m_SharedMem.setKey(s_Key);
+#ifndef _WIN32
+  // the segment of a crashed or killed process stays on Linux; attaching to it and
+  // detaching removes it if no other process uses it
+  if (m_SharedMem.attach())
+    m_SharedMem.detach();
+#endif
 
   if (!m_SharedMem.create(1)) {
     if (m_SharedMem.error() == QSharedMemory::AlreadyExists) {
@@ -35,6 +41,9 @@ MOMultiProcess::MOMultiProcess(bool allowMultiple, QObject* parent)
             Qt::QueuedConnection);
     // has to be called before listen
     m_Server.setSocketOptions(QLocalServer::WorldAccessOption);
+#ifndef _WIN32
+    QLocalServer::removeServer(s_Key);  // socket file left by a crashed primary
+#endif
     m_Server.listen(s_Key);
   }
 }
