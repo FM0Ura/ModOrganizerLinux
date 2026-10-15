@@ -18,10 +18,6 @@ on:
         required: false
         default: ""
 
-concurrency:
-  group: windows-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   # vcpkg binary cache for the ports built by every configure (uibase, archive, ...)
   VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
@@ -29,6 +25,11 @@ env:
 jobs:
   build:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[windows-ci]')
+    # Job-level concurrency: a later push whose job is skipped (no [windows-ci]) must
+    # not cancel a running checkpoint; only another checkpoint run replaces it.
+    concurrency:
+      group: windows-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: windows-2022
     steps:
       - name: Pick fork ref

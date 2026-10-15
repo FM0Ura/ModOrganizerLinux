@@ -41,13 +41,13 @@
 |---|---|
 | 1. `build.sh` gera o app a partir de container limpo | ✅ (CI Linux) |
 | 2. Checklist manual aprovado no Bazzite | ⏳ **com você** — [`docs/testing/phase1-manual-checklist.md`](docs/testing/phase1-manual-checklist.md) |
-| 3. CI Linux e Windows verdes | ⏳ execuções finais em andamento: [Linux #27](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338290), [Windows #13](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338274). Último Windows verde: [#6](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38758535199) |
+| 3. CI Linux e Windows verdes | Linux ✅ [#27](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338290) e [#28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345). Windows ⏳ checkpoint final refeito (o #13 foi cancelado por um push seguinte; corrigido no workflow). Último Windows verde: [#6](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38758535199) |
 | 4. Linha de base de desempenho registrada | ✅ [`benchmarks/results/2026-10-phase1-baseline.md`](benchmarks/results/2026-10-phase1-baseline.md) |
 | 5. Nenhum `windows.h` fora de código só-Windows | ✅ |
 
 ## Próximos passos
 
-1. Confirmar CI Linux e Windows verdes no commit `67c1a46`.
+1. Confirmar o CI Windows do checkpoint final (Linux já verde).
 2. Você roda o checklist manual no Bazzite e reporta o resultado (ou os logs, se algo falhar).
 3. Corrigir o que o teste manual encontrar.
 4. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
