@@ -187,6 +187,47 @@ pre_modorganizer() {
     ctest --test-dir "$BUILD_OUT/modorganizer" --output-on-failure
 }
 
+# check_plugins <game|installer> <plugin>...: with --tests, the plugin load check
+# (tests/plugin-load) loads the installed plugins with QPluginLoader, like the
+# application's PluginContainer, and checks the interface each one implements.
+check_plugins() {
+    [[ $TESTS == 1 ]] || return 0
+    local kind="$1"; shift
+    # throwaway install prefix: the check must not leave files in $INSTALL
+    cmake_configure plugin-load "$ROOT/tests/plugin-load" \
+        -DCMAKE_INSTALL_PREFIX="$BUILD_OUT/plugin-load-install"
+    cmake --build "$BUILD_OUT/plugin-load"
+    log "plugin load check ($kind)"
+    "$BUILD_OUT/plugin-load/plugin_load" "$kind" "$@" || die "plugin load check failed"
+}
+
+# game_bethesda: the plugins of the Bethesda games (one libgame_<game>.so per game, built
+# on the static libraries game_gamebryo and game_creation), installed in bin/plugins;
+# with --tests its GoogleTest suite runs (Skyrim SE: detection in a fake Steam library,
+# data directory, save information) and every game plugin must load.
+build_game_bethesda() {
+    cmake_build game_bethesda "$ROOT/deps/game_bethesda"
+    check_plugins game "$INSTALL"/bin/plugins/libgame_*.so
+}
+
+# the installer plugins, installed in bin/plugins; with --tests each must load, and the
+# GoogleTest suite of installer_fomod parses the FOMOD sample of tests/fixtures.
+build_installer_quick() {
+    cmake_build installer_quick "$ROOT/deps/installer_quick"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_quick.so"
+}
+
+build_installer_manual() {
+    cmake_build installer_manual "$ROOT/deps/installer_manual"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_manual.so"
+}
+
+build_installer_fomod() {
+    cmake_build installer_fomod "$ROOT/deps/installer_fomod" \
+        -DFOMOD_SAMPLE_DIR="$ROOT/tests/fixtures/fomod-sample"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_fomod.so"
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
