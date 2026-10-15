@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>FOMOD Sample</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Choose an option">
+      <optionalFileGroups order="Explicit">
+        <group name="Options" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="Option A">
+              <description>Installs textures/option_a.dds.</description>
+              <files>
+                <file source="textures/option_a.dds" destination="textures/option_a.dds" priority="0"/>
+              </files>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Option B">
+              <description>Installs textures/option_b.dds.</description>
+              <files>
+                <file source="textures/option_b.dds" destination="textures/option_b.dds" priority="0"/>
+              </files>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>
