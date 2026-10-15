@@ -37,7 +37,9 @@ Limitations of Phase 1:
 - Nexus and Steam logins are not persisted on Linux yet (kept in memory only; a secret-store
   integration comes later).
 - "My Games" and AppData point to XDG folders (Phase 3 maps them into the Proton prefix).
-- Steam auto-detection covers the standard Steam library; otherwise give the game path by hand.
+- Steam auto-detection covers `~/.local/share/Steam`, `~/.steam/steam`, Flatpak Steam and the
+  extra libraries listed in `libraryfolders.vdf`; otherwise give the game path by hand.
+- No Python plugins and no `nxm://` link handler until Phase 4.
 - RAR extraction is verified manually only (no automated fixture).
 - No AppImage yet (Phase 5): the binary links against the system Qt 6, so it must run in a
   Fedora 44 environment (see below), not directly on the Bazzite host.
@@ -63,27 +65,36 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
          qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
          fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland
      ```
-2. Baixe o artefato: GitHub -> repositório `FM0Ura/ModOrganizerLinux` -> aba Actions ->
-   workflow **Linux** -> último run verde da branch `claude/serene-maxwell-1dyrbg` ->
-   seção Artifacts -> `mo2-linux-install` (é preciso estar logado no GitHub). Pelo terminal,
-   com o `gh` autenticado: `gh run download <id do run> -R FM0Ura/ModOrganizerLinux -n mo2-linux-install -D ~/mo2-phase1`.
-3. Extraia e dê permissão de execução (o zip do GitHub não preserva as permissões):
+2. Obtenha o artefato `mo2-linux-install`. Duas rotas:
+   - **Pelo navegador:** GitHub -> repositório `FM0Ura/ModOrganizerLinux` -> aba Actions ->
+     workflow **Linux** -> último run verde da branch `claude/serene-maxwell-1dyrbg` ->
+     seção Artifacts -> `mo2-linux-install` (é preciso estar logado no GitHub). O download é
+     um zip; extraia (só nesta rota):
+     ```sh
+     mkdir -p ~/mo2-phase1 && unzip ~/Downloads/mo2-linux-install.zip -d ~/mo2-phase1
+     ```
+   - **Pelo terminal**, com o `gh` autenticado (ele já extrai os arquivos):
+     ```sh
+     gh run download <id do run> -R FM0Ura/ModOrganizerLinux -n mo2-linux-install -D ~/mo2-phase1
+     ```
+3. Nas duas rotas, o artefato perde a permissão de execução; restaure:
    ```sh
-   mkdir -p ~/mo2-phase1 && unzip ~/Downloads/mo2-linux-install.zip -d ~/mo2-phase1
    chmod +x ~/mo2-phase1/bin/ModOrganizer
    ```
 4. Rode dentro do distrobox:
    ```sh
-   distrobox enter mo2-run -- env -u QT_QPA_PLATFORM ~/mo2-phase1/bin/ModOrganizer
+   distrobox enter mo2-run -- ~/mo2-phase1/bin/ModOrganizer
    ```
-   `QT_QPA_PLATFORM` não é necessário em um desktop (só para execução sem tela); o
-   `env -u` apenas remove o valor `offscreen` que a imagem do `Containerfile` define.
-   Se a janela não aparecer no Wayland, tente `env QT_QPA_PLATFORM=xcb`.
+   `QT_QPA_PLATFORM` não é necessário em um desktop (só para execução sem tela). Se a janela
+   não aparecer no Wayland, tente
+   `distrobox enter mo2-run -- env QT_QPA_PLATFORM=xcb ~/mo2-phase1/bin/ModOrganizer`.
 
-Alternativa: compilar você mesmo dentro do distrobox, com os fontes em `../modorganizer`
-(branch `claude/serene-maxwell-1dyrbg` de `FM0Ura/modorganizer`):
+Alternativa: compilar você mesmo. Isso só funciona no distrobox criado com a imagem do
+`build/Containerfile` (a rota `fedora:44` + `dnf` acima não tem gcc, cmake, ninja nem Rust) e
+exige o fork clonado ao lado deste repositório, em `../modorganizer`:
 
 ```sh
+git clone -b claude/serene-maxwell-1dyrbg https://github.com/FM0Ura/modorganizer.git ../modorganizer
 distrobox enter mo2-run -- ./build.sh        # gera install/bin/ModOrganizer
 ```
 

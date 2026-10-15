@@ -248,6 +248,10 @@ for t in "${ALLOW_FAIL[@]}"; do
     is_known "$t" || die "unknown target: $t (see --list)"
 done
 
+# The unit tests and the smoke test run without a display, whatever the environment says
+# (the container image and a desktop session may set QT_QPA_PLATFORM to something else).
+((TESTS)) && export QT_QPA_PLATFORM=offscreen
+
 mkdir -p "$INSTALL"
 skipped=()
 failed=()
