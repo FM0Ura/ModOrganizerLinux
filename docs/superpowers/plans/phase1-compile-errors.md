@@ -23,7 +23,7 @@ Totals: 154 objects (sources, moc, rcc), **104 failed**, 50 built; 70 distinct e
 
 | ✓ | File | Errors | Sources blocked | First error | Category |
 |---|------|-------:|----------------:|-------------|----------|
-| [ ] | `installationmanager.h` | 1 | 47 (incl. `mocs_compilation.cpp`, `organizercore.cpp`, `main.cpp`, `modinfo*.cpp`, `modlist*.cpp`, `downloadmanager.cpp`, …) | `:33: Windows.h: No such file or directory` | include |
+| [x] | `installationmanager.h` | 1 | 47 (incl. `mocs_compilation.cpp`, `organizercore.cpp`, `main.cpp`, `modinfo*.cpp`, `modlist*.cpp`, `downloadmanager.cpp`, …) | `:33: Windows.h: No such file or directory` | include |
 | [x] | `settings.h` | 1 | 29 (`profile.cpp`, `settingsdialog*.cpp`, `instancemanager*.cpp`, `nexusinterface.cpp`, …) | `:29: usvfs/usvfsparameters.h: No such file or directory` | include (usvfs → Task 11: include Windows-only) |
 | [x] | `loot.h` | 1 | 5 (`lootdialog`, `pluginlist`, `pluginlistproxy`, `pluginlistsortproxy`, `genericicondelegate`) | `:8: windows.h: No such file or directory` | include (Task 11: Windows-only) |
 | [x] | `mainwindow.h` | 1 | 5 (`moapplication`, `modlistview`, `pluginlistview`, `uilocker`; `shared/util.cpp` is no longer built on Linux, see section 3) | `:109: Windows.h: No such file or directory` | include (Task 11: Windows-only) |
@@ -37,14 +37,14 @@ Totals: 154 objects (sources, moc, rcc), **104 failed**, 50 built; 70 distinct e
 
 | ✓ | File | Errors | First error | Category |
 |---|------|-------:|-------------|----------|
-| [ ] | `settingsutilities.cpp` | 23 | `:217: 'CRED_TYPE_GENERIC' was not declared` (Windows Credential Manager: `CredWriteW`/`CredReadW`/`CredFree`) | Win32 API |
-| [ ] | `filetreeitem.cpp` | 17 | `:18: 'SHGFI_TYPENAME' was not declared` (`SHGetFileInfoW` file type names) | Win32 API |
+| [x] | `settingsutilities.cpp` | 23 | `:217: 'CRED_TYPE_GENERIC' was not declared` (Windows Credential Manager: `CredWriteW`/`CredReadW`/`CredFree`) | Win32 API |
+| [x] | `filetreeitem.cpp` | 17 | `:18: 'SHGFI_TYPENAME' was not declared` (`SHGetFileInfoW` file type names) | Win32 API |
 | [x] | `shared/fileentry.cpp` | 3 | `:18: 'FILETIME' has not been declared` | type (Task 9) |
-| [ ] | `iconfetcher.cpp` | 2 | `:24: 'GetSystemMetrics'` / `'SM_CXSMICON' was not declared` | Win32 API |
-| [ ] | `qdirfiletree.cpp` | 2 (+5 reported in `<bits/stl_construct.h>`) | `:60: cannot define member function 'QDirFileTree::doClone' within 'QDirFileTreeImpl'` (then `make_shared` of an abstract class) | compiler (MSVC accepts) |
-| [ ] | `multiprocess.cpp` | 1 | `:53: 'Sleep' was not declared in this scope` | Win32 API |
-| [ ] | `browserview.cpp` | 1 | `:29: Shlwapi.h: No such file or directory` | include |
-| [ ] | `messagedialog.cpp` | 1 | `:24: Windows.h: No such file or directory` | include |
+| [x] | `iconfetcher.cpp` | 2 | `:24: 'GetSystemMetrics'` / `'SM_CXSMICON' was not declared` | Win32 API |
+| [x] | `qdirfiletree.cpp` | 2 (+5 reported in `<bits/stl_construct.h>`) | `:60: cannot define member function 'QDirFileTree::doClone' within 'QDirFileTreeImpl'` (then `make_shared` of an abstract class) | compiler (MSVC accepts) |
+| [x] | `multiprocess.cpp` | 1 | `:53: 'Sleep' was not declared in this scope` | Win32 API |
+| [x] | `browserview.cpp` | 1 | `:29: Shlwapi.h: No such file or directory` | include |
+| [x] | `messagedialog.cpp` | 1 | `:24: Windows.h: No such file or directory` | include |
 
 ## 3. Expected at link time (not compiled on Linux, need `src/linux/<name>_linux.cpp`)
 
@@ -64,8 +64,8 @@ link time until the Linux files exist.
   usvfs process list (`getRunningUSVFSProcesses()`) is only used by
   `ProcessRunner::waitForAllUSVFSProcessesWithLock()`, whose Linux version is in
   `src/linux/processrunner_linux.cpp`
-- [ ] `shared/windows_error.cpp` → Task 12
-- [ ] `shared/util.cpp` (excluded in Task 9) → Task 12: `src/linux/util_linux.cpp` has the
+- [x] `shared/windows_error.cpp` → Task 12 (`src/linux/windows_error_linux.cpp`)
+- [x] `shared/util.cpp` (excluded in Task 9) → Task 12 (built on both platforms again, see "After Task 12"): `src/linux/util_linux.cpp` has the
   string, file and thread-name helpers (and `getUsvfsVersionString()`, "none", since
   Task 11); still missing on Linux: `createVersionInfo()`,
   `checkDuplicateShortcuts()`, `ExitModOrganizer()`,
@@ -119,18 +119,59 @@ include guarded locally (not committed), `organizercore.cpp`, `processrunner.cpp
 `aboutdialog.cpp` and `pluginlistview.cpp` build; the files of Task 11 that still fail
 stop at errors of Task 12:
 
-- [ ] `json.h:117` `typeid(T).name` without `()` (MSVC accepts it in an uninstantiated
+- [x] `json.h:117` `typeid(T).name` without `()` (MSVC accepts it in an uninstantiated
   template; blocks `loot.cpp`, which builds once it is fixed)
-- [ ] `mainwindow.cpp`: `<QFIleIconProvider>` (case), `<shlobj.h>`, then
+- [x] `mainwindow.cpp`: `<QFIleIconProvider>` (case), `<shlobj.h>`, then
   `FindFirstFileW` (~2527), `GetLastError` (~3908/3933), `UINT32`
-- [ ] `moapplication.cpp`: `<QSSLSocket>` (case: `<QSslSocket>`), `GetCommandLineW()` (~207)
-- [ ] `lootdialog.cpp:319`: `GetLastError`
+- [x] `moapplication.cpp`: `<QSSLSocket>` (case: `<QSslSocket>`), `GetCommandLineW()` (~207)
+- [x] `lootdialog.cpp:319`: `GetLastError`
 
 Uncovered by the `settings.h` fix (they stopped at `settings.h` before):
 
-- [ ] `settings.cpp`: `GetLastError`; `settingsutilities.h`: `QVariant` from `long` /
+- [x] `settings.cpp`: `GetLastError`; `settingsutilities.h`: `QVariant` from `long` /
   `unsigned long` is ambiguous (instantiated from `settings.cpp:266` and `:2472`)
-- [ ] `profile.cpp`: `Windows.h`
-- [ ] `instancemanagerdialog.cpp`: `GetLastError`, `ERROR_CANCELLED`
-- [ ] `nexusinterface.cpp`: uibase `moassert.h` uses `IsDebuggerPresent()`/`DebugBreak()`
+- [x] `profile.cpp`: `Windows.h`
+- [x] `instancemanagerdialog.cpp`: `GetLastError`, `ERROR_CANCELLED`
+- [x] `nexusinterface.cpp`: uibase `moassert.h` uses `IsDebuggerPresent()`/`DebugBreak()`
   (needs a Linux branch in uibase), then `__FUNCSIG__` (MSVC-only)
+
+## After Task 12
+
+The application compiles and links on Linux (`./build.sh --tests`, no `--allow-fail`)
+and `install/bin/ModOrganizer --help` runs headless (smoke test of `build.sh --tests`
+and of the Linux CI). How the remaining items were fixed:
+
+- Windows-only includes (`installationmanager.{h,cpp}`, `profile.cpp`,
+  `profilesdialog.cpp`, `messagedialog.cpp`, `browserview.cpp`, `motddialog.cpp`,
+  `overwriteinfodialog.cpp`, `problemsdialog.cpp`, `editexecutablesdialog.cpp`,
+  `mainwindow.cpp`, `shared/windows_error.h`) are under `#ifdef _WIN32`;
+  `usvfsconnector.h` is not given to moc on Linux.
+- `src/linux/win32compat_linux.h` (included by `pch.h` on Linux) has the few Win32
+  functions the shared code calls directly, with their Windows meaning:
+  `GetLastError()` (errno), `ERROR_CANCELLED`, `Sleep()`, `UINT32`, `GetProcessId()`
+  (a `HANDLE` is a pid), `GetCommandLineW()` (from `/proc/self/cmdline`, parsed back by
+  `split_unix()` in `commandline.cpp`), `GetPrivateProfileStringW()` /
+  `GetPrivateProfileSectionNamesW()` (`profile.cpp` INI tweaks, `savestab.cpp`) and
+  `__FUNCSIG__`. This covers `settings.cpp`, `lootdialog.cpp`, `instancemanagerdialog.cpp`,
+  `modlist.cpp`, `modlistviewactions.cpp`, `modinforegular.cpp`, `organizerproxy.cpp`,
+  `savestab.cpp`, `profile.cpp`, `multiprocess.cpp`, `installationmanager.cpp`,
+  `filetreemodel.cpp` and `nexusinterface.cpp` without changing them.
+- Mixed files with Win32 functions in `#ifdef _WIN32` and the Linux ones in
+  `src/linux/`: `shared/util.cpp` (`util_linux.cpp`, now with `createVersionInfo()`
+  from `version.rc`), `shared/windows_error.cpp` (`windows_error_linux.cpp`, still
+  excluded), `main.cpp` (`main_linux.cpp`), `commandline.cpp`
+  (`commandline_linux.cpp`), `filetreeitem.cpp` (`filetreeitem_linux.cpp`),
+  `pluginlist.cpp` (`pluginlist_linux.cpp`), `settingsutilities.cpp`
+  (`settingsutilities_linux.cpp`); one-line `#ifdef`s in `iconfetcher.cpp`,
+  `mainwindow.cpp` (`fileMoved()`), `loglist.cpp` (crash log) and `shared/util.h`
+  (`ToFILETIME()`).
+- Portable C++ fixes visible on Windows (same meaning with MSVC): `json.h`
+  (`typeid(T).name()`), `qdirfiletree.cpp` (`doClone() const override`),
+  `modlistdropinfo.cpp` (`m_url.clear()`), `modinfodialog.cpp` (`path().wstring()`),
+  `settings.cpp` (`qulonglong`/`qlonglong` casts), `mainwindow.cpp` (`QFileIconProvider`
+  case, `filetree.h` include, `QString::fromStdWString()`), `moapplication.cpp`
+  (`QSslSocket` case).
+- `uibase`: `moassert.h` has a Linux branch (debugger check through
+  `/proc/self/status`, `__PRETTY_FUNCTION__`); the type information of the plugin
+  requirements is exported on Linux (`pluginrequirements.h`, `dynamic_cast` in
+  `plugincontainer.cpp`).
