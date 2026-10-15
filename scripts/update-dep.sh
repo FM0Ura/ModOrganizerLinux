@@ -24,6 +24,7 @@ declare -A DEP_URLS=(
     [installer_quick]="https://github.com/ModOrganizer2/modorganizer-installer_quick"
     [installer_manual]="https://github.com/ModOrganizer2/modorganizer-installer_manual"
     [installer_fomod]="https://github.com/ModOrganizer2/modorganizer-installer_fomod"
+    [modorganizer]="https://github.com/ModOrganizer2/modorganizer"
 )
 
 usage() {

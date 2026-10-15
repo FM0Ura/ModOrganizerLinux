@@ -1,10 +1,7 @@
 name: Windows
 
-# Builds the application fork (FM0Ura/modorganizer) on Windows with upstream
-# ModOrganizer2 dependencies (master), the way upstream CI builds modorganizer.
-# The fork has GitHub Actions disabled, so this workflow lives in the superproject.
-# The fork branch follows the same-name rule as linux.yml: the branch of this ref if
-# the fork has it, else master; workflow_dispatch can name another fork ref.
+# Builds the application (deps/modorganizer) on Windows with upstream ModOrganizer2
+# dependencies (master), the way upstream CI builds modorganizer.
 
 # Runs only at checkpoints (end of Phase 1 Task 12 and end of each phase), because a
 # run takes 17-33 minutes: either on demand, or on a push whose head commit message
@@ -12,11 +9,6 @@ name: Windows
 on:
   push:
   workflow_dispatch:
-    inputs:
-      fork-ref:
-        description: Branch, tag or commit of FM0Ura/modorganizer to build (default same-name branch, else master)
-        required: false
-        default: ""
 
 env:
   # vcpkg binary cache for the ports built by every configure (uibase, archive, ...)
@@ -32,23 +24,6 @@ jobs:
       cancel-in-progress: true
     runs-on: windows-2022
     steps:
-      - name: Pick fork ref
-        id: fork
-        shell: bash
-        env:
-          INPUT_REF: ${{ inputs.fork-ref }}
-          BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          if [[ -n $INPUT_REF ]]; then
-            ref=$INPUT_REF
-          elif git ls-remote --exit-code --heads https://github.com/FM0Ura/modorganizer "refs/heads/$BRANCH" >/dev/null; then
-            ref=$BRANCH
-          else
-            ref=master
-          fi
-          echo "Building FM0Ura/modorganizer at $ref"
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-
       - name: Restore vcpkg binary cache
         uses: actions/cache@v4
         with:
@@ -63,7 +38,7 @@ jobs:
       # Qt, vcpkg and the upstream dependencies (master of each ModOrganizer2 repository),
       # built and installed into ./install. The action would check out *this* repository
       # as the project to build, so its checkout/configure/build steps are skipped and the
-      # fork is built below with the same commands.
+      # application is built below with the same commands.
       - name: Build dependencies with mob action
         id: mob
         uses: ModOrganizer2/build-with-mob-action@master
@@ -74,12 +49,17 @@ jobs:
           qt-modules: qtpositioning qtwebchannel qtwebengine qtwebsockets qtnetworkauth
           mo2-dependencies: usvfs uibase bsatk esptk archive lootcli
 
-      - name: Check out application fork
+      # only deps/modorganizer is needed; it is moved to build/modorganizer, where mob
+      # keeps the projects it builds
+      - name: Check out application
         uses: actions/checkout@v4
         with:
-          repository: FM0Ura/modorganizer
-          ref: ${{ steps.fork.outputs.ref }}
-          path: build/modorganizer
+          path: superproject
+          sparse-checkout: deps/modorganizer
+
+      - name: Move application into the mob build tree
+        shell: bash
+        run: mkdir -p build && mv superproject/deps/modorganizer build/modorganizer
 
       - name: Configure ModOrganizer
         shell: pwsh

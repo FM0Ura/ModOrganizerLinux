@@ -7,14 +7,14 @@
 # build or fail the run (used by CI for targets that are still being ported); the
 # modorganizer unit tests (--tests) are not covered by it.
 #
-# Environment: MO2_SRC (default ../modorganizer) is the application fork.
+# Environment: MO2_SRC (default deps/modorganizer) is the application source.
 # Works inside the build container and in any environment that provides the
 # dependencies listed in build/Containerfile (CC/CXX/CMAKE_PREFIX_PATH from
 # the environment are respected, e.g. after `source /opt/mo2env/activate-mo2.sh`).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MO2_SRC="${MO2_SRC:-$ROOT/../modorganizer}"
+MO2_SRC="${MO2_SRC:-$ROOT/deps/modorganizer}"
 INSTALL="$ROOT/install"
 BUILD_OUT="$ROOT/build-out"
 
@@ -152,9 +152,9 @@ build_lootcli() {
     cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON
 }
 
-# modorganizer is the application itself (the fork at $MO2_SRC), configured with its
-# linux-gcc preset (Ninja, RelWithDebInfo, no vcpkg); -B keeps the build tree out of
-# the fork. It installs bin/ModOrganizer with its resources next to it; with --tests,
+# modorganizer is the application itself ($MO2_SRC, by default deps/modorganizer),
+# configured with its linux-gcc preset (Ninja, RelWithDebInfo, no vcpkg); -B keeps the
+# build tree out of the source. It installs bin/ModOrganizer with its resources next to it; with --tests,
 # the installed executable must then pass the smoke test.
 build_modorganizer() {
     cmake_build modorganizer "$MO2_SRC" --preset linux-gcc

@@ -3,10 +3,11 @@
 Superproject for a native Linux port of [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer).
 The goal is a Mod Organizer 2 that runs natively on Linux (Bazzite is the reference
 platform) and manages mods for Steam games running through Proton, while the application
-fork (`modorganizer`) keeps building on Windows against the upstream `uibase`.
+keeps building on Windows against the upstream `uibase`.
 
-This repository holds the build scripts, CI, documentation and the upstream dependencies
-(vendored under [`deps/`](deps/README.md) with `git subtree`).
+This repository holds the build scripts, CI, documentation, the application
+(`deps/modorganizer`) and the upstream dependencies, all vendored under
+[`deps/`](deps/README.md) with `git subtree`.
 
 - Design specification: [docs/superpowers/specs/2026-10-14-mo2-linux-port-design.md](docs/superpowers/specs/2026-10-14-mo2-linux-port-design.md)
 - Vendored dependencies and their pinned versions: [deps/README.md](deps/README.md)
@@ -25,8 +26,8 @@ Done:
   `translations/`, `resources/`) and `install/lib/`.
 - Linux CI builds everything, runs the unit tests, the plugin-load harness and a headless
   smoke test of the application, and uploads `install/` as the artifact `mo2-linux-install`.
-- Windows CI (builds the fork against upstream `uibase`) runs only for commits whose message
-  contains `[windows-ci]`, or on manual dispatch. It builds the fork against the dependencies
+- Windows CI (builds the application against upstream `uibase`) runs only for commits whose message
+  contains `[windows-ci]`, or on manual dispatch. It builds `deps/modorganizer` against the dependencies
   of upstream `master` (via `mob`), **not** against our patched copies in `deps/` (`uibase`,
   `archive`, `bsatk`, `esptk`, `cmake_common`, `game_bethesda`, installers). Those patches have
   only been checked for Windows by an `unifdef -D_WIN32` review (the Windows view of each file
@@ -103,11 +104,10 @@ NVIDIA, crie o distrobox com `--nvidia`); se aparecer "SHM error ... permission 
 os `/tmp/qipc_*_mo*` deixados por uma execução anterior como root. Detalhes no checklist.
 
 Alternativa: compilar você mesmo. Isso só funciona no distrobox criado com a imagem do
-`build/Containerfile` (a rota `fedora:44` + `dnf` acima não tem gcc, cmake, ninja nem Rust) e
-exige o fork clonado ao lado deste repositório, em `../modorganizer`:
+`build/Containerfile` (a rota `fedora:44` + `dnf` acima não tem gcc, cmake, ninja nem Rust).
+O código do app já vem neste repositório, em `deps/modorganizer`:
 
 ```sh
-git clone -b claude/serene-maxwell-1dyrbg https://github.com/FM0Ura/modorganizer.git ../modorganizer
 distrobox enter mo2-run -- ./build.sh        # gera install/bin/ModOrganizer
 ```
 
@@ -120,8 +120,8 @@ The build environment is defined once, in [`build/Containerfile`](build/Containe
 fmt, lz4, zlib, gtest, fuse3, clang-tools-extra, Rust stable). CI uses the same file. If
 `fedora:44` is ever unavailable, use the latest stable Fedora tag and note it here.
 
-`build.sh` expects the application fork checked out next to this repository
-(`../modorganizer`, override with `MO2_SRC`). It builds into `build-out/` and installs into
+`build.sh` builds the application from `deps/modorganizer` (override with `MO2_SRC`).
+It builds into `build-out/` and installs into
 `install/`:
 
 ```sh

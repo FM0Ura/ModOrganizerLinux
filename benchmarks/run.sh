@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Phase 1 refresh benchmark: generate a synthetic instance, build and run
-# organizer_bench_refresh from the application fork, append the result to
+# organizer_bench_refresh from the application (deps/modorganizer), append the result to
 # benchmarks/results/2026-10-phase1-baseline.md.
 #
 #   benchmarks/run.sh [--mods N] [--files N] [--seed N] [--results FILE] [--no-record]
@@ -10,7 +10,7 @@
 # disk has too little free space the size is scaled down (mods and files by the same
 # factor) and the size actually used is recorded in the result.
 #
-# Environment: MO2_SRC (default ../modorganizer) is the application fork; the build
+# Environment: MO2_SRC (default deps/modorganizer) is the application source; the build
 # needs what build.sh needs (CMAKE_PREFIX_PATH etc., e.g. after
 # `source /opt/mo2env/activate-mo2.sh`), and ./build.sh must have installed the
 # dependencies into ./install first.
@@ -18,7 +18,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-MO2_SRC="${MO2_SRC:-$ROOT/../modorganizer}"
+MO2_SRC="${MO2_SRC:-$ROOT/deps/modorganizer}"
 INSTALL="$ROOT/install"
 BUILD_DIR="$ROOT/build-out/bench"
 RESULTS="$HERE/results/2026-10-phase1-baseline.md"
@@ -121,7 +121,11 @@ if (( RECORD )); then
     CORES="$(nproc)"
     KERNEL="$(uname -sr)"
     SUPER="$(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet HEAD 2>/dev/null || echo '+dirty')"
-    FORK="$(git -C "$MO2_SRC" rev-parse --short HEAD)$(git -C "$MO2_SRC" diff --quiet HEAD 2>/dev/null || echo '+dirty')"
+    # the application is part of the superproject unless MO2_SRC points elsewhere
+    SRC=""
+    if [[ $(git -C "$MO2_SRC" rev-parse --show-toplevel) != "$(git -C "$ROOT" rev-parse --show-toplevel)" ]]; then
+        SRC="$(git -C "$MO2_SRC" rev-parse --short HEAD)$(git -C "$MO2_SRC" diff --quiet HEAD 2>/dev/null || echo '+dirty')"
+    fi
     mkdir -p "$(dirname "$RESULTS")"
     if [[ ! -s $RESULTS ]]; then
         cat > "$RESULTS" <<'HDR'
@@ -135,7 +139,7 @@ HDR
         echo
         echo "## $DATE"
         echo
-        echo "- superproject commit: \`$SUPER\`; fork (modorganizer) commit: \`$FORK\`"
+        echo "- superproject commit: \`$SUPER\`${SRC:+; application source (\`$MO2_SRC\`) commit: \`$SRC\`}"
         echo "- CPU: $CPU ($CORES logical CPUs); kernel: $KERNEL"
         echo "- size: $MODS mods, $FILES files, seed $SEED, $(metric threads) refresh threads${SCALED:+ ($SCALED)}"
         echo "- build: RelWithDebInfo, $(basename "${CXX:-c++}")"

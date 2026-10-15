@@ -4,14 +4,11 @@
 
 **Última atualização:** 2026-10-15
 **Fase atual:** 2 — VFS FUSE · **Status:** 🚧 iniciada · **Anterior:** Fase 1 — Build nativo ✅
-**Branch de trabalho (ambos os repositórios):** `fase-2-vfs-fuse` (Fase 1 em `claude/serene-maxwell-1dyrbg`)
+**Branch de trabalho:** `fase-2-vfs-fuse` (Fase 1 em `claude/serene-maxwell-1dyrbg`)
 
-## Repositórios
+## Repositório
 
-| Repositório | Papel | Commit atual |
-|---|---|---|
-| [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux) | Superprojeto: build, CI, `deps/`, testes, docs | `592efad` |
-| [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) | Fork do app MO2 | `bb46b18` |
+Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
 
 ## Fase 1 — progresso
 
@@ -76,6 +73,7 @@ Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura
 | 2026-10-14 | Dependências do upstream em `deps/` via `git subtree`, acompanhando o `master` do upstream |
 | 2026-10-15 | CI só em pontos de controle; CI Windows roda em commits com `[windows-ci]` ou manualmente |
 | 2026-10-15 | Fase 1 concluída: teste manual aprovado no Bazzite |
+| 2026-10-15 | Um repositório só: o fork `modorganizer` vira o subtree `deps/modorganizer` (commits do fork reaplicados) |
 
 ## Pendências por fase
 

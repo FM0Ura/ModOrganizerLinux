@@ -27,11 +27,20 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `installer_quick` | https://github.com/ModOrganizer2/modorganizer-installer_quick | `master` (`1773580d2ecad6f4c857f0a39564883f4b268d49`) | 2026-10-06 |
 | `installer_manual` | https://github.com/ModOrganizer2/modorganizer-installer_manual | `master` (`3ff03327656662a5ce3a7e9fb6b44952d1bb379f`) | 2025-05-29 |
 | `installer_fomod` | https://github.com/ModOrganizer2/modorganizer-installer_fomod | `master` (`7c3995682134a63b5040b7865b88a3749b056d68`) | 2026-10-06 |
+| `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`
 shows the same commit in the `git-subtree-split:` line of the latest squash commit.
 
 ## Notes on individual pins
+
+- **`modorganizer`** is the application itself and carries most of the port (Linux
+  `env` layer, `VfsConnector`, CMake preset `linux-gcc`), so it is the exception to the
+  "small changes" rule below. Until 2026-10-15 it lived in a separate fork,
+  [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (branch
+  `claude/serene-maxwell-1dyrbg`, `bb46b18`); its 11 commits on top of upstream
+  `4ba22f0` were replayed here one by one, with the `deps/modorganizer:` prefix. To send
+  a change upstream, extract it with `git subtree split --prefix deps/modorganizer`.
 
 - **`dds-header`**: the vcpkg port `mo2-dds-header` downloads one file,
   `DirectXTex/DDS.h`, from the `jun2024` tag of Microsoft's DirectXTex. There is no
