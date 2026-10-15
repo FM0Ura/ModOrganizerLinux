@@ -6,6 +6,14 @@ cmake_minimum_required(VERSION 3.16)
 # application
 add_executable(organizer_tests)
 mo2_configure_tests(organizer_tests NO_MAIN NO_MOCK WARNINGS 4)
+
+# mo2_configure_tests takes every .cpp of this directory; bench_refresh.cpp is the
+# refresh benchmark (organizer_bench_refresh, see the top-level CMakeLists.txt), with a
+# main() of its own
+get_target_property(_organizer_tests_sources organizer_tests SOURCES)
+list(FILTER _organizer_tests_sources EXCLUDE REGEX "(^|/)bench_refresh\\.cpp$")
+set_property(TARGET organizer_tests PROPERTY SOURCES ${_organizer_tests_sources})
+
 target_link_libraries(organizer_tests PRIVATE
 	organizer_launch organizer_archivetree organizer_env organizer_datatree)
 
