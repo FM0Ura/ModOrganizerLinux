@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-15
-**Fase atual:** 1 — Build nativo · **Status:** implementada e com CI verde; aguardando teste manual no Bazzite
+**Fase atual:** 1 — Build nativo · **Status:** ✅ concluída (teste manual aprovado no Bazzite) · **Próxima:** Fase 2 — VFS FUSE
 **Branch de trabalho (ambos os repositórios):** `claude/serene-maxwell-1dyrbg`
 
 ## Repositórios
@@ -40,7 +40,7 @@
 | Critério | Status |
 |---|---|
 | 1. `build.sh` gera o app a partir de container limpo | ✅ (CI Linux) |
-| 2. Checklist manual aprovado no Bazzite | ⏳ **com você** — [`docs/testing/phase1-manual-checklist.md`](docs/testing/phase1-manual-checklist.md) |
+| 2. Checklist manual aprovado no Bazzite | ✅ aprovado pelo usuário em 2026-10-15 |
 | 3. CI Linux e Windows verdes | ✅ Linux [#27](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338290)/[#28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345); Windows [#15](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38810512689) (fork `bb46b18` contra deps do upstream — ver pendência dos `deps/`) |
 | 4. Linha de base de desempenho registrada | ✅ [`benchmarks/results/2026-10-phase1-baseline.md`](benchmarks/results/2026-10-phase1-baseline.md) |
 | 5. Nenhum `windows.h` fora de código só-Windows | ✅ |
@@ -51,10 +51,9 @@ Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura
 
 ## Próximos passos
 
-1. Você roda o checklist manual no Bazzite e reporta o resultado (ou os logs, se algo falhar).
-2. Corrigir o que o teste manual encontrar.
-3. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
-4. Escrever a spec e o plano da Fase 2.
+1. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
+2. Escrever a spec e o plano da próxima etapa.
+3. Resolver a pendência de compilar os `deps/` com nossos patches no Windows (ver abaixo).
 
 ## Limitações conhecidas da Fase 1
 
@@ -76,12 +75,13 @@ Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura
 | 2026-10-14 | Desktop Linux primeiro (Bazzite); Steam Deck depois; distribuição em AppImage |
 | 2026-10-14 | Dependências do upstream em `deps/` via `git subtree`, acompanhando o `master` do upstream |
 | 2026-10-15 | CI só em pontos de controle; CI Windows roda em commits com `[windows-ci]` ou manualmente |
+| 2026-10-15 | Fase 1 concluída: teste manual aprovado no Bazzite |
 
 ## Pendências por fase
 
 Itens menores encontrados nas revisões da Fase 1 e adiados (lista completa no ledger da Fase 1).
 
-**Antes de fechar a Fase 1 / próximo checkpoint**
+**Próximo checkpoint (início da Fase 2)**
 - Compilar no Windows as dependências com os nossos patches (`deps/`); hoje o CI Windows usa as dependências do upstream e nossos patches só foram conferidos por análise (`unifdef`).
 
 **Fase 2 (VFS)**
