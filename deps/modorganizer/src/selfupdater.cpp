@@ -58,7 +58,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <boost/bind/bind.hpp>
 
+#ifdef _WIN32
 #include <Windows.h>  //for VS_FIXEDFILEINFO, GetLastError
+#endif
 
 #include <exception>
 #include <map>
@@ -87,6 +89,10 @@ void SelfUpdater::setPluginContainer(PluginContainer* pluginContainer)
 
 void SelfUpdater::testForUpdate(const Settings& settings)
 {
+#ifndef _WIN32
+  log::debug("not checking for updates, there are no Linux releases yet");
+  return;
+#endif
   if (settings.network().offlineMode()) {
     log::debug("not checking for updates, in offline mode");
     return;

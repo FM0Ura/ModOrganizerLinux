@@ -81,7 +81,11 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <uibase/tutorialmanager.h>
 #include <uibase/utility.h>
 #include <uibase/versioninfo.h>
+#ifdef _WIN32
 #include <usvfs/usvfs.h>
+#else
+#include "linux/loot_linux.h"
+#endif
 
 #include "directoryrefresher.h"
 #include "shared/directoryentry.h"
@@ -3067,6 +3071,9 @@ void MainWindow::updateSortButton()
       IPluginGame::SortMechanism::NONE) {
     ui->sortButton->setEnabled(true);
     ui->sortButton->setToolTip(tr("Sort the plugins using LOOT."));
+#ifndef _WIN32
+    disableIfLootUnavailable(ui->sortButton);
+#endif
   } else {
     ui->sortButton->setDisabled(true);
     ui->sortButton->setToolTip(tr("There is no supported sort mechanism for this game. "

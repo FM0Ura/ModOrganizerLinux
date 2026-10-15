@@ -294,6 +294,16 @@ void UsvfsConnector::updateForcedLibraries(
   }
 }
 
+QString UsvfsConnector::name() const
+{
+  return "usvfs";
+}
+
+std::unique_ptr<VfsConnector> createVfsConnector()
+{
+  return std::make_unique<UsvfsConnector>();
+}
+
 std::vector<HANDLE> getRunningUSVFSProcesses()
 {
   std::vector<DWORD> pids;

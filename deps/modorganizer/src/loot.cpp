@@ -5,6 +5,9 @@
 #include "spawn.h"
 #include <log.h>
 #include <report.h>
+#ifndef _WIN32
+#include "linux/loot_linux.h"
+#endif
 
 using namespace MOBase;
 using namespace json;
@@ -13,6 +16,7 @@ static QString LootReportPath       = QDir::temp().absoluteFilePath("lootreport.
 static QString SortedPluginListPath = QDir::temp().absoluteFilePath("loadorder.txt");
 static const DWORD PipeTimeout      = 500;
 
+#ifdef _WIN32
 class AsyncPipe
 {
 public:
@@ -192,6 +196,7 @@ private:
     return {m_buffer, m_buffer + bytesRead};
   }
 };
+#endif  // _WIN32
 
 log::Levels levelFromLoot(lootcli::LogLevels level)
 {
@@ -493,6 +498,10 @@ bool Loot::spawnLootcli(QWidget* parent, bool didUpdateMasterList,
   sp.currentDirectory.setPath(qApp->applicationDirPath() + "/loot");
   sp.hooked = true;
   sp.stdOut = stdoutHandle.get();
+#ifndef _WIN32
+  // not an .exe on Linux
+  sp.binary = QFileInfo(lootcliPath());
+#endif
 
   HANDLE lootHandle = spawn::startBinary(parent, sp);
 
@@ -562,6 +571,7 @@ void Loot::lootThread()
   emit finished();
 }
 
+#ifdef _WIN32
 bool Loot::waitForCompletion()
 {
   bool terminating = false;
@@ -620,6 +630,7 @@ bool Loot::waitForCompletion()
 
   return true;
 }
+#endif  // _WIN32
 
 void Loot::processStdout(const std::string& lootOut)
 {
@@ -972,9 +983,11 @@ bool runLoot(QWidget* parent, OrganizerCore& core, bool didUpdateMasterList)
     dialog.exec();
 
     return dialog.result();
+#ifdef _WIN32
   } catch (const UsvfsConnectorException& e) {
     log::debug("{}", e.what());
     return false;
+#endif
   } catch (const std::exception& e) {
     reportError(QObject::tr("failed to run loot: %1").arg(e.what()));
     return false;

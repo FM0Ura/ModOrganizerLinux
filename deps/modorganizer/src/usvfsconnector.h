@@ -21,6 +21,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #define USVFSCONNECTOR_H
 
 #include "envdump.h"
+#include "vfsconnector.h"
 #include <QDebug>
 #include <QFile>
 #include <QList>
@@ -71,7 +72,7 @@ private:
   QByteArray m_Message;
 };
 
-class UsvfsConnector : public QObject
+class UsvfsConnector : public QObject, public VfsConnector
 {
 
   Q_OBJECT
@@ -80,15 +81,17 @@ public:
   UsvfsConnector();
   ~UsvfsConnector();
 
-  void updateMapping(const MappingType& mapping);
+  void updateMapping(const MappingType& mapping) override;
 
   void updateParams(MOBase::log::Levels logLevel, env::CoreDumpTypes coreDumpType,
                     const QString& crashDumpsPath, std::chrono::seconds spawnDelay,
                     QString executableBlacklist, const QStringList& skipFileSuffixes,
-                    const QStringList& skipDirectories);
+                    const QStringList& skipDirectories) override;
 
   void updateForcedLibraries(
-      const QList<MOBase::ExecutableForcedLoadSetting>& forcedLibraries);
+      const QList<MOBase::ExecutableForcedLoadSetting>& forcedLibraries) override;
+
+  QString name() const override;
 
 private:
   LogWorker m_LogWorker;

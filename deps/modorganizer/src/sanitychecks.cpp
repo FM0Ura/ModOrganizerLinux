@@ -405,8 +405,10 @@ void checkEnvironment(const env::Environment& e)
 
   int n = 0;
 
+#ifdef _WIN32
   n += checkBlocked();
   n += checkMissingFiles();
+#endif
   n += checkIncompatibilities(e);
 
   log::debug("sanity checks done, {}",

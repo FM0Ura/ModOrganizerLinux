@@ -23,8 +23,12 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #define WIN32_LEAN_AND_MEAN
 #include <QDir>
 #include <QFileInfo>
+#ifdef _WIN32
 #include <tchar.h>
 #include <windows.h>
+#else
+#include <uibase/win32compat.h>  // HANDLE
+#endif
 
 class Settings;
 
@@ -84,6 +88,9 @@ FileExecutionContext getFileExecutionContext(QWidget* parent, const QFileInfo& t
 
 FileExecutionTypes getFileExecutionType(const QFileInfo& target);
 
+#ifndef _WIN32
+QString launchUnavailableMessage();  // starting programs comes in Phase 3 on Linux
+#endif
 }  // namespace spawn
 
 // convenience functions to work with the external helper program, which is used

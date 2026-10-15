@@ -36,7 +36,11 @@
 #include "selfupdater.h"
 #include "settings.h"
 #include "uilocker.h"
+#ifdef _WIN32
 #include "usvfsconnector.h"
+#else
+#include "vfsconnector.h"
+#endif
 
 class ModListSortProxy;
 class PluginListSortProxy;
@@ -590,7 +594,7 @@ private:
   bool m_ArchivesInit;
 
   MOBase::DelayedFileWriter m_PluginListsWriter;
-  UsvfsConnector m_USVFS;
+  std::unique_ptr<VfsConnector> m_VFS;
 
   UILocker m_UILocker;
 };

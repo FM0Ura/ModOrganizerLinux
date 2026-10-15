@@ -83,9 +83,11 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 #
 # On Linux, the data tree (shared/ file register) and the filesystem part of env are
 # built as a static library, organizer_datatree, and the rest of env, except env.cpp
-# (which needs the settings), as organizer_env, and the file tree of archives used by
-# the installation as organizer_archivetree; the application links them and so do the
-# unit tests (tests/), without the rest of the application.
+# (which needs the settings), as organizer_env, the file tree of archives used by
+# the installation as organizer_archivetree, and the Linux parts of running programs
+# (the virtual file system connector, spawn and the availability of LOOT) as
+# organizer_launch; the application links them and so do the unit tests (tests/),
+# without the rest of the application.
 set(_organizer_datatree_sources
 	shared/directoryentry.cpp
 	shared/fileentry.cpp
@@ -110,6 +112,11 @@ set(_organizer_env_sources
 	linux/envshortcut_linux.cpp
 	linux/envwindows_linux.cpp)
 
+set(_organizer_launch_sources
+	linux/loot_linux.cpp
+	linux/spawn_linux.cpp
+	linux/vfsconnector_linux.cpp)
+
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)
 foreach(_source IN LISTS _organizer_sources)
@@ -123,6 +130,7 @@ foreach(_source IN LISTS _organizer_sources)
 				OR _relative MATCHES "\\.(rc|manifest)$"
 				OR _relative IN_LIST _organizer_datatree_sources
 				OR _relative IN_LIST _organizer_env_sources
+				OR _relative IN_LIST _organizer_launch_sources
 				OR _relative STREQUAL "archivefiletree.cpp")
 			continue()
 		endif()
@@ -156,8 +164,14 @@ if (NOT WIN32)
 	target_precompile_headers(organizer_archivetree REUSE_FROM organizer_datatree)
 	target_link_libraries(organizer_archivetree PUBLIC organizer_datatree mo2::archive)
 
+	add_library(organizer_launch STATIC ${_organizer_launch_sources})
+	mo2_configure_target(organizer_launch
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+	target_precompile_headers(organizer_launch REUSE_FROM organizer_datatree)
+	target_link_libraries(organizer_launch PUBLIC organizer_env mo2::lootcli-header)
+
 	target_link_libraries(organizer PRIVATE
-		organizer_archivetree organizer_env organizer_datatree)
+		organizer_launch organizer_archivetree organizer_env organizer_datatree)
 endif()
 
 # we add translations "manually" to handle MO2_INSTALL_IS_BIN

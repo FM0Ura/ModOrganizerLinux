@@ -6,9 +6,9 @@
 // on Windows, independently of the locale.
 //
 // Not here yet (shared/util.cpp, see docs/superpowers/plans/phase1-compile-errors.md
-// in the superproject): createVersionInfo(), getUsvfsVersionString(),
-// checkDuplicateShortcuts(), ExitModOrganizer(), ModOrganizerCanCloseNow(),
-// ModOrganizerExiting(), ResetExitFlag() and isNxmLink().
+// in the superproject): createVersionInfo(), checkDuplicateShortcuts(),
+// ExitModOrganizer(), ModOrganizerCanCloseNow(), ModOrganizerExiting(),
+// ResetExitFlag() and isNxmLink().
 
 #include "../shared/util.h"
 
@@ -152,6 +152,13 @@ int caseInsensitiveCompare(std::wstring_view lhs, std::wstring_view rhs)
   }
 
   return (lhs.size() < rhs.size()) ? -1 : 1;
+}
+
+QString getUsvfsVersionString()
+{
+  // there is no usvfs on Linux (see vfsconnector.h); this is shown in the about dialog
+  // and logged on startup
+  return "none";
 }
 
 void SetThisThreadName(const QString& s)

@@ -54,6 +54,7 @@ void adjustForVirtualized(const IPluginGame* game, spawn::SpawnParameters& sp,
   }
 }
 
+#ifdef _WIN32
 std::optional<ProcessRunner::Results> singleWait(HANDLE handle, DWORD pid)
 {
   if (handle == INVALID_HANDLE_VALUE) {
@@ -82,6 +83,9 @@ std::optional<ProcessRunner::Results> singleWait(HANDLE handle, DWORD pid)
   }
   }
 }
+#else
+std::optional<ProcessRunner::Results> singleWait(HANDLE handle, DWORD pid);
+#endif  // _WIN32
 
 enum class Interest
 {
@@ -352,6 +356,7 @@ void waitForProcessesThread(ProcessRunner::Results& result, HANDLE job,
   }
 }
 
+#ifdef _WIN32
 ProcessRunner::Results waitForProcesses(const std::vector<HANDLE>& initialProcesses,
                                         UILocker::Session* ls)
 {
@@ -441,6 +446,10 @@ ProcessRunner::Results waitForProcess(HANDLE initialProcess, LPDWORD exitCode,
 
   return r;
 }
+#else
+ProcessRunner::Results waitForProcess(HANDLE initialProcess, LPDWORD exitCode,
+                                      UILocker::Session* ls);
+#endif  // _WIN32
 
 ProcessRunner::ProcessRunner(OrganizerCore& core, IUserInterface* ui)
     : m_core(core), m_ui(ui), m_lockReason(UILocker::NoReason), m_waitFlags(NoFlags),
@@ -686,6 +695,7 @@ bool ProcessRunner::shouldRunShell() const
   return !m_shellOpen.filePath().isEmpty();
 }
 
+#ifdef _WIN32
 ProcessRunner::Results ProcessRunner::run()
 {
   // check if setHooked() was called after setFromFile(); this needs to
@@ -727,6 +737,7 @@ ProcessRunner::Results ProcessRunner::run()
 
   return postRun();
 }
+#endif  // _WIN32
 
 std::optional<ProcessRunner::Results> ProcessRunner::runShell()
 {
@@ -946,6 +957,7 @@ env::HandlePtr ProcessRunner::stealProcessHandle()
   return env::HandlePtr(h);
 }
 
+#ifdef _WIN32
 ProcessRunner::Results
 ProcessRunner::waitForAllUSVFSProcessesWithLock(UILocker::Reasons reason)
 {
@@ -984,6 +996,7 @@ ProcessRunner::waitForAllUSVFSProcessesWithLock(UILocker::Reasons reason)
 
   return r;
 }
+#endif  // _WIN32
 
 void ProcessRunner::withLock(std::function<void(UILocker::Session&)> f)
 {

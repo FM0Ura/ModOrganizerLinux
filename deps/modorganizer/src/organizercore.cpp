@@ -37,7 +37,9 @@
 #include <uibase/report.h>
 #include <uibase/scopeguard.h>
 #include <uibase/utility.h>
+#ifdef _WIN32
 #include <usvfs/usvfs.h>
+#endif
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -54,10 +56,12 @@
 #include <QtDebug>
 #include <QtGlobal>  // for qUtf8Printable, etc
 
+#ifdef _WIN32
 #include <Psapi.h>
 #include <Shlobj.h>
 #include <tchar.h>  // for _tcsicmp
 #include <tlhelp32.h>
+#endif
 
 #include <limits.h>
 #include <stddef.h>
@@ -181,7 +185,8 @@ OrganizerCore::OrganizerCore(Settings& settings)
       }),
       m_DownloadManager(&NexusInterface::instance(), this), m_DirectoryUpdate(false),
       m_ArchivesInit(false),
-      m_PluginListsWriter(std::bind(&OrganizerCore::savePluginList, this))
+      m_PluginListsWriter(std::bind(&OrganizerCore::savePluginList, this)),
+      m_VFS(createVfsConnector())
 {
   env::setHandleCloserThreadCount(settings.refreshThreadCount());
   m_DownloadManager.setOutputDirectory(m_Settings.paths().downloads(), false);
@@ -555,7 +560,7 @@ void OrganizerCore::createOverwriteDirectories()
 
 void OrganizerCore::prepareVFS()
 {
-  m_USVFS.updateMapping(fileMapping(m_CurrentProfile->name(), QString()));
+  m_VFS->updateMapping(fileMapping(m_CurrentProfile->name(), QString()));
 }
 
 void OrganizerCore::updateVFSParams(log::Levels logLevel,
@@ -568,8 +573,8 @@ void OrganizerCore::updateVFSParams(log::Levels logLevel,
 {
   setGlobalCoreDumpType(coreDumpType);
 
-  m_USVFS.updateParams(logLevel, coreDumpType, crashDumpsPath, spawnDelay,
-                       executableBlacklist, skipFileSuffixes, skipDirectories);
+  m_VFS->updateParams(logLevel, coreDumpType, crashDumpsPath, spawnDelay,
+                      executableBlacklist, skipFileSuffixes, skipDirectories);
 }
 
 void OrganizerCore::setLogLevel(log::Levels level)
@@ -2106,11 +2111,13 @@ bool OrganizerCore::beforeRun(
   }
 
   try {
-    m_USVFS.updateMapping(fileMapping(profileName, customOverwrite));
-    m_USVFS.updateForcedLibraries(forcedLibraries);
+    m_VFS->updateMapping(fileMapping(profileName, customOverwrite));
+    m_VFS->updateForcedLibraries(forcedLibraries);
+#ifdef _WIN32
   } catch (const UsvfsConnectorException& e) {
     log::debug("{}", e.what());
     return false;
+#endif
   } catch (const std::exception& e) {
     QWidget* w = nullptr;
     if (m_UserInterface) {
@@ -2275,7 +2282,8 @@ std::vector<Mapping> OrganizerCore::fileMapping(const QString& dataPath,
 
     result.push_back({source, target, true, writeDestination});
     std::vector<Mapping> subRes =
-        fileMapping(dataPath, relPath + dirName + "\\", base, d, createDestination);
+        fileMapping(dataPath, normalizeSeparators(relPath + dirName + "\\"), base, d,
+                    createDestination);
     result.insert(result.end(), subRes.begin(), subRes.end());
   }
   return result;
