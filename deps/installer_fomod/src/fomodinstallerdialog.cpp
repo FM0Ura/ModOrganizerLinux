@@ -35,7 +35,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QScrollArea>
 #include <QStringEncoder>
 
+#ifdef _WIN32
 #include <Shellapi.h>
+#endif
 
 #include <uibase/game_features/igamefeatures.h>
 #include <uibase/game_features/scriptextender.h>
@@ -1340,8 +1342,12 @@ void FomodInstallerDialog::on_cancelBtn_clicked()
 
 void FomodInstallerDialog::on_websiteLabel_linkActivated(const QString& link)
 {
+#ifdef _WIN32
   ::ShellExecuteW(nullptr, L"open", ToWString(link).c_str(), nullptr, nullptr,
                   SW_SHOWNORMAL);
+#else
+  MOBase::shell::Open(QUrl(link));
+#endif
 }
 
 void FomodInstallerDialog::activateCurrentPage()
