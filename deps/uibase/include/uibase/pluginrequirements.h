@@ -61,6 +61,12 @@ public:
   virtual ~IPluginRequirement() {}
 };
 
+#ifndef _WIN32
+// uibase is built with hidden visibility: the type information of the requirements must
+// be visible to the application, which tells them apart with dynamic_cast
+#pragma GCC visibility push(default)
+#endif
+
 /**
  * @brief Plugin dependency - The requirement is met if one of the
  *     given plugin is active.
@@ -130,6 +136,10 @@ public:
 private:
   const IPluginDiagnose* m_Diagnose;
 };
+
+#ifndef _WIN32
+#pragma GCC visibility pop
+#endif
 
 /**
  * Factory for plugin requirements.

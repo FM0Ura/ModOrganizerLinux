@@ -204,6 +204,16 @@ namespace
         return fail(EINVAL);
       }
 
+      // missing parent directories of the destination are created, like with
+      // FOF_NOCONFIRMMKDIR on Windows
+      if (const auto parent = to.parent_path();
+          !parent.empty() && !pathExists(parent)) {
+        fs::create_directories(parent, ec);
+        if (ec) {
+          return fail(ec);
+        }
+      }
+
       const bool ok = op == Operation::Copy ? copyEntry(from, to) : moveEntry(from, to);
       if (!ok) {
         return false;

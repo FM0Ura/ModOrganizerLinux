@@ -101,7 +101,8 @@ namespace
 
 bool moveToTrash(const QString& path)
 {
-  const QString absolute  = QFileInfo(path).absoluteFilePath();
+  // cleaned: "dir/" is "dir", whose name is not empty
+  const QString absolute  = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
   const QByteArray native = QFile::encodeName(absolute);
   const QByteArray name   = QFile::encodeName(QFileInfo(absolute).fileName());
 

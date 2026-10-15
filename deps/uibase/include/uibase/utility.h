@@ -34,6 +34,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #else
 #include "win32compat.h"
 #include <QFile>
+#include <QFileInfo>
 #include <cctype>
 #include <fstream>
 #include <memory>
@@ -613,6 +614,12 @@ template <class F>
 bool forEachLineInFile(const QString& filePath, F&& f)
 {
 #ifndef _WIN32
+  // like CreateFileW() on Windows, only files can be read (a directory would open
+  // and report a huge size)
+  if (!QFileInfo(filePath).isFile()) {
+    return false;
+  }
+
   std::ifstream in(QFile::encodeName(filePath).constData(),
                    std::ios::binary | std::ios::ate);
   if (!in) {

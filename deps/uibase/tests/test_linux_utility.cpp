@@ -197,6 +197,24 @@ TEST(ShellDelete, RecycleMissingFileFails)
   EXPECT_EQ(errno, ENOENT);
 }
 
+TEST(ShellDelete, RecycleWithTrailingSlash)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  ScopedEnv data("XDG_DATA_HOME", tmp.filePath("data"));
+
+  writeFile(tmp.filePath("work/folder/inner.txt"), "inner");
+
+  ASSERT_TRUE(shellDelete({tmp.filePath("work/folder/")}, true))
+      << std::strerror(errno);
+
+  EXPECT_FALSE(QFileInfo::exists(tmp.filePath("work/folder")));
+  EXPECT_EQ(readFile(tmp.filePath("data/Trash/files/folder/inner.txt")), "inner");
+  EXPECT_TRUE(
+      readFile(tmp.filePath("data/Trash/info/folder.trashinfo"))
+          .contains("Path=" + QFile::encodeName(tmp.filePath("work/folder")) + "\n"));
+}
+
 TEST(ShellDelete, PermanentRemovesTree)
 {
   QTemporaryDir tmp;
@@ -247,6 +265,44 @@ TEST(ShellMove, IntoExistingDirectory)
   EXPECT_EQ(readFile(tmp.filePath("target/a.txt")), "a");
   EXPECT_EQ(readFile(tmp.filePath("target/b.txt")), "b");
   EXPECT_FALSE(QFileInfo::exists(tmp.filePath("a.txt")));
+}
+
+TEST(ShellMove, CreatesMissingParentDirectories)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+
+  writeFile(tmp.filePath("file.txt"), "file");
+  writeFile(tmp.filePath("dir/inner.txt"), "inner");
+
+  ASSERT_TRUE(shellMove(tmp.filePath("file.txt"), tmp.filePath("new/parents/file.txt")))
+      << std::strerror(errno);
+  EXPECT_EQ(readFile(tmp.filePath("new/parents/file.txt")), "file");
+  EXPECT_FALSE(QFileInfo::exists(tmp.filePath("file.txt")));
+
+  ASSERT_TRUE(shellMove(QStringList{tmp.filePath("dir")},
+                        QStringList{tmp.filePath("other/parents/dir")}))
+      << std::strerror(errno);
+  EXPECT_EQ(readFile(tmp.filePath("other/parents/dir/inner.txt")), "inner");
+  EXPECT_FALSE(QFileInfo::exists(tmp.filePath("dir")));
+}
+
+TEST(ShellCopy, CreatesMissingParentDirectories)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+
+  writeFile(tmp.filePath("file.txt"), "file");
+  writeFile(tmp.filePath("dir/inner.txt"), "inner");
+
+  ASSERT_TRUE(shellCopy(tmp.filePath("file.txt"), tmp.filePath("a/b/c/file.txt")))
+      << std::strerror(errno);
+  EXPECT_EQ(readFile(tmp.filePath("a/b/c/file.txt")), "file");
+  EXPECT_TRUE(QFileInfo::exists(tmp.filePath("file.txt")));
+
+  ASSERT_TRUE(shellCopy(tmp.filePath("dir"), tmp.filePath("x/y/dir")))
+      << std::strerror(errno);
+  EXPECT_EQ(readFile(tmp.filePath("x/y/dir/inner.txt")), "inner");
 }
 
 TEST(ShellCopy, CopiesTreeAndWildcard)
@@ -444,6 +500,19 @@ TEST(Utility, ForEachLineInFile)
   EXPECT_EQ(lines, QStringList({"a.esp", "*b c.esm", "last"}));
 
   EXPECT_FALSE(forEachLineInFile(tmp.filePath("missing.txt"), [](const QString&) {}));
+}
+
+TEST(Utility, ForEachLineInFileRefusesDirectory)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  QDir().mkpath(tmp.filePath("folder"));
+
+  bool called = false;
+  EXPECT_FALSE(forEachLineInFile(tmp.filePath("folder"), [&](const QString&) {
+    called = true;
+  }));
+  EXPECT_FALSE(called);
 }
 
 // --- errors ----------------------------------------------------------------------
