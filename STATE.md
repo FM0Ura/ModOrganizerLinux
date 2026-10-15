@@ -3,14 +3,14 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-15
-**Fase atual:** 1 — Build nativo · **Status:** implementada, aguardando CI final e teste manual
+**Fase atual:** 1 — Build nativo · **Status:** implementada e com CI verde; aguardando teste manual no Bazzite
 **Branch de trabalho (ambos os repositórios):** `claude/serene-maxwell-1dyrbg`
 
 ## Repositórios
 
 | Repositório | Papel | Commit atual |
 |---|---|---|
-| [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux) | Superprojeto: build, CI, `deps/`, testes, docs | `67c1a46` |
+| [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux) | Superprojeto: build, CI, `deps/`, testes, docs | `592efad` |
 | [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) | Fork do app MO2 | `bb46b18` |
 
 ## Fase 1 — progresso
@@ -41,17 +41,20 @@
 |---|---|
 | 1. `build.sh` gera o app a partir de container limpo | ✅ (CI Linux) |
 | 2. Checklist manual aprovado no Bazzite | ⏳ **com você** — [`docs/testing/phase1-manual-checklist.md`](docs/testing/phase1-manual-checklist.md) |
-| 3. CI Linux e Windows verdes | Linux ✅ [#27](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338290) e [#28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345). Windows ⏳ checkpoint final refeito (o #13 foi cancelado por um push seguinte; corrigido no workflow). Último Windows verde: [#6](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38758535199) |
+| 3. CI Linux e Windows verdes | ✅ Linux [#27](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338290)/[#28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345); Windows [#15](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38810512689) (fork `bb46b18` contra deps do upstream — ver pendência dos `deps/`) |
 | 4. Linha de base de desempenho registrada | ✅ [`benchmarks/results/2026-10-phase1-baseline.md`](benchmarks/results/2026-10-phase1-baseline.md) |
 | 5. Nenhum `windows.h` fora de código só-Windows | ✅ |
 
+## Pacote para o teste manual
+
+Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345) (passo a passo no README, seção Bazzite; checklist em `docs/testing/phase1-manual-checklist.md`).
+
 ## Próximos passos
 
-1. Confirmar o CI Windows do checkpoint final (Linux já verde).
-2. Você roda o checklist manual no Bazzite e reporta o resultado (ou os logs, se algo falhar).
-3. Corrigir o que o teste manual encontrar.
-4. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
-5. Escrever a spec e o plano da Fase 2.
+1. Você roda o checklist manual no Bazzite e reporta o resultado (ou os logs, se algo falhar).
+2. Corrigir o que o teste manual encontrar.
+3. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
+4. Escrever a spec e o plano da Fase 2.
 
 ## Limitações conhecidas da Fase 1
 
