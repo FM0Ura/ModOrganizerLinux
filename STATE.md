@@ -1,0 +1,108 @@
+# Estado do projeto
+
+> Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
+
+**Última atualização:** 2026-10-15
+**Fase atual:** 1 — Build nativo · **Status:** implementada, aguardando CI final e teste manual
+**Branch de trabalho (ambos os repositórios):** `claude/serene-maxwell-1dyrbg`
+
+## Repositórios
+
+| Repositório | Papel | Commit atual |
+|---|---|---|
+| [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux) | Superprojeto: build, CI, `deps/`, testes, docs | `67c1a46` |
+| [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) | Fork do app MO2 | `bb46b18` |
+
+## Fase 1 — progresso
+
+| # | Tarefa | Status |
+|---|---|---|
+| 1 | Dependências em `deps/` via subtree | ✅ |
+| 2 | Container, `build.sh`, CI Linux | ✅ |
+| 3 | `cmake_common` com GCC | ✅ |
+| 4 | 7-Zip 26.01 como `7z.so` | ✅ |
+| 5 | `archive` no Linux | ✅ |
+| 6 | `uibase` no Linux | ✅ |
+| 7 | `bsatk`, `esptk`, `lootcli`, `dds-header` | ✅ |
+| 7b | Dependências refixadas no `master` do upstream | ✅ |
+| 8 | CMake Linux do app + CI Windows | ✅ |
+| 9 | Varredura de pastas nativa + árvore de dados | ✅ |
+| 10 | Processos, shell, atalhos `.desktop`, métricas | ✅ |
+| 11 | `VfsConnector` + execução desativada | ✅ |
+| 12 | Compilação completa + smoke test | ✅ |
+| 13 | Plugins `game_bethesda` + instaladores | ✅ |
+| 14 | Benchmark de refresh (linha de base) | ✅ |
+| 15 | Checklist manual + README | ✅ |
+| — | Revisão final do branch + correções | ✅ |
+
+### Critérios de pronto (spec §4.8)
+
+| Critério | Status |
+|---|---|
+| 1. `build.sh` gera o app a partir de container limpo | ✅ (CI Linux) |
+| 2. Checklist manual aprovado no Bazzite | ⏳ **com você** — [`docs/testing/phase1-manual-checklist.md`](docs/testing/phase1-manual-checklist.md) |
+| 3. CI Linux e Windows verdes | ⏳ execuções finais em andamento: [Linux #27](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338290), [Windows #13](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38806338274). Último Windows verde: [#6](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38758535199) |
+| 4. Linha de base de desempenho registrada | ✅ [`benchmarks/results/2026-10-phase1-baseline.md`](benchmarks/results/2026-10-phase1-baseline.md) |
+| 5. Nenhum `windows.h` fora de código só-Windows | ✅ |
+
+## Próximos passos
+
+1. Confirmar CI Linux e Windows verdes no commit `67c1a46`.
+2. Você roda o checklist manual no Bazzite e reporta o resultado (ou os logs, se algo falhar).
+3. Corrigir o que o teste manual encontrar.
+4. Decidir: seguir para a Fase 2 (VFS) **ou** adiantar um AppImage simples só para facilitar testes.
+5. Escrever a spec e o plano da Fase 2.
+
+## Limitações conhecidas da Fase 1
+
+- Sem VFS: mods não ficam visíveis para o jogo (Fase 2).
+- "Executar" mostra aviso; jogos e ferramentas não iniciam (Fase 3).
+- Sem LOOT, sem criação de BSA, sem atualização automática, sem plugins Python, sem `nxm://` (Fase 4/5).
+- Logins do Nexus/Steam ficam só em memória (perdidos ao fechar) até haver integração com keyring.
+- "My Games"/"AppData" apontam para pastas XDG (Fase 3 leva para o prefixo do Proton).
+- Lixeira só funciona no mesmo sistema de arquivos da home; em outro disco a remoção falha sem apagar nada.
+- Roda dentro de uma distrobox Fedora 44 (AppImage na Fase 5).
+
+## Decisões tomadas
+
+| Data | Decisão |
+|---|---|
+| 2026-10-14 | Ferramenta pública; código multiplataforma (Windows continua compilando) |
+| 2026-10-14 | VFS = FUSE próprio em Rust; o restante do MO2 continua em C++ |
+| 2026-10-14 | Jogos iniciados direto via Proton (`umu-run`); modificar arquivo de mod altera o original (como USVFS) |
+| 2026-10-14 | Desktop Linux primeiro (Bazzite); Steam Deck depois; distribuição em AppImage |
+| 2026-10-14 | Dependências do upstream em `deps/` via `git subtree`, acompanhando o `master` do upstream |
+| 2026-10-15 | CI só em pontos de controle; CI Windows roda em commits com `[windows-ci]` ou manualmente |
+
+## Pendências por fase
+
+Itens menores encontrados nas revisões da Fase 1 e adiados (lista completa no ledger da Fase 1).
+
+**Antes de fechar a Fase 1 / próximo checkpoint**
+- Compilar no Windows as dependências com os nossos patches (`deps/`); hoje o CI Windows usa as dependências do upstream e nossos patches só foram conferidos por análise (`unifdef`).
+
+**Fase 2 (VFS)**
+- `fileMapping()` sem teste direto (a Fase 2 o consome).
+- Varredura de pastas: tratar `EINTR`, `fstat` da raiz e links simbólicos duplicando entradas.
+- Consolidar duplicações: conversão FILETIME↔Unix (4 cópias), leitor de INI (app e `game_bethesda`), mecanismos de include do `uibase`.
+- Guard em CI contra `read/skip<u?int64_t>` nos saves (lê 4 bytes no Linux).
+- Smoke test até a janela principal (instância pronta, `--disable-gpu`, `TMPDIR` privado), hermético e sem rodar duas vezes no CI.
+
+**Fase 3 (Steam/Proton)**
+- Identificar processos do Wine/Proton por `/proc/<pid>/cmdline` (aparecem como `wine64-preloader`).
+- Espera de processos: evitar laço em processos zumbis; `AsyncPipe` (fds).
+- `UntouchedCommandLineArguments` ainda usa aspas no estilo Windows.
+- Extração temporária de FOMOD/readme em `/tmp` compartilhado: usar `QTemporaryDir` por processo e rejeitar `..` nos caminhos do arquivo compactado.
+- Curingas (`*`, `?`) em `shellDelete` só quando o caminho literal não existir.
+
+**Fase 4 (Ecossistema)**
+- `plugin_python`: `cmake_common` exige Python 3.13 exato; ramo `pylupdate6.exe`.
+- Credenciais via keyring; mensagem amigável quando o MO2 foi aberto como root antes (`/tmp/qipc_*`).
+- Lixeira por ponto de montagem (`.Trash-$uid`).
+- Escrita de INI atômica e respeitando a codificação do arquivo; leitor de INI tratando seções repetidas como o Windows.
+- Texto do aviso da Fase 3 em inglês no código-fonte (traduções).
+- Reportar ao upstream os bugs do `bsatk` (extração duplicada, `writeData` invertido, `%s` com path).
+
+**Fase 5 (Distribuição)**
+- Nota de proveniência/licença do `dxgiformat.h`; `7z.so` com libstdc++ dinâmica; separar símbolos de depuração (binário de ~345 MB).
+- Cache da imagem do container no CI; avisos do Node 20 nas actions.
