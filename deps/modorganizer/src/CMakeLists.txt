@@ -137,12 +137,39 @@ foreach(_source IN LISTS _organizer_sources)
 				OR _relative IN_LIST _organizer_datatree_sources
 				OR _relative IN_LIST _organizer_env_sources
 				OR _relative IN_LIST _organizer_launch_sources
-				OR _relative STREQUAL "archivefiletree.cpp")
+				OR _relative STREQUAL "archivefiletree.cpp"
+				OR _relative STREQUAL "resources.qrc")
 			continue()
 		endif()
 	endif()
 	list(APPEND _organizer_platform_sources ${_source})
 endforeach()
+
+# Linux: resources.qrc embeds qt.conf at :/qt/etc/qt.conf, where Qt reads it first; its
+# Plugins=dlls is the layout of the Windows package, with it Qt only looks for its
+# plugins (the platform plugin included) in <bin>/dlls and the QApplication cannot be
+# created. The Linux build compiles a copy of resources.qrc without that resource, so Qt
+# uses its default plugin path. The copy is in the build tree: its files are absolute
+# paths, each one with its resource name as alias.
+if (NOT WIN32)
+	set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc)
+	file(READ ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc _organizer_qrc)
+	string(REGEX REPLACE
+		"[ \t]*<qresource prefix=\"/qt/etc\">[ \t\r\n]*<file>qt\\.conf</file>[ \t\r\n]*</qresource>[ \t]*\r?\n"
+		"" _organizer_qrc "${_organizer_qrc}")
+	if (_organizer_qrc MATCHES "qt\\.conf")
+		message(FATAL_ERROR "resources.qrc: could not remove the qt.conf resource")
+	endif()
+	string(REGEX REPLACE "<file>([^<]+)</file>" "<file alias=\"\\1\">\\1</file>"
+		_organizer_qrc "${_organizer_qrc}")
+	string(REGEX REPLACE "(<file alias=\"[^\"]*\">)([^<]+)</file>"
+		"\\1${CMAKE_CURRENT_SOURCE_DIR}/\\2</file>" _organizer_qrc "${_organizer_qrc}")
+	file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/resources_linux.qrc
+		CONTENT "${_organizer_qrc}" @ONLY)
+	list(APPEND _organizer_platform_sources ${CMAKE_CURRENT_BINARY_DIR}/resources_linux.qrc)
+endif()
+
 set_property(TARGET organizer PROPERTY SOURCES ${_organizer_platform_sources})
 
 if (NOT WIN32)
