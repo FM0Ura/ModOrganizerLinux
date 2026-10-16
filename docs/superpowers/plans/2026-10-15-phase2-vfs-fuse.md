@@ -4,7 +4,7 @@
 
 **Goal:** Programas Linux nativos iniciados pelo MO2 enxergam, via um FUSE próprio em Rust (`mo2-vfs`), a visão mesclada dos mods sobre as pastas do jogo, sem alterar a instalação do jogo.
 
-**Architecture:** O crate `mo2-vfs` (superprojeto `ModOrganizerLinux`) é uma biblioteca (`name`, `mapping`, `layer`, `tree`, `ops`, `inodes`, `fs`, `session`, `state`, `watch`, `ipc`) mais o binário `mo2-vfs`, que o MO2 inicia com `QProcess` e controla por JSON-por-linha no stdin/stdout. No fork `modorganizer`, o `LinuxVfsConnector` substitui o `NullVfsConnector`, a interface `VfsConnector` ganha `activate`/`watchProcessGroup`/`releaseIfIdle`/`isActive`/`waitInactive`/`setDeactivatedCallback` (vazios no Windows), e o "Executar" passa a iniciar programas Linux nativos com o VFS montado.
+**Architecture:** O crate `mo2-vfs` (superprojeto `ModOrganizerLinux`) é uma biblioteca (`name`, `mapping`, `layer`, `tree`, `ops`, `inodes`, `fs`, `session`, `state`, `watch`, `ipc`) mais o binário `mo2-vfs`, que o MO2 inicia com `QProcess` e controla por JSON-por-linha no stdin/stdout. No app (`deps/modorganizer`), o `LinuxVfsConnector` substitui o `NullVfsConnector`, a interface `VfsConnector` ganha `activate`/`watchProcessGroup`/`releaseIfIdle`/`isActive`/`waitInactive`/`setDeactivatedCallback` (vazios no Windows), e o "Executar" passa a iniciar programas Linux nativos com o VFS montado.
 
 **Tech Stack:** Rust stable (edition 2024) com `fuser` 0.18, `parking_lot`, `serde`/`serde_json`, `rustix`, `tracing`; C++23/Qt 6 (`QProcess`, `QJsonDocument`); FUSE 3 (`fusermount3`); GoogleTest; GitHub Actions + container Fedora 44.
 
@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- Branch de trabalho nos dois repositórios: `fase-2-vfs-fuse` (o CI Linux usa o branch do fork com o mesmo nome do branch do superprojeto). Criar no superprojeto a partir do commit atual (`git switch -c fase-2-vfs-fuse`); no fork ele já existe.
-- O fork continua compilando no Windows **contra o `uibase` upstream**: nada no fork pode depender de API nova do `uibase`; mudanças no `uibase` são aditivas ou restritas a arquivos Linux.
+- Um repositório só: `ModOrganizerLinux`, branch `fase-2-vfs-fuse`. O app está no subtree `deps/modorganizer` (o fork `FM0Ura/modorganizer` foi incorporado em 2026-10-15 e não recebe mais mudanças). Toda mudança dentro de um subtree vai em commit próprio com o assunto prefixado por `deps/<nome>:` (ex.: `deps/modorganizer: Linux: mo2-vfs connector`), como diz `deps/README.md`; onde o plano diz "(fork)", leia `deps/modorganizer`.
+- O app (`deps/modorganizer`) continua compilando no Windows **contra o `uibase` upstream**: nada no fork pode depender de API nova do `uibase`; mudanças no `uibase` são aditivas ou restritas a arquivos Linux.
 - Os novos métodos de `VfsConnector` têm implementação padrão vazia na própria interface; `usvfsconnector.*` não muda.
 - Código Linux do fork em `src/linux/<nome>_linux.cpp`; `#ifdef _WIN32` só para mudanças de 1–3 linhas em código compartilhado.
 - O CMake do fork **não** compila Rust. O `mo2-vfs` é encontrado em `QCoreApplication::applicationDirPath() + "/mo2-vfs"` ou pela variável de ambiente `MO2_VFS_BINARY` (que tem precedência).
@@ -27,7 +27,7 @@
 
 ## Ambiente de execução
 
-O CI (GitHub Actions, container Fedora 44 com `--device /dev/fuse --cap-add SYS_ADMIN`) é a referência de "passou". No Bazzite, rodar dentro da distrobox Fedora 44 do README; ela vê `/dev/fuse` e `fusermount3` do host. Comandos `cargo` rodam em `ModOrganizerLinux/mo2-vfs/`.
+O CI (GitHub Actions, container Fedora 44 com `--device /dev/fuse --cap-add SYS_ADMIN`) é a referência de "passou". No Bazzite, rodar dentro da distrobox Fedora 44 do README; ela vê `/dev/fuse` e `fusermount3` do host. Comandos `cargo` rodam em `mo2-vfs/`.
 
 ## Review Focus
 
@@ -538,8 +538,8 @@ fn m(src: &str, dst: &str, dir: bool, create: bool) -> Mapping { /* constrói */
 ### Task 10: `LinuxVfsConnector` e o cliente do protocolo (fork)
 
 **Files:**
-- Create: `modorganizer/src/linux/vfsclient_linux.h`, `modorganizer/src/linux/vfsclient_linux.cpp`, `modorganizer/tests/fusetest.h`
-- Modify: `modorganizer/src/vfsconnector.h`, `modorganizer/src/linux/vfsconnector_linux.cpp`, `modorganizer/src/CMakeLists.txt` (`vfsclient_linux.cpp` em `_organizer_launch_sources`), `modorganizer/tests/test_vfsconnector.cpp`, `ModOrganizerLinux/build.sh` (`pre_modorganizer` exporta `MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs"` antes do `ctest`)
+- Create: `deps/modorganizer/src/linux/vfsclient_linux.h`, `deps/modorganizer/src/linux/vfsclient_linux.cpp`, `deps/modorganizer/tests/fusetest.h`
+- Modify: `deps/modorganizer/src/vfsconnector.h`, `deps/modorganizer/src/linux/vfsconnector_linux.cpp`, `deps/modorganizer/src/CMakeLists.txt` (`vfsclient_linux.cpp` em `_organizer_launch_sources`), `deps/modorganizer/tests/test_vfsconnector.cpp`, `build.sh` (`pre_modorganizer` exporta `MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs"` antes do `ctest`)
 
 **Interfaces:**
 - Consumes: protocolo da Task 8 (nomes de campo exatos: `op`, `mappings[].source|destination|is_directory|create_target`, `skip_file_suffixes`, `skip_directories`, `pgid`; eventos `hello|ready|ok|error|unmounted|status`).
@@ -632,8 +632,8 @@ TEST(VfsConnector, ParamsSkipListsAreSent)
 ### Task 11: Executar programas Linux com o VFS montado (fork)
 
 **Files:**
-- Modify: `modorganizer/src/linux/spawn_linux.cpp`, `modorganizer/src/linux/processrunner_linux.cpp`, `modorganizer/src/organizercore.cpp` (`beforeRun`, `afterRun`, `refreshDirectoryStructure`, construtor), `modorganizer/src/organizercore.h` (membro `bool m_RefreshPendingAfterVfs = false;`), `modorganizer/tests/test_launch.cpp`
-- Test: `modorganizer/tests/test_launch.cpp`
+- Modify: `deps/modorganizer/src/linux/spawn_linux.cpp`, `deps/modorganizer/src/linux/processrunner_linux.cpp`, `deps/modorganizer/src/organizercore.cpp` (`beforeRun`, `afterRun`, `refreshDirectoryStructure`, construtor), `deps/modorganizer/src/organizercore.h` (membro `bool m_RefreshPendingAfterVfs = false;`), `deps/modorganizer/tests/test_launch.cpp`
+- Test: `deps/modorganizer/tests/test_launch.cpp`
 
 **Interfaces:**
 - Consumes: métodos novos de `VfsConnector` (Task 10).
@@ -679,8 +679,8 @@ O fluxo completo (montar → executar → desmontar) é coberto pela Task 13.
 ### Task 12: `fileMapping()` testável (pendência da Fase 1)
 
 **Files:**
-- Create: `modorganizer/src/filemappingbuilder.h`, `modorganizer/src/filemappingbuilder.cpp`, `modorganizer/tests/test_filemapping.cpp`
-- Modify: `modorganizer/src/organizercore.cpp` (`fileMapping(profile, customOverwrite)` delega), `modorganizer/src/CMakeLists.txt` (fonte nova em `organizer_launch` e no app, nas duas plataformas)
+- Create: `deps/modorganizer/src/filemappingbuilder.h`, `deps/modorganizer/src/filemappingbuilder.cpp`, `deps/modorganizer/tests/test_filemapping.cpp`
+- Modify: `deps/modorganizer/src/organizercore.cpp` (`fileMapping(profile, customOverwrite)` delega), `deps/modorganizer/src/CMakeLists.txt` (fonte nova em `organizer_launch` e no app, nas duas plataformas)
 
 **Interfaces:**
 - Produces:
@@ -714,7 +714,7 @@ TEST(FileMapping, MissingModSubdirIsNotMapped)              // mod sem pasta "Ro
 ### Task 13: Teste ponta a ponta e CI
 
 **Files:**
-- Create: `ModOrganizerLinux/tests/vfs-e2e/run.sh`, `ModOrganizerLinux/tests/vfs-e2e/probe.sh`, `ModOrganizerLinux/tests/fixtures/vfs-e2e/` (instância portátil mínima: `ModOrganizer.ini` com `gameName=Skyrim Special Edition` e `gamePath` apontando para uma pasta de jogo falsa criada pelo `run.sh`, `profiles/Default/modlist.txt` com `+ModA`/`+ModB`, `mods/ModA`, `mods/ModB`, `overwrite/`)
+- Create: `tests/vfs-e2e/run.sh`, `tests/vfs-e2e/probe.sh`, `tests/fixtures/vfs-e2e/` (instância portátil mínima: `ModOrganizer.ini` com `gameName=Skyrim Special Edition` e `gamePath` apontando para uma pasta de jogo falsa criada pelo `run.sh`, `profiles/Default/modlist.txt` com `+ModA`/`+ModB`, `mods/ModA`, `mods/ModB`, `overwrite/`)
 - Modify: `build.sh` (com `--tests`, roda `tests/vfs-e2e/run.sh "$INSTALL"` depois do smoke test), `.github/workflows/linux.yml` (nada além da Task 1, se o `build.sh --tests` já roda)
 
 **Interfaces:**
@@ -731,7 +731,7 @@ TEST(FileMapping, MissingModSubdirIsNotMapped)              // mod sem pasta "Ro
 ### Task 14: Varredura de pastas — `EINTR`, `fstat` da raiz, links simbólicos (pendência)
 
 **Files:**
-- Modify: `modorganizer/src/linux/envfs_linux.cpp`, `modorganizer/tests/test_envfs.cpp`
+- Modify: `deps/modorganizer/src/linux/envfs_linux.cpp`, `deps/modorganizer/tests/test_envfs.cpp`
 
 - [ ] **Step 1: testes** (`test_envfs.cpp`)
 
@@ -749,16 +749,16 @@ TEST(EnvFs, InterruptedReadIsRetried)            // getdents64/fstatat com EINTR
 ### Task 15: Consolidar duplicações (pendência)
 
 **Files:**
-- Create: `ModOrganizerLinux/deps/uibase/include/uibase/linux/filetime.h`, `ModOrganizerLinux/deps/uibase/include/uibase/linux/inifile.h`, `ModOrganizerLinux/deps/uibase/src/linux/inifile_linux.cpp`, testes em `deps/uibase/tests/`
-- Modify: `modorganizer/src/linux/envfs_linux.cpp`, `modorganizer/src/linux/pluginlist_linux.cpp`, `modorganizer/src/linux/win32compat_linux.cpp`, `ModOrganizerLinux/deps/game_bethesda/src/gamebryo/linux/win32compat_linux.cpp`, `ModOrganizerLinux/deps/uibase/CMakeLists.txt` ou `src/CMakeLists.txt`
+- Create: `deps/uibase/include/uibase/linux/filetime.h`, `deps/uibase/include/uibase/linux/inifile.h`, `deps/uibase/src/linux/inifile_linux.cpp`, testes em `deps/uibase/tests/`
+- Modify: `deps/modorganizer/src/linux/envfs_linux.cpp`, `deps/modorganizer/src/linux/pluginlist_linux.cpp`, `deps/modorganizer/src/linux/win32compat_linux.cpp`, `deps/game_bethesda/src/gamebryo/linux/win32compat_linux.cpp`, `deps/uibase/CMakeLists.txt` ou `src/CMakeLists.txt`
 
 **Interfaces:**
 - Produces (Linux-only, aditivo no `uibase`): `MOBase::linux::toFileTime(const timespec&) -> FILETIME`, `MOBase::linux::toTimespec(FILETIME) -> timespec`, `MOBase::linux::fileTimeTicks(FILETIME) -> std::uint64_t` (header-only); `MOBase::linux::IniFile` com o comportamento atual de `GetPrivateProfileString`/`WritePrivateProfileString` das duas cópias (ler as duas antes e unir os casos que cada uma trata).
 
-- [ ] **Step 1:** Inventário: `grep -rn "11644473600\|116444736000000000\|10000000" modorganizer/src/linux ModOrganizerLinux/deps/*/src` e `grep -rn "PrivateProfile" modorganizer/src/linux ModOrganizerLinux/deps/*/src/**/linux`. Registrar no commit as cópias encontradas. A cópia em `deps/archive/src/linux/fileio_linux.cpp` **fica** (o `archive` não depende do `uibase`), com um comentário apontando para `uibase/linux/filetime.h`.
+- [ ] **Step 1:** Inventário: `grep -rn "11644473600\|116444736000000000\|10000000" deps/modorganizer/src/linux deps/*/src` e `grep -rn "PrivateProfile" deps/modorganizer/src/linux deps/*/src/**/linux`. Registrar no commit as cópias encontradas. A cópia em `deps/archive/src/linux/fileio_linux.cpp` **fica** (o `archive` não depende do `uibase`), com um comentário apontando para `uibase/linux/filetime.h`.
 - [ ] **Step 2: testes** no `uibase`: ida e volta `timespec`↔`FILETIME` (epoch Unix = `116444736000000000`; nanossegundos truncados a 100 ns; datas antes de 1970); `IniFile`: chave existente, ausente com padrão, seção ausente, aspas, comentários `;` e `#`, CRLF, chave repetida (vale a primeira, como hoje — o comportamento do Windows fica como pendência da Fase 4).
 - [ ] **Step 3:** FAIL → implementar → PASS; trocar as cópias do fork e do `game_bethesda` pelos novos headers. Os testes existentes de `pluginlist_linux`, `envfs` e `game_bethesda` continuam passando.
-- [ ] **Step 4:** "Mecanismos de include do `uibase`": ler como o fork e os plugins incluem `win32compat.h` e os headers Linux do `uibase` (`grep -rn "win32compat\|uibase/linux" modorganizer/src deps/*/src | sort | uniq -c`); deixar um só jeito (`#include <uibase/win32compat.h>` vindo do include do `uibase`) e remover os caminhos alternativos. Se a mudança for maior que ~20 arquivos, parar e registrar como pendência da Fase 3 em vez de fazer.
+- [ ] **Step 4:** "Mecanismos de include do `uibase`": ler como o fork e os plugins incluem `win32compat.h` e os headers Linux do `uibase` (`grep -rn "win32compat\|uibase/linux" deps/*/src | sort | uniq -c`); deixar um só jeito (`#include <uibase/win32compat.h>` vindo do include do `uibase`) e remover os caminhos alternativos. Se a mudança for maior que ~20 arquivos, parar e registrar como pendência da Fase 3 em vez de fazer.
 - [ ] **Step 5: Commits** — `deps/uibase: Linux FILETIME and INI helpers`, (fork) `Linux: use the uibase FILETIME and INI helpers`, `deps/game_bethesda: use the uibase INI helper`
 
 ---
@@ -766,8 +766,8 @@ TEST(EnvFs, InterruptedReadIsRetried)            // getdents64/fstatat com EINTR
 ### Task 16: Guard no CI contra leituras de 64 bits nos saves (pendência)
 
 **Files:**
-- Create: `ModOrganizerLinux/scripts/check-save-reads.sh`
-- Modify: `.github/workflows/linux.yml` (passo antes do build), `ModOrganizerLinux/deps/game_bethesda/src/gamebryo/gamebryosavegame.h` (se a causa estiver no template)
+- Create: `scripts/check-save-reads.sh`
+- Modify: `.github/workflows/linux.yml` (passo antes do build), `deps/game_bethesda/src/gamebryo/gamebryosavegame.h` (se a causa estiver no template)
 
 - [ ] **Step 1:** Ler `FileWrapper::read`/`skip` em `gamebryosavegame.h` (linha ~106) e descobrir por que `read<int64_t>`/`skip<uint64_t>` leem 4 bytes no Linux (provável: sobrecarga ou especialização para `unsigned long`/`long`, que tem 4 bytes no Windows e 8 no Linux).
 - [ ] **Step 2:** Se a causa for o template, corrigir com tipos de tamanho fixo e acrescentar `static_assert(sizeof(T) == …)` onde o tamanho no arquivo é fixo; teste em `deps/game_bethesda` que lê um buffer com um `uint64_t` conhecido e confere o valor e a posição seguinte.
@@ -779,8 +779,8 @@ TEST(EnvFs, InterruptedReadIsRetried)            // getdents64/fstatat com EINTR
 ### Task 17: Smoke test até a janela principal (pendência)
 
 **Files:**
-- Modify: `ModOrganizerLinux/tests/smoke/modorganizer-smoke.sh`, `ModOrganizerLinux/.github/workflows/linux.yml`
-- Create: `ModOrganizerLinux/tests/fixtures/smoke-instance/` (reaproveitar a instância do fixture da Task 13 se servir)
+- Modify: `tests/smoke/modorganizer-smoke.sh`, `.github/workflows/linux.yml`
+- Create: `tests/fixtures/smoke-instance/` (reaproveitar a instância do fixture da Task 13 se servir)
 
 - [ ] **Step 1:** Estender o smoke test: com uma instância pronta (portátil, jogo falso da Task 13), `QT_QPA_PLATFORM=offscreen`, `--disable-gpu`, `HOME` e `TMPDIR` privados (tempdir removido no fim), o app abre até a janela principal (critério: a linha de log que o app grava ao mostrar a janela principal — procurar em `src/mainwindow.cpp`/`src/main.cpp` e citar a linha no script) e é encerrado com `SIGTERM` em até 30 s, sem crash dump.
 - [ ] **Step 2:** Hermético: nenhuma escrita fora dos tempdirs (conferir com `find "$HOME_ORIG" -newer <marcador>` vazio no CI).
@@ -793,10 +793,10 @@ TEST(EnvFs, InterruptedReadIsRetried)            // getdents64/fstatat com EINTR
 
 **Files:**
 - Create: `docs/testing/phase2-manual-checklist.md`
-- Modify: `ROADMAP.md`, `STATE.md`, `README.md`, `docs/superpowers/specs/2026-10-14-mo2-linux-port-design.md` (§1.2 e §3.1), `modorganizer/src/linux/README.md`
+- Modify: `ROADMAP.md`, `STATE.md`, `README.md`, `docs/superpowers/specs/2026-10-14-mo2-linux-port-design.md` (§1.2 e §3.1), `deps/modorganizer/src/linux/README.md`
 
 - [ ] **Step 1:** Spec geral: §1.2/§3.1 — VFS em processo auxiliar com JSON por stdin/stdout (link para a spec da Fase 2), resultado do spike; §3.2 — risco do `pressure-vessel` resolvido; novo risco da Fase 3: processos do Wine que saem do grupo de processos (`setsid`/`wineserver`) e o cache de diretórios do Wine.
 - [ ] **Step 2:** `ROADMAP.md`: Fase 2 com status, bullets atualizados (sem Corrosion/`cbindgen`), link para spec e plano. `STATE.md`: tabela de tarefas da Fase 2, critérios de pronto da §10 com status, decisões novas (2026-10-15: processo auxiliar; proteção dos originais; execução nativa na Fase 2; refresh adiado enquanto montado), pendências que sobraram, resultado dos benchmarks.
 - [ ] **Step 3:** `docs/testing/phase2-manual-checklist.md`, no formato do checklist da Fase 1: no Bazzite, criar instância Skyrim SE, ativar 2 mods com conflito, cadastrar `/usr/bin/dolphin` (ou `nautilus`) como executável, Executar → navegar em `Data/` (arquivos dos mods, conflito resolvido, pasta do jogo intacta depois), criar um arquivo → aparece em `overwrite/` após fechar; fechar o MO2 com o gerenciador aberto → `Data` continua montada até fechar o gerenciador; matar o `mo2-vfs` com `kill -9` → reabrir o MO2 limpa o mount; `findmnt -t fuse.mo2-vfs` vazio no fim.
-- [ ] **Step 4:** Revisão final do branch nos dois repositórios (superpowers:requesting-code-review), correções, checkpoint de CI Linux e Windows (commit com `[windows-ci]` no fork).
+- [ ] **Step 4:** Revisão final do branch (superpowers:requesting-code-review), correções, checkpoint de CI Linux e Windows (commit com `[windows-ci]`).
 - [ ] **Step 5: Commit** — `docs: Phase 2 state, roadmap and manual checklist`

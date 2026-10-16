@@ -3,7 +3,7 @@
 - **Data:** 2026-10-15
 - **Status:** aguardando revisão
 - **Spec geral:** [`2026-10-14-mo2-linux-port-design.md`](2026-10-14-mo2-linux-port-design.md) (§3.1 resume esta fase; este documento a substitui onde divergirem)
-- **Branches:** `fase-2-vfs-fuse` no fork `modorganizer` e neste repositório (o CI usa o branch do fork com o mesmo nome)
+- **Branch:** `fase-2-vfs-fuse` (o app está em `deps/modorganizer` desde 2026-10-15)
 
 ## 1. Objetivo
 
@@ -48,11 +48,11 @@ Consequência: o desenho "o MO2 monta no host, depois executa" vale também para
 
 | Lugar | Conteúdo |
 |---|---|
-| `ModOrganizerLinux/mo2-vfs/` | Crate Rust (biblioteca + binário). Começa no superprojeto; pode virar repositório próprio depois. |
-| `ModOrganizerLinux/build.sh` | Novo alvo `mo2-vfs` (`cargo build --release` + `cargo test`), instalado em `install/bin/mo2-vfs`. Roda antes do `modorganizer`. |
-| `modorganizer/src/linux/vfsconnector_linux.cpp` | `LinuxVfsConnector`, substitui o `NullVfsConnector`. |
-| `modorganizer/src/linux/vfsclient_linux.{h,cpp}` | Cliente do protocolo (§5): inicia o `mo2-vfs` com `QProcess`, envia mensagens pelo stdin, lê as respostas do stdout. |
-| `modorganizer/src/linux/spawn_linux.cpp`, `processrunner_linux.cpp` | Execução de programas Linux nativos (§6). |
+| `mo2-vfs/` | Crate Rust (biblioteca + binário). Começa no superprojeto; pode virar repositório próprio depois. |
+| `build.sh` | Novo alvo `mo2-vfs` (`cargo build --release` + `cargo test`), instalado em `install/bin/mo2-vfs`. Roda antes do `modorganizer`. |
+| `deps/modorganizer/src/linux/vfsconnector_linux.cpp` | `LinuxVfsConnector`, substitui o `NullVfsConnector`. |
+| `deps/modorganizer/src/linux/vfsclient_linux.{h,cpp}` | Cliente do protocolo (§5): inicia o `mo2-vfs` com `QProcess`, envia mensagens pelo stdin, lê as respostas do stdout. |
+| `deps/modorganizer/src/linux/spawn_linux.cpp`, `processrunner_linux.cpp` | Execução de programas Linux nativos (§6). |
 
 O CMake do fork não compila Rust: o `mo2-vfs` é um executável à parte, encontrado em `<pasta do ModOrganizer>/mo2-vfs` (mesmo `bin/` da instalação) ou pela variável `MO2_VFS_BINARY` (testes).
 
