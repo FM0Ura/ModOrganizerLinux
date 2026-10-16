@@ -535,6 +535,26 @@ fn m(src: &str, dst: &str, dir: bool, create: bool) -> Mapping { /* constrói */
 
 ---
 
+### Task 9b: Desempenho do VFS (inserida pelo controlador, Ruling 12)
+
+A medição da Task 9 (`benchmarks/results/2026-10-phase2-vfs.md`) ficou 5–14× fora das metas da §8: `mount` 11,4 s, `update` 13,7 s, `readdir` 5,45×, `open`+`read` 6,27× (sem passthrough, em overlay). Esta tarefa ataca as causas medidas, sem mudar a semântica da §4.
+
+**Files:**
+- Modify: `mo2-vfs/src/tree.rs`, `mo2-vfs/src/layer.rs`, `mo2-vfs/src/fs.rs`, `mo2-vfs/src/inodes.rs`, `mo2-vfs/src/session.rs` (só o necessário), `mo2-vfs/Cargo.toml` (se precisar de `rayon`), `benchmarks/results/2026-10-phase2-vfs.md`
+
+**Interfaces:**
+- Consumes/Produces: nenhuma interface pública muda (`Tree::build_with`, `Session::*`, protocolo). Todos os testes existentes continuam passando sem alteração de comportamento.
+
+- [ ] **Step 1: perfil.** Medir onde vai o tempo antes de mudar (instância menor, ex. `--mods 500 --files 50000`, num sistema de arquivos real — `BENCH_TMPDIR` em `$HOME/.cache`, não o overlay do container): `perf record -g` se disponível na distrobox (`sudo dnf install -y perf` é permitido), senão contadores de tempo temporários. Registrar no relatório as 3–5 maiores fontes de custo de `Tree::build`, `do_readdir`, `lookup`/`open`.
+- [ ] **Step 2: construção da árvore.** Varredura das camadas em paralelo (uma tarefa por camada, ex. `rayon` ou `std::thread::scope` com um pool do tamanho de `available_parallelism`) produzindo listas por camada, e mesclagem sequencial em ordem de prioridade (o resultado tem de ser idêntico ao atual — teste de equivalência: árvore paralela == árvore sequencial para fixtures com conflitos, maiúsculas, whiteouts, skip). Reduzir alocações por entrada (dobra de nome uma vez por entrada, sem `PathBuf` intermediários desnecessários).
+- [ ] **Step 3: `readdir`.** Sem custo quadrático: o offset vira índice direto (ex. `children` materializado num `Vec` por diretório no momento da listagem, ou cache de listagem por `fh` do `opendir`), e o inode de cada filho obtido sem `path_of` + dobra do caminho inteiro por entrada (ex. chave do filho = chave do pai + `/` + chave do nome) e com o lock do `Inodes` tomado uma vez por página, não por entrada.
+- [ ] **Step 4: `open`/`read`.** Responder `open` com `FOPEN_KEEP_CACHE` (o page cache do kernel continua válido entre aberturas; a `update` e as escritas pelo VFS já invalidam o inode — conferir que `inval_inode` cobre os arquivos cuja origem mudou e que escrita pelo mount continua coerente) e manter TTLs de 60 s. Medir com passthrough desligado e ligado (`try_passthrough: true`, que cai para `pread` sem privilégio).
+- [ ] **Step 5: `update`.** Mesmo caminho otimizado da construção; a comparação para invalidação (`changes()`) sem custo por entrada maior que O(1) amortizado.
+- [ ] **Step 6: medir de novo** com `benchmarks/run-vfs.sh` na instância de 2.000 mods, temp dir num sistema de arquivos real (registrar o tipo), e acrescentar uma seção nova ao resultado com antes/depois. Metas da §8; o que não for atingido fica registrado com a causa medida (não bloqueia a tarefa).
+- [ ] **Step 7:** `cargo test` (todos), fmt, clippy limpos; nenhum mount sobrando. **Commits** separados por otimização (`mo2-vfs: scan layers in parallel`, `mo2-vfs: linear readdir`, `mo2-vfs: keep the page cache across opens`, `bench: Phase 2 VFS after optimization`).
+
+---
+
 ### Task 10: `LinuxVfsConnector` e o cliente do protocolo (fork)
 
 **Files:**
