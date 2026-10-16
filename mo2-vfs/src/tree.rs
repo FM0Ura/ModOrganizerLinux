@@ -2,11 +2,12 @@
 
 use crate::layer::{Layer, LayerId, Layers, Skip};
 use crate::name::{Key, fold, fold_into, fold_path};
-use rustix::fs::{AtFlags, Dir, FileType, Mode, OFlags, Stat, openat, statat};
+use rustix::fs::{AtFlags, FileType, Mode, OFlags, RawDir, Stat, openat, statat};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::hash::{BuildHasherDefault, Hasher};
-use std::os::fd::{BorrowedFd, OwnedFd};
+use std::mem::MaybeUninit;
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -409,9 +410,18 @@ fn scan_layer(layer: &Layer, skip: &Skip, whiteouts: &Whiteouts) -> Scan {
         vkey: target.0,
         stack: Vec::new(),
         scan: DirScan::default(),
+        dirents: vec![MaybeUninit::uninit(); 32 * 1024],
+        pool: Vec::new(),
     };
-    let dir = match Dir::read_from(&layer.dir) {
-        Ok(dir) => dir,
+    // A new fd for the root: reading moves the file offset, and `layer.dir` is shared (a
+    // hot update reads the original layer again through a duplicate of it).
+    let dir = match openat(
+        &layer.dir,
+        ".",
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(fd) => fd,
         Err(e) => {
             tracing::warn!(layer = %layer.source.display(), rel = "", error = %e, "cannot list directory");
             return Scan::Dir(scanner.scan);
@@ -444,6 +454,9 @@ fn all_can_search(mode: u32) -> bool {
     mode & 0o111 == 0o111
 }
 
+/// The names of one directory (their bytes, then each name's span and type).
+type NameBuf = (Vec<u8>, Vec<(Span, FileType)>);
+
 struct Scanner<'a> {
     layer: &'a Layer,
     skip: &'a Skip,
@@ -454,16 +467,23 @@ struct Scanner<'a> {
     /// (device, inode) of the directories being scanned, to stop at symlink loops.
     stack: Vec<(u64, u64)>,
     scan: DirScan,
+    /// `getdents` buffer.
+    dirents: Vec<MaybeUninit<u8>>,
+    /// Name buffers of finished directories, for reuse.
+    pool: Vec<NameBuf>,
 }
 
 impl Scanner<'_> {
     /// Lists `dir`, whose path relative to the layer is `rel` (`None` for the layer root)
     /// and whose entry is `parent`. `searchable`: see `all_can_search`.
-    fn dir(&mut self, mut dir: Dir, rel: Option<Span>, parent: u32, searchable: bool) {
+    fn dir(&mut self, dir: OwnedFd, rel: Option<Span>, parent: u32, searchable: bool) {
         // Names of this directory, sorted by their bytes.
-        let mut buf: Vec<u8> = Vec::new();
-        let mut names: Vec<(Span, FileType)> = Vec::new();
-        while let Some(Ok(e)) = dir.read() {
+        let (mut buf, mut names) = self.pool.pop().unwrap_or_default();
+        buf.clear();
+        names.clear();
+        let mut entries = RawDir::new(&dir, &mut self.dirents);
+        // A read error ends the listing (what was read so far is kept).
+        while let Some(Ok(e)) = entries.next() {
             let name = e.file_name().to_bytes();
             if name != b"." && name != b".." {
                 let start = buf.len() as u32;
@@ -472,9 +492,9 @@ impl Scanner<'_> {
             }
         }
         names.sort_unstable_by(|a, b| a.0.of(&buf).cmp(b.0.of(&buf)));
-        let Ok(dirfd) = dir.fd() else { return };
+        let dirfd = dir.as_fd();
         let mut key = Vec::new();
-        for (name, dtype) in names {
+        for &(name, dtype) in &names {
             let name = name.of(&buf);
             if !self.layer.original && name.starts_with(TMP_PREFIX.as_bytes()) {
                 continue;
@@ -496,6 +516,7 @@ impl Scanner<'_> {
             self.entry(dirfd, rel, parent, name, &key, dtype);
             self.vkey.truncate(vlen);
         }
+        self.pool.push((buf, names));
     }
 
     /// The real path of `name` (in the directory at `rel`), for log messages.
@@ -580,10 +601,9 @@ impl Scanner<'_> {
         }
         let index = self.scan.entries.len() as u32;
         let rel = self.record(rel, parent, name, key, Kind::Dir);
-        // The fd is ours: read it directly (no reopen of "." as `Dir::read_from` does).
-        let Ok(dir) = Dir::new(sub) else { return };
+        // The fd is ours: read it directly.
         self.stack.push(id);
-        self.dir(dir, Some(rel), index, all_can_search(mode));
+        self.dir(sub, Some(rel), index, all_can_search(mode));
         self.stack.pop();
     }
 
@@ -835,13 +855,25 @@ impl Builder {
             kids,
             ..
         } = self;
-        drop(index);
+        // Nothing waits for the index to be freed.
+        let freed = std::thread::Builder::new()
+            .name("mo2-vfs-drop".into())
+            .spawn(move || drop(index));
+        drop(freed);
         // A node's key is the folded form of its (latest) displayed name.
         let maps = |range: std::ops::Range<usize>| -> Vec<(NodeId, BTreeMap<Key, NodeId>)> {
             range
                 .filter(|&p| !kids[p].is_empty())
                 .map(|p| {
-                    let map = kids[p].iter().map(|&c| (fold(&nodes[c].name), c)).collect();
+                    let pairs = kids[p].iter().map(|&c| (fold(&nodes[c].name), c));
+                    // Inserting straight into a small map saves `collect`'s buffer.
+                    let map = if kids[p].len() <= 16 {
+                        let mut m = BTreeMap::new();
+                        m.extend(pairs);
+                        m
+                    } else {
+                        pairs.collect()
+                    };
                     (p, map)
                 })
                 .collect()
@@ -1240,6 +1272,7 @@ mod tests {
     /// tests compare the current build against it.
     mod reference {
         use super::super::*;
+        use rustix::fs::Dir;
 
         pub fn build_with(layers: &Layers, skip: &Skip, whiteouts: &Whiteouts) -> Tree {
             let root = Node {
