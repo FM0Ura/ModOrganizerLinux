@@ -10,6 +10,7 @@
 
 pub mod fs;
 pub mod inodes;
+pub mod ipc;
 pub mod layer;
 pub mod mapping;
 pub mod name;
@@ -17,3 +18,4 @@ pub mod ops;
 pub mod session;
 pub mod state;
 pub mod tree;
+pub mod watch;

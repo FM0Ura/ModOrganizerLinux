@@ -26,6 +26,8 @@ pub enum ErrorCode {
     MountBusy,
     BadMapping,
     Io,
+    /// Malformed or out-of-sequence request (used by the line protocol).
+    BadRequest,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
