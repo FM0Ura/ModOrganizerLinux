@@ -62,6 +62,8 @@ pub struct VfsShared {
     version: AtomicU64,
     /// Directory listings being read page by page, by directory inode.
     listings: Mutex<HashMap<u64, Arc<Listing>>>,
+    /// What the real file looked like at the last open of each inode (see `do_open`).
+    stamps: Mutex<HashMap<u64, Stamp>>,
     pub handles: Mutex<HashMap<u64, Arc<OwnedFd>>>,
     /// Kernel passthrough backing ids, alive as long as their file handle.
     backings: Mutex<HashMap<u64, BackingId>>,
@@ -137,6 +139,29 @@ struct Listing {
     /// The children in map order: inode, type, displayed name.
     entries: Vec<(u64, FileType, OsString)>,
 }
+
+/// Identity and change times of a real file: equal stamps mean the content the kernel
+/// cached at one open is still the content at the next.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Stamp([i64; 7]);
+
+impl Stamp {
+    #[allow(clippy::unnecessary_cast)] // the integer widths of `Stat` differ per target
+    fn of(st: &Stat) -> Stamp {
+        Stamp([
+            st.st_dev as i64,
+            st.st_ino as i64,
+            st.st_size as i64,
+            st.st_mtime as i64,
+            st.st_mtime_nsec as i64,
+            st.st_ctime as i64,
+            st.st_ctime_nsec as i64,
+        ])
+    }
+}
+
+/// Most stamps kept; past that they are dropped (the next opens then just reread).
+const MAX_STAMPS: usize = 1 << 20;
 
 /// Most listings kept at once (a reader that stops half-way leaves its listing behind).
 const MAX_LISTINGS: usize = 1024;
@@ -232,6 +257,7 @@ impl Vfs {
                 generation: AtomicU64::new(0),
                 version: AtomicU64::new(0),
                 listings: Mutex::new(HashMap::new()),
+                stamps: Mutex::new(HashMap::new()),
                 handles: Mutex::new(HashMap::new()),
                 backings: Mutex::new(HashMap::new()),
                 next_fh: AtomicU64::new(1),
@@ -414,12 +440,21 @@ impl Vfs {
         Ok(())
     }
 
+    /// Opens the real file. Also says whether the kernel may keep the pages it cached for
+    /// this inode (`FOPEN_KEEP_CACHE`): only when the real file is the one, unchanged, that
+    /// was opened the previous time (same device, inode, size, mtime and ctime). The tree
+    /// does not change file contents; this also covers a hot update that put another real
+    /// file behind the name (besides the `inval_inode` the update sends), writes through
+    /// another virtual path to the same real file (a source mapped twice) and changes made
+    /// behind the VFS. Writes through this inode update its cached pages in the kernel.
+    /// What it does not cover is a change behind the VFS while the file is open: pages read
+    /// before it stay until the file is opened again (as without the flag).
     fn do_open(
         &self,
         ino: u64,
         flags: OpenFlags,
         reply: &ReplyOpen,
-    ) -> Res<(u64, Option<BackingId>)> {
+    ) -> Res<(u64, Option<BackingId>, bool)> {
         let writable = flags.acc_mode() != OpenAccMode::O_RDONLY;
         let key = self
             .shared
@@ -437,6 +472,17 @@ impl Vfs {
             }
             // Editing mod and original files in place is allowed (spec 1.1): no copy-up.
             ops::open(&self.shared.layers(), node, open_oflags(flags.0)).map_err(errno)?
+        };
+        let keep_cache = match fstat(&fd) {
+            Ok(st) => {
+                let stamp = Stamp::of(&st);
+                let mut stamps = self.shared.stamps.lock();
+                if stamps.len() >= MAX_STAMPS {
+                    stamps.clear();
+                }
+                stamps.insert(ino, stamp) == Some(stamp)
+            }
+            Err(_) => false,
         };
         let fd = Arc::new(fd);
         let mut backing = None;
@@ -458,7 +504,7 @@ impl Vfs {
         }
         let fh = self.shared.next_fh.fetch_add(1, Ordering::Relaxed);
         self.shared.handles.lock().insert(fh, fd);
-        Ok((fh, backing))
+        Ok((fh, backing, keep_cache))
     }
 
     fn do_read(&self, fh: u64, offset: u64, size: u32) -> Res<Vec<u8>> {
@@ -837,12 +883,21 @@ impl Filesystem for Vfs {
 
     fn open(&self, _req: &Request, ino: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
         match guarded("open", || self.do_open(ino.into(), flags, &reply)) {
-            Ok((fh, Some(backing))) => {
-                let mut backings = self.shared.backings.lock();
-                backings.insert(fh, backing);
-                reply.opened_passthrough(FileHandle(fh), FopenFlags::empty(), &backings[&fh]);
+            Ok((fh, backing, keep_cache)) => {
+                let flags = if keep_cache {
+                    FopenFlags::FOPEN_KEEP_CACHE
+                } else {
+                    FopenFlags::empty()
+                };
+                match backing {
+                    Some(backing) => {
+                        let mut backings = self.shared.backings.lock();
+                        backings.insert(fh, backing);
+                        reply.opened_passthrough(FileHandle(fh), flags, &backings[&fh]);
+                    }
+                    None => reply.opened(FileHandle(fh), flags),
+                }
             }
-            Ok((fh, None)) => reply.opened(FileHandle(fh), FopenFlags::empty()),
             Err(e) => reply.error(e),
         }
     }

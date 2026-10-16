@@ -428,3 +428,56 @@ fn update_refreshes_cached_listings() {
     assert_eq!(listing(&tex), ["d.dds", "moved.dds", "rock.dds"]);
     s.unmount().unwrap();
 }
+
+#[test]
+fn kept_page_cache_stays_coherent() {
+    if !require_fuse() {
+        return;
+    }
+    // The kernel keeps a file's cached pages across opens while the real file is unchanged;
+    // every way the content behind a name can change must still show at the next open.
+    // Same size and same mtime, so neither can tell the versions apart.
+    let e = rock_env();
+    e.write("A/textures/same.dds", "AAAA");
+    e.write("B/textures/same.dds", "BBBB");
+    let when = std::time::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    for f in ["A/textures/same.dds", "B/textures/same.dds"] {
+        let file = fs::File::options().write(true).open(e.p(f)).unwrap();
+        file.set_modified(when).unwrap();
+    }
+    let mut s = e.mount(&rock_maps(&e, true));
+    let same = e.p("Data/textures/same.dds");
+    let copy = e.p("Data/copy/textures/same.dds");
+    for _ in 0..2 {
+        assert_eq!(fs::read_to_string(&same).unwrap(), "BBBB");
+    }
+    // a hot update puts another real file behind the name
+    s.update(&rock_maps(&e, false), Skip::default()).unwrap();
+    assert_eq!(fs::read_to_string(&same).unwrap(), "AAAA");
+    // a write through the mount
+    {
+        use std::io::Write;
+        let mut f = fs::File::options().write(true).open(&same).unwrap();
+        f.write_all(b"CCCC").unwrap();
+    }
+    assert_eq!(fs::read_to_string(&same).unwrap(), "CCCC");
+    // the same real file under two virtual paths: a write through one shows in the other
+    let twice = vec![
+        e.dir_map("A", "Data", false),
+        e.dir_map("A", "Data/copy", false),
+    ];
+    s.update(&twice, Skip::default()).unwrap();
+    for _ in 0..2 {
+        assert_eq!(fs::read_to_string(&copy).unwrap(), "CCCC");
+    }
+    fs::write(&same, "DDDD").unwrap();
+    assert_eq!(fs::read_to_string(&copy).unwrap(), "DDDD");
+    // a change behind the VFS shows at the next open
+    for _ in 0..2 {
+        assert_eq!(fs::read_to_string(&same).unwrap(), "DDDD");
+    }
+    fs::write(e.p("A/textures/same.dds"), "EEEE").unwrap();
+    assert_eq!(fs::read_to_string(&same).unwrap(), "EEEE");
+    assert_eq!(fs::read_to_string(&copy).unwrap(), "EEEE");
+    s.unmount().unwrap();
+}
