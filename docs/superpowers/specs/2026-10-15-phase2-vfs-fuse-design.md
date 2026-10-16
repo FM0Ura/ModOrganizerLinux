@@ -15,7 +15,7 @@ Nesta fase o "Executar" volta a funcionar **só para programas Linux nativos** (
 
 | Tema | Decisão |
 |---|---|
-| Arquitetura | **Processo auxiliar** `mo2-vfs` (binário Rust) conversando com o MO2 por socket Unix. Substitui a ponte em processo (`cxx`/`cbindgen` + Corrosion) prevista na spec geral. |
+| Arquitetura | **Processo auxiliar** `mo2-vfs` (binário Rust) conversando com o MO2 pelo stdin/stdout do processo. Substitui a ponte em processo (`cxx`/`cbindgen` + Corrosion) prevista na spec geral. |
 | Motivo | Se o MO2 travar ou fechar, o jogo continua com acesso aos arquivos; os threads FUSE ficam fora do processo Qt (sem deadlock quando o MO2 acessa uma pasta montada); o build Windows e o CMake do fork não ganham Rust. |
 | Demonstração na fase | "Executar" de programas Linux nativos com o VFS montado; `.exe` continua com o aviso da Fase 3. |
 | Arquivos originais do jogo | Nunca apagados nem renomeados pelo VFS: exclusão só esconde até desmontar; renomeação copia para a camada de criação. Editar o conteúdo continua alterando o original (como o USVFS). |
@@ -51,7 +51,7 @@ Consequência: o desenho "o MO2 monta no host, depois executa" vale também para
 | `ModOrganizerLinux/mo2-vfs/` | Crate Rust (biblioteca + binário). Começa no superprojeto; pode virar repositório próprio depois. |
 | `ModOrganizerLinux/build.sh` | Novo alvo `mo2-vfs` (`cargo build --release` + `cargo test`), instalado em `install/bin/mo2-vfs`. Roda antes do `modorganizer`. |
 | `modorganizer/src/linux/vfsconnector_linux.cpp` | `LinuxVfsConnector`, substitui o `NullVfsConnector`. |
-| `modorganizer/src/linux/vfsclient_linux.{h,cpp}` | Cliente do protocolo (§5): inicia o `mo2-vfs`, envia mensagens, espera respostas. |
+| `modorganizer/src/linux/vfsclient_linux.{h,cpp}` | Cliente do protocolo (§5): inicia o `mo2-vfs` com `QProcess`, envia mensagens pelo stdin, lê as respostas do stdout. |
 | `modorganizer/src/linux/spawn_linux.cpp`, `processrunner_linux.cpp` | Execução de programas Linux nativos (§6). |
 
 O CMake do fork não compila Rust: o `mo2-vfs` é um executável à parte, encontrado em `<pasta do ModOrganizer>/mo2-vfs` (mesmo `bin/` da instalação) ou pela variável `MO2_VFS_BINARY` (testes).
@@ -61,13 +61,13 @@ O CMake do fork não compila Rust: o `mo2-vfs` é um executável à parte, encon
 | Módulo | Responsabilidade | Depende de |
 |---|---|---|
 | `mapping` | Recebe a lista de `Mapping{source, destination, is_directory, create_target}`, normaliza caminhos e agrupa por **raiz de montagem** (§3.1). | — |
-| `tree` | Árvore virtual imutável construída a partir das camadas; lookup sem diferenciar maiúsculas/minúsculas; máscaras de exclusão. Sem FUSE: testável isoladamente. | `mapping` |
+| `tree` | Árvore virtual construída a partir das camadas; lookup sem diferenciar maiúsculas/minúsculas; máscaras de exclusão. Sem FUSE: testável isoladamente. | `mapping` |
 | `fs` | Implementação de `fuser::Filesystem`: inode → nó → arquivo real; operações da §4. | `tree`, `fuser` |
 | `session` | Um mount por raiz: abre o fd da pasta original **antes** de montar, monta, desmonta, arquivo de estado (§5.3). | `fs` |
-| `ipc` | Protocolo JSON com delimitação por linha sobre socket Unix (§5). | `session` |
+| `ipc` | Protocolo JSON com delimitação por linha sobre stdin/stdout (§5). | `session` |
 | `bin/mo2-vfs.rs` | Argumentos, log, sinais, laço do `ipc`. | todos |
 
-Dependências externas previstas: `fuser` (com passthrough), `arc-swap`, `serde`/`serde_json`, `nix` ou `rustix`, `tracing`/`tracing-appender`. Testes: `tempfile`. Benchmarks: `criterion`.
+Dependências externas previstas: `fuser` 0.18 (com passthrough), `parking_lot`, `serde`/`serde_json`, `nix` ou `rustix`, `tracing`/`tracing-appender`. Testes: `tempfile`. Benchmarks: `criterion`.
 
 ## 3. Modelo de dados
 
@@ -106,7 +106,7 @@ original Data/   Skyrim.esm          textures/rock.dds
 
 ### 3.4 Atualização da árvore
 
-A árvore é imutável e trocada atomicamente (`ArcSwap`) a cada `update`. Ela é varrida a partir dos diretórios reais das camadas na montagem e em cada `update`. Alterações feitas pelo próprio VFS (criação, exclusão, renomeação) atualizam a árvore corrente por cópia do caminho afetado (*copy-on-write* do ramo), sem varrer de novo.
+A árvore fica atrás de um `RwLock`. Ela é varrida a partir dos diretórios reais das camadas na montagem e em cada `update`; no `update`, a árvore nova é construída fora do lock e só a troca acontece com o lock de escrita (efeito de troca atômica para quem lê). Alterações feitas pelo próprio VFS (criação, exclusão, renomeação) alteram a árvore corrente no lugar, com o lock de escrita, sem varrer de novo.
 
 As máscaras (§4) valem até desmontar e sobrevivem a `update`.
 
@@ -115,15 +115,16 @@ As máscaras (§4) valem até desmontar e sobrevivem a `update`.
 | Operação | Comportamento |
 |---|---|
 | `lookup`, `getattr`, `readdir` | Pela árvore; atributos do arquivo real (`fstatat`). |
-| `open`, `read` | Abre o arquivo real da camada vencedora. Usa **FUSE passthrough** (kernel ≥ 6.9) quando disponível; senão, `pread` no próprio processo. |
+| `open`, `read` | Abre o arquivo real da camada vencedora. Tenta **FUSE passthrough** (kernel ≥ 6.9); como o kernel exige `CAP_SYS_ADMIN` para registrar o arquivo, sem privilégio o caminho normal é `pread` no próprio processo. A primeira recusa desliga a tentativa até desmontar. |
 | `write`, `truncate`, `chmod`, `utimens`, `fsync` | No arquivo real da camada vencedora (mod **ou** original). |
 | `create`, `mkdir` | Na camada de criação, no mesmo caminho relativo; diretórios-pai que faltarem são criados nela. |
 | `unlink`, `rmdir` — camada de mod | Apaga o arquivo real e **mascara** o caminho, para que uma versão de camada inferior não reapareça na sessão. |
 | `unlink`, `rmdir` — camada original | Só mascara. O arquivo do jogo não é apagado. |
 | `rename` — origem em camada de mod ou de criação | Move dentro da própria camada (`renameat`), criando os pais nela se preciso. Se o destino existe noutra camada, ele fica mascarado. |
-| `rename` — origem na camada original | Copia para a camada de criação no caminho de destino e mascara a origem. |
+| `rename` — arquivo da camada original | Copia para a camada de criação no caminho de destino (conteúdo, modo e datas) e mascara a origem. |
+| `rename` — diretório presente em mais de uma camada, diretório da camada original, ou arquivo vindo de mapping de arquivo | `EXDEV`: o programa copia e apaga, como faria entre discos (e a exclusão segue as regras acima). |
 | `rename` com `RENAME_EXCHANGE`/`RENAME_WHITEOUT` | `EINVAL`. |
-| `symlink`, `link`, `mknod`, xattrs | `ENOTSUP`/`EPERM` (não usados pelos jogos). `readlink` de links reais funciona. |
+| `symlink`, `link`, `mknod`, xattrs | `EPERM`/`ENOTSUP` (não usados pelos jogos). Links simbólicos dentro das camadas são seguidos, como no USVFS: a visão não tem links; um link quebrado fica fora da árvore com aviso no log. |
 | `statfs` | Da camada de criação. |
 
 O caso mais comum — o jogo grava `save.tmp` e renomeia para `save.ess` — fica inteiro na camada de criação.
@@ -134,8 +135,9 @@ O caso mais comum — o jogo grava `save.tmp` e renomeia para `save.ess` — fic
 
 ### 5.1 Processo
 
-- O `LinuxVfsConnector` inicia `mo2-vfs --socket <caminho> --log <instância>/logs/mo2-vfs.log --log-level <nível>` com `QProcess`, em `$XDG_RUNTIME_DIR/mo2-vfs/<pid do MO2>.sock`.
-- O `mo2-vfs` mantém um pidfd do MO2. Se o MO2 sumir, ele **não** desmonta de imediato: espera os processos que estão usando os mounts terminarem (§5.4) e então desmonta e sai.
+- O `LinuxVfsConnector` inicia `mo2-vfs --log <instância>/logs/mo2-vfs.log --log-level <nível>` com `QProcess`. O canal é o stdin (pedidos) e o stdout (respostas) do processo; o log vai só para o arquivo e o stderr.
+- O `mo2-vfs` desmonta **sozinho** quando o último grupo de processos informado em `watch` termina, esteja o MO2 vivo ou não, e avisa com o evento `unmounted`.
+- Se o stdin fechar (o MO2 saiu ou travou): sem grupo vivo, desmonta e sai; com grupo vivo, mantém os mounts até o último grupo terminar, desmonta e sai.
 
 ### 5.2 Mensagens (JSON, uma por linha)
 
@@ -143,40 +145,48 @@ O caso mais comum — o jogo grava `save.tmp` e renomeia para `save.ess` — fic
 |---|---|
 | `mount` | `mappings`, `skip_file_suffixes`, `skip_directories` |
 | `update` | mesmos campos; troca a árvore sem desmontar |
-| `watch` | `pid` do primeiro processo iniciado (para o caso de o MO2 sumir) |
-| `unmount` | — |
+| `watch` | `pgid` do grupo de processos do programa iniciado |
+| `unmount` | — (desmonta já; usado quando o programa nem chegou a iniciar) |
 | `status` | — |
 
 | `mo2-vfs` → MO2 | Conteúdo |
 |---|---|
 | `ready` | raízes montadas |
 | `error` | `code` (`fuse_unavailable`, `mount_busy`, `bad_mapping`, `io`), `message`, `path` |
-| `unmounted` | — |
-| `status` | raízes, contagem de nós, máscaras |
+| `unmounted` | — (resposta a `unmount`, ou evento espontâneo da desmontagem automática) |
+| `status` | raízes, contagem de nós, máscaras, grupos acompanhados |
+| `hello` | versão; enviado uma vez ao iniciar |
 
-Cada pedido recebe exatamente uma resposta; `mount`/`update` respondem só quando todos os mounts estão prontos.
+Cada pedido recebe exatamente uma resposta (`watch` responde `{"event":"ok"}`); `mount`/`update` respondem só quando todos os mounts estão prontos. O único evento espontâneo é o `unmounted` da desmontagem automática.
 
 ### 5.3 Arquivo de estado e limpeza
 
-`$XDG_RUNTIME_DIR/mo2-vfs/state-<pid>.json` lista as raízes montadas. Na inicialização, o `LinuxVfsConnector` procura arquivos de estado cujo pid não existe mais e, para cada raiz ainda montada com tipo `fuse.mo2-vfs`, roda `fusermount3 -u` (e `-uz` se falhar). Raízes que não forem desmontadas são informadas ao usuário.
+`$XDG_RUNTIME_DIR/mo2-vfs/state-<pid>.json` lista as raízes montadas. Na inicialização, o `LinuxVfsConnector` roda `mo2-vfs --cleanup`, que procura arquivos de estado cujo pid não existe mais e, para cada raiz ainda montada com tipo `fuse.mo2-vfs` (`/proc/self/mountinfo`), roda `fusermount3 -u` (e `-uz` se falhar). Raízes que não forem desmontadas são informadas ao usuário.
 
 ### 5.4 Desmontagem
 
-`unmount` tenta `fusermount3 -u` por até 5 s (repetindo em `EBUSY`); se não conseguir, faz `-uz` (desmonte preguiçoso) e registra no log. Quando o MO2 sumiu, o `mo2-vfs` espera o grupo de processos do `pid` de `watch` terminar (pidfd + varredura de `/proc` pelos descendentes) antes de desmontar.
+`unmount` tenta `fusermount3 -u` por até 5 s (repetindo em `EBUSY`); se não conseguir, faz `-uz` (desmonte preguiçoso) e registra no log. Um grupo informado em `watch` está vivo enquanto existir em `/proc` algum processo com esse `pgrp` que não seja zumbi (verificado a cada 500 ms); zumbis não seguram o mount.
 
 ## 6. Integração no MO2
 
 ### 6.1 `LinuxVfsConnector`
 
 - `updateParams`: guarda os `skip*` e o nível de log; o resto é ignorado (§1.3).
-- `updateMapping`: converte para `/` (como o `NullVfsConnector` faz hoje), inicia o `mo2-vfs` se preciso e envia `mount` (primeira vez) ou `update`. Espera a resposta com timeout de 30 s; `error` vira exceção com a mensagem do auxiliar, que o `OrganizerCore` já mostra ao usuário e que cancela a execução.
+- `updateMapping`: converte para `/` (como o `NullVfsConnector` faz hoje) e **só guarda** os mappings — ele também é chamado ao trocar de perfil, quando nada deve ser montado. Se já houver mount ativo, envia `update`.
+- Novos métodos na interface `VfsConnector`, com implementação vazia por padrão (o Windows não muda):
+  - `activate()`: inicia o `mo2-vfs` se preciso e envia `mount` (ou `update`, se já ativo) com os últimos mappings. Timeout de 30 s; `error` vira `std::runtime_error` com a mensagem do auxiliar, que o `OrganizerCore` mostra e que cancela a execução.
+  - `watchProcessGroup(pgid)`: envia `watch`.
+  - `releaseIfIdle()`: envia `unmount` se nenhum grupo foi informado (o programa não iniciou).
+  - `isActive()` e `waitInactive(timeout)`.
+  - `setDeactivatedCallback(f)`: chamado (na thread da interface) quando chega `unmounted`.
 - `name()`: `"mo2-vfs"`.
-- Novo `unmount()` na interface `VfsConnector` (no Windows, vazio): chamado pelo `ProcessRunner` quando o último processo acompanhado termina.
+- **O mount vale para o sistema inteiro, inclusive para o próprio MO2.** Enquanto `isActive()`, o `OrganizerCore::refreshDirectoryStructure` não varre: marca a atualização como pendente e a executa no callback de desativação. Sem isso, o MO2 leria a `Data` montada e confundiria arquivos de mods com os originais do jogo.
 
 ### 6.2 Execução de programas Linux
 
-- `spawn::startBinary`: se o alvo é ELF executável ou script com `#!` e permissão de execução, inicia com `posix_spawn` num grupo de processos novo, no diretório de trabalho do executável e com o ambiente do MO2. `.exe`, `.bat` e o resto continuam com a mensagem da Fase 3.
-- `ProcessRunner::run` no Linux deixa de recusar tudo: segue o fluxo comum (salvar perfil, `beforeRun`, montar, iniciar, esperar, `unmount`, `afterRun`) para os programas aceitos acima.
+- `spawn::startBinary`: se o alvo é ELF executável ou script com `#!` e permissão de execução, inicia com `posix_spawn` num grupo de processos novo (`POSIX_SPAWN_SETPGROUP`, informado ao `mo2-vfs` com `watch`), no diretório de trabalho do executável e com o ambiente do MO2. `.exe`, `.bat` e o resto continuam com a mensagem da Fase 3.
+- `ProcessRunner::run` no Linux deixa de recusar tudo: segue o fluxo comum (salvar perfil, `beforeRun` — que agora chama `activate()` —, iniciar, `watchProcessGroup`, esperar, `afterRun`) para os programas aceitos acima. Se o programa não iniciar, `releaseIfIdle()`.
+- `afterRun` chama `waitInactive(5 s)` antes de atualizar a árvore de dados.
 - A espera usa o acompanhamento de árvore de processos que já existe em `processrunner_linux.cpp`.
 - "Executar" de novo com um programa já rodando reaproveita o mount e envia `update`, como no Windows.
 
@@ -184,7 +194,7 @@ Cada pedido recebe exatamente uma resposta; `mount`/`update` respondem só quand
 
 | Situação | Resultado |
 |---|---|
-| `/dev/fuse` ou `fusermount3` ausente | `error fuse_unavailable`; programa não inicia; mensagem explica como habilitar. |
+| `/dev/fuse` ou `fusermount3` ausente | `error fuse_unavailable`; programa não inicia; a mensagem diz o que falta e, dentro de distrobox/container, que `/dev/fuse` precisa estar disponível nele. |
 | Raiz já montada (por outro MO2 ou resto de falha) | Limpeza da §5.3; se continuar ocupada, `error mount_busy`. |
 | Mapping com origem inexistente | Camada ignorada com aviso no log (o MO2 pode mandar mods removidos entre o refresh e a execução). |
 | Erro de E/S num arquivo real | Repassado ao programa com o mesmo `errno`. |
