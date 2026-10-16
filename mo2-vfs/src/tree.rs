@@ -50,7 +50,7 @@ impl Tree {
             parent: 0,
             origin: Origin {
                 layer: 0,
-                rel: PathBuf::new(),
+                rel: PathBuf::from("."),
             },
             dir_origins: Vec::new(),
             children: BTreeMap::new(),
@@ -96,7 +96,7 @@ impl Tree {
         // The layer root is the target directory.
         let origin = Origin {
             layer: layer.id,
-            rel: PathBuf::new(),
+            rel: PathBuf::from("."),
         };
         if parent != 0 {
             self.nodes[parent].origin = origin.clone();
@@ -111,6 +111,12 @@ impl Tree {
         if let Ok(st) = rustix::fs::fstat(&layer.dir) {
             stack.push((st.st_dev, st.st_ino));
         }
+        // The original folder is shown as-is: skip rules only apply to mapping layers.
+        let skip = if layer.original {
+            &Skip::default()
+        } else {
+            skip
+        };
         self.scan(layer, &layer.dir, Path::new(""), parent, skip, &mut stack);
     }
 
@@ -121,11 +127,12 @@ impl Tree {
         if let Some(&id) = self.nodes[parent].children.get(&key)
             && self.nodes[id].kind == Kind::Dir
         {
+            self.nodes[id].name = name.to_os_string();
             return id;
         }
         let origin = Origin {
             layer,
-            rel: PathBuf::new(),
+            rel: PathBuf::from("."),
         };
         let id = self.insert(parent, name, Kind::Dir, origin);
         self.nodes[id].dir_origins.clear();
@@ -250,8 +257,10 @@ impl Tree {
     pub fn lookup(&self, vpath: &Path) -> Option<NodeId> {
         let mut cur = 0;
         for c in vpath.components() {
-            if let Component::Normal(n) = c {
-                cur = self.child(cur, n)?;
+            match c {
+                Component::Normal(n) => cur = self.child(cur, n)?,
+                Component::ParentDir => return None,
+                _ => {}
             }
         }
         Some(cur)
@@ -457,7 +466,7 @@ mod tests {
         touch(tmp.path(), "mod/a.dds");
         let specs = vec![spec(tmp.path().join("mod"), "Textures", true, 0)];
         let t = build(&tmp, "orig", specs, &Skip::default());
-        assert_eq!(names(&t, ""), ["textures"]);
+        assert_eq!(names(&t, ""), ["Textures"]);
         assert_eq!(names(&t, "textures"), ["a.dds", "o.dds"]);
         assert_eq!(origin_layer(&t, "textures/a.dds"), 1);
         let dir = t.node(t.lookup(Path::new("textures")).unwrap());
@@ -483,6 +492,85 @@ mod tests {
         let t = build(&tmp, "orig", specs, &skip);
         assert_eq!(names(&t, ""), ["b.esp", "sub", "x"]);
         assert!(names(&t, "sub").is_empty());
+    }
+
+    #[test]
+    fn tree_every_origin_is_statable() {
+        let tmp = TempDir::new().unwrap();
+        touch(tmp.path(), "orig/textures/o.dds");
+        touch(tmp.path(), "mod/a.dds");
+        touch(tmp.path(), "mod/sub/b.dds");
+        touch(tmp.path(), "extra/custom.ini");
+        let specs = vec![
+            spec(tmp.path().join("mod"), "new/deep", true, 0),
+            spec(tmp.path().join("mod"), "Textures", true, 1),
+            spec(tmp.path().join("mod"), "", true, 2),
+            spec(
+                tmp.path().join("extra/custom.ini"),
+                "cfg/Skyrim.ini",
+                false,
+                3,
+            ),
+        ];
+        let root = RootSpec {
+            mountpoint: tmp.path().join("orig"),
+            layers: specs,
+        };
+        let layers = open_layers(&root).unwrap();
+        let t = Tree::build(&layers, &Skip::default());
+        let mut todo = vec![t.root()];
+        let mut seen = 0;
+        while let Some(id) = todo.pop() {
+            seen += 1;
+            let n = t.node(id);
+            let st = rustix::fs::statat(
+                &layers.list[n.origin.layer].dir,
+                &n.origin.rel,
+                rustix::fs::AtFlags::empty(),
+            )
+            .unwrap_or_else(|e| panic!("{:?}: {e}", t.path_of(id)));
+            let is_dir =
+                rustix::fs::FileType::from_raw_mode(st.st_mode) == rustix::fs::FileType::Directory;
+            assert_eq!(is_dir, n.kind == Kind::Dir, "{:?}", t.path_of(id));
+            for o in &n.dir_origins {
+                rustix::fs::statat(
+                    &layers.list[o.layer].dir,
+                    &o.rel,
+                    rustix::fs::AtFlags::empty(),
+                )
+                .unwrap();
+            }
+            todo.extend(t.children(id).map(|(c, _)| c));
+        }
+        assert_eq!(seen, t.len());
+        let new = t.node(t.lookup(Path::new("new")).unwrap());
+        assert!(new.dir_origins.is_empty());
+        assert_eq!(new.origin.layer, 1);
+    }
+
+    #[test]
+    fn tree_skip_does_not_apply_to_original() {
+        let tmp = TempDir::new().unwrap();
+        touch(tmp.path(), "orig/a.esp.mohidden");
+        touch(tmp.path(), "mod/b.esp.mohidden");
+        let specs = vec![spec(tmp.path().join("mod"), "", true, 0)];
+        let skip = Skip::new(&[".mohidden".to_string(), String::new()], &[String::new()]);
+        assert_eq!(skip.suffixes.len(), 1);
+        assert!(skip.directories.is_empty());
+        let t = build(&tmp, "orig", specs, &skip);
+        assert_eq!(names(&t, ""), ["a.esp.mohidden"]);
+    }
+
+    #[test]
+    fn tree_intermediate_dir_takes_winning_spelling_and_lookup_dotdot() {
+        let tmp = TempDir::new().unwrap();
+        touch(tmp.path(), "orig/Textures/o.dds");
+        touch(tmp.path(), "mod/a.dds");
+        let specs = vec![spec(tmp.path().join("mod"), "TEXTURES/sub", true, 0)];
+        let t = build(&tmp, "orig", specs, &Skip::default());
+        assert_eq!(names(&t, ""), ["TEXTURES"]);
+        assert!(t.lookup(Path::new("textures/../textures")).is_none());
+        assert!(t.lookup(Path::new("./textures/./sub")).is_some());
     }
 
     #[test]

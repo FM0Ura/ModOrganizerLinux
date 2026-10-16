@@ -118,9 +118,14 @@ impl Skip {
         Skip {
             suffixes: suffixes
                 .iter()
+                .filter(|s| !s.is_empty())
                 .map(|s| String::from_utf8_lossy(&fold(OsStr::new(s)).0).into_owned())
                 .collect(),
-            directories: directories.iter().map(|d| fold(OsStr::new(d))).collect(),
+            directories: directories
+                .iter()
+                .filter(|d| !d.is_empty())
+                .map(|d| fold(OsStr::new(d)))
+                .collect(),
         }
     }
 
