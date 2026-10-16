@@ -11,7 +11,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
         qt6-qtwebengine-devel qt6-qtwebsockets-devel qt6-qtnetworkauth-devel \
         qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtwayland \
         boost-devel spdlog-devel fmt-devel lz4-devel zlib-devel \
-        gtest-devel fuse3-devel clang-tools-extra \
+        gtest-devel fuse3 fuse3-devel clang-tools-extra \
     && dnf clean all
 
 # Rust (stable) via rustup, system-wide so any user in a distrobox sees it.

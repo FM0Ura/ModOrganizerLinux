@@ -23,7 +23,7 @@ BUILD_OUT="$ROOT/build-out"
 # function pre_<t> runs first, outside --allow-fail.
 ALL_TARGETS=(
     7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk lootcli
-    modorganizer game_bethesda installer_quick installer_manual installer_fomod
+    mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
 )
 
 ONLY=()
@@ -150,6 +150,23 @@ build_esptk() {
 # making Qt6 invisible to the project (its CMake builds the executable only if Qt6 is found).
 build_lootcli() {
     cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON
+}
+
+# mo2-vfs is the FUSE virtual file system (Rust, ./mo2-vfs), a program of its own
+# started by the application; with --tests its unit and integration tests run (the
+# ones that need FUSE are skipped without /dev/fuse, unless MO2_REQUIRE_FUSE=1)
+build_mo2_vfs() {
+    local src="$ROOT/mo2-vfs"
+    # the toolchain image keeps CARGO_HOME read-only for non-root users (distrobox)
+    [[ -w ${CARGO_HOME:-$HOME/.cargo} ]] || export CARGO_HOME="$HOME/.cache/mo2-cargo"
+    log "build mo2-vfs"
+    cargo build --release --locked --manifest-path "$src/Cargo.toml" \
+        --target-dir "$BUILD_OUT/mo2-vfs"
+    if [[ $TESTS == 1 ]]; then
+        cargo test --release --locked --manifest-path "$src/Cargo.toml" \
+            --target-dir "$BUILD_OUT/mo2-vfs"
+    fi
+    install -Dm755 "$BUILD_OUT/mo2-vfs/release/mo2-vfs" "$INSTALL/bin/mo2-vfs"
 }
 
 # modorganizer is the application itself ($MO2_SRC, by default deps/modorganizer),

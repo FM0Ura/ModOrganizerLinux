@@ -130,6 +130,10 @@ It builds into `build-out/` and installs into
 ./build.sh --list                   # targets in build order
 ```
 
+The `mo2-vfs` target builds the Rust FUSE virtual file system (`mo2-vfs/`) into
+`install/bin/mo2-vfs`; its tests need `/dev/fuse` and `fusermount3` (they are skipped
+without them, and fail with `MO2_REQUIRE_FUSE=1`, as in CI).
+
 Targets not ported yet are skipped by the default run and rejected with `--only`.
 
 ### With podman or docker

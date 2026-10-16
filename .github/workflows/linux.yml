@@ -21,14 +21,18 @@ jobs:
       # application (build.sh smoke_modorganizer)
       - name: Build and test
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+          docker run --rm --device /dev/fuse --cap-add SYS_ADMIN \
+            --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 \
+            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
             mo2-linux-build ./build.sh --tests
 
       # the installed application prints its usage, and starts headless (fresh HOME, no
       # instance) up to the instance selection without crashing
       - name: Smoke test
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+          docker run --rm --device /dev/fuse --cap-add SYS_ADMIN \
+            --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 \
+            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
             mo2-linux-build tests/smoke/modorganizer-smoke.sh install
 
       - name: Upload install tree
