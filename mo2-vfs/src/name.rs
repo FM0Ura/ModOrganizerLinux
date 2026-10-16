@@ -1,5 +1,6 @@
 //! Case-insensitive name keys.
 
+use std::borrow::Borrow;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Component, Path};
@@ -8,17 +9,37 @@ use std::path::{Component, Path};
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Key(pub(crate) Vec<u8>);
 
+/// Lets maps keyed by `Key` be searched with a borrowed byte slice (no allocation). The
+/// ordering and hash of `Key` are those of its bytes, so this is consistent.
+impl Borrow<[u8]> for Key {
+    fn borrow(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Folds one name. Valid UTF-8 is lowercased char by char (simple folding); other names
 /// only have ASCII bytes lowercased.
 pub fn fold(name: &OsStr) -> Key {
-    let bytes = name.as_bytes();
+    let mut out = Vec::new();
+    fold_into(name.as_bytes(), &mut out);
+    Key(out)
+}
+
+/// Appends the folded form of the name `bytes` (see `fold`) to `out`.
+pub(crate) fn fold_into(bytes: &[u8], out: &mut Vec<u8>) {
+    // ASCII is the common case; simple folding of ASCII is ASCII lowercasing.
+    if bytes.is_ascii() {
+        out.extend(bytes.iter().map(u8::to_ascii_lowercase));
+        return;
+    }
     match std::str::from_utf8(bytes) {
-        Ok(s) => Key(s
-            .chars()
-            .flat_map(char::to_lowercase)
-            .collect::<String>()
-            .into_bytes()),
-        Err(_) => Key(bytes.to_ascii_lowercase()),
+        Ok(s) => {
+            let mut buf = [0u8; 4];
+            for c in s.chars().flat_map(char::to_lowercase) {
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+        Err(_) => out.extend(bytes.iter().map(u8::to_ascii_lowercase)),
     }
 }
 

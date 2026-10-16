@@ -141,11 +141,20 @@ impl Skip {
     }
 
     pub fn skips_file(&self, name: &OsStr) -> bool {
-        let folded = fold(name).0;
-        self.suffixes.iter().any(|s| folded.ends_with(s.as_bytes()))
+        self.skips_file_key(&fold(name).0)
     }
 
     pub fn skips_dir(&self, name: &OsStr) -> bool {
-        self.directories.contains(&fold(name))
+        self.skips_dir_key(&fold(name).0)
+    }
+
+    /// `skips_file` for an already folded name.
+    pub(crate) fn skips_file_key(&self, folded: &[u8]) -> bool {
+        self.suffixes.iter().any(|s| folded.ends_with(s.as_bytes()))
+    }
+
+    /// `skips_dir` for an already folded name.
+    pub(crate) fn skips_dir_key(&self, folded: &[u8]) -> bool {
+        self.directories.iter().any(|d| d.0 == folded)
     }
 }
