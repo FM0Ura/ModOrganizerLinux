@@ -380,8 +380,9 @@ impl Vfs {
 
     /// Runs `f` with the tree write lock and the resolved directory `parent`.
     fn mutate<T>(&self, parent: u64, f: impl FnOnce(&mut Tree, NodeId) -> Res<T>) -> Res<T> {
-        let pkey = self.key_of(parent)?;
+        // Tree first, then inodes.
         let mut tree = self.shared.tree.write();
+        let pkey = self.key_of(parent)?;
         let pid = tree.lookup_folded(&pkey).ok_or(Errno::ENOENT)?;
         f(&mut tree, pid)
     }
@@ -412,16 +413,10 @@ impl Vfs {
         r.map_err(errno)
     }
 
-    /// Close-time flush: make what was written through this handle durable.
+    /// `flush` runs on every close(): like native filesystems it does not sync (that is
+    /// `fsync`'s job). It only checks that the handle exists.
     fn do_flush(&self, fh: u64) -> Res<()> {
-        let fd = self.handle(fh)?;
-        let writable = rustix::fs::fcntl_getfl(&*fd)
-            .map(|f| f.intersects(OFlags::WRONLY | OFlags::RDWR))
-            .unwrap_or(false);
-        if writable {
-            fsync(&*fd).map_err(errno)?;
-        }
-        Ok(())
+        self.handle(fh).map(|_| ())
     }
 
     fn do_create(&self, parent: u64, name: &OsStr, mode: u32, flags: i32) -> Res<(FileAttr, u64)> {
@@ -487,8 +482,8 @@ impl Vfs {
         newname: &OsStr,
         flags: RenameFlags,
     ) -> Res<Vec<(u64, OsString)>> {
-        let npkey = self.key_of(newparent)?;
         self.mutate(parent, |tree, pid| {
+            let npkey = self.key_of(newparent)?;
             let npid = tree.lookup_folded(&npkey).ok_or(Errno::ENOENT)?;
             let src = tree.child(pid, name);
             let old_key = src.map(|s| fold_path(&tree.path_of(s)));
@@ -510,7 +505,7 @@ impl Vfs {
             if let Some(old_key) = old_key {
                 let new_key = fold_path(&tree.path_of(npid).join(newname));
                 // Inodes under the old path follow the move; those of a replaced
-                // destination are forgotten.
+                // destination stay valid as aliases of the new path.
                 self.shared.inodes.lock().rekey_prefix(&old_key, &new_key);
             }
             let mut stale = Vec::new();
@@ -534,11 +529,16 @@ impl Vfs {
         let Some(notifier) = self.shared.notifier.get().cloned() else {
             return;
         };
-        std::thread::spawn(move || {
-            for (parent, name) in entries {
-                let _ = notifier.inval_entry(INodeNo(parent), &name);
-            }
-        });
+        let spawned = std::thread::Builder::new()
+            .name("mo2-vfs-inval".into())
+            .spawn(move || {
+                for (parent, name) in entries {
+                    let _ = notifier.inval_entry(INodeNo(parent), &name);
+                }
+            });
+        if let Err(e) = spawned {
+            tracing::warn!(error = %e, "cannot start the cache invalidation thread");
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -580,10 +580,29 @@ impl Vfs {
             return Ok(attr_from_stat(ino, Kind::File, &st));
         }
 
-        // By path: the tree read lock keeps the node from moving under the `*at` calls.
+        // By path. The size change opens the real file under the tree read lock and
+        // truncates after releasing it; mode and times are short `*at` calls under the lock.
+        let trunc_fd = match size {
+            Some(size) => {
+                let tree = self.shared.tree.read();
+                let id = tree.lookup_folded(&key).ok_or(Errno::ENOENT)?;
+                let node = tree.node(id);
+                if node.kind == Kind::Dir {
+                    return Err(Errno::EISDIR);
+                }
+                self.check_owner(node, uid, gid)?;
+                let fd = ops::open(&self.shared.layers, node, OFlags::WRONLY).map_err(errno)?;
+                Some((fd, size))
+            }
+            None => None,
+        };
+        if let Some((fd, size)) = trunc_fd {
+            ftruncate(&fd, size).map_err(errno)?;
+        }
         let tree = self.shared.tree.read();
         let id = tree.lookup_folded(&key).ok_or(Errno::ENOENT)?;
         let node = tree.node(id);
+        self.check_owner(node, uid, gid)?;
         let layer = self
             .shared
             .layers
@@ -591,17 +610,6 @@ impl Vfs {
             .get(node.origin.layer)
             .ok_or(Errno::EIO)?;
         let rel: &Path = &node.origin.rel;
-        let st = statat(&layer.dir, rel, AtFlags::empty()).map_err(errno)?;
-        if uid.is_some_and(|u| u != st.st_uid) || gid.is_some_and(|g| g != st.st_gid) {
-            return Err(Errno::EPERM);
-        }
-        if let Some(size) = size {
-            if node.kind == Kind::Dir {
-                return Err(Errno::EISDIR);
-            }
-            let fd = ops::open(&self.shared.layers, node, OFlags::WRONLY).map_err(errno)?;
-            ftruncate(&fd, size).map_err(errno)?;
-        }
         if let Some(p) = perm {
             chmodat(&layer.dir, rel, p, AtFlags::empty()).map_err(errno)?;
         }
@@ -609,6 +617,24 @@ impl Vfs {
             utimensat(&layer.dir, rel, t, AtFlags::empty()).map_err(errno)?;
         }
         self.attr_of(ino, node.kind, &node.origin)
+    }
+
+    /// uid/gid changes are refused unless they change nothing.
+    fn check_owner(&self, node: &crate::tree::Node, uid: Option<u32>, gid: Option<u32>) -> Res<()> {
+        if uid.is_none() && gid.is_none() {
+            return Ok(());
+        }
+        let layer = self
+            .shared
+            .layers
+            .list
+            .get(node.origin.layer)
+            .ok_or(Errno::EIO)?;
+        let st = statat(&layer.dir, &node.origin.rel, AtFlags::empty()).map_err(errno)?;
+        if uid.is_some_and(|u| u != st.st_uid) || gid.is_some_and(|g| g != st.st_gid) {
+            return Err(Errno::EPERM);
+        }
+        Ok(())
     }
 
     fn do_statfs(&self) -> Res<rustix::fs::StatVfs> {

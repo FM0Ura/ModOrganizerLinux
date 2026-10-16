@@ -87,6 +87,8 @@ impl Inodes {
         }
     }
 
+    /// Every known inode with its key. Several inodes may share a key (aliases left by a
+    /// rename that replaced a name); aliases are never removed before unmount.
     pub fn known(&self) -> impl Iterator<Item = (u64, &Key)> {
         self.by_ino.iter().map(|(&i, k)| (i, k))
     }

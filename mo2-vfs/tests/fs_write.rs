@@ -487,3 +487,48 @@ fn deleted_and_renamed_files_vanish_under_every_spelling() {
     assert!(!m.path().join("bar.txt").exists());
     assert_eq!(read(m.path().join("BAZ.TXT")), "bar");
 }
+
+#[test]
+fn truncate_and_utimens_by_path_reach_real_file() {
+    if !common::require_fuse() {
+        return;
+    }
+    let f = Fixture::skyrim();
+    let real = f.dir("A").join("meshes/tree.nif");
+    let m = f.mount();
+    let path = m.path().join("meshes/tree.nif");
+    truncate_by_path(&path, 4);
+    assert_eq!(fs::metadata(&real).unwrap().len(), 4);
+    assert_eq!(read(&real), "A:me");
+    truncate_by_path(&path, 9);
+    assert_eq!(fs::metadata(&real).unwrap().len(), 9);
+    let ts = rustix::fs::Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: 1_000_000_000,
+            tv_nsec: 0,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: 1_100_000_000,
+            tv_nsec: 0,
+        },
+    };
+    rustix::fs::utimensat(rustix::fs::CWD, &path, &ts, rustix::fs::AtFlags::empty()).unwrap();
+    let md = fs::metadata(&real).unwrap();
+    assert_eq!(md.mtime(), 1_100_000_000);
+    assert_eq!(md.atime(), 1_000_000_000);
+}
+
+/// truncate(2) on a path, without opening it first (coreutils `truncate -s` does exactly that).
+fn truncate_by_path(path: &std::path::Path, len: u64) {
+    let out = Command::new("truncate")
+        .arg("-s")
+        .arg(len.to_string())
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
