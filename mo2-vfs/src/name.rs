@@ -8,12 +8,16 @@ use std::path::{Component, Path};
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct Key(pub(crate) Vec<u8>);
 
-/// Folds one name. Valid UTF-8 gets full Unicode lowercasing; other names
+/// Folds one name. Valid UTF-8 is lowercased char by char (simple folding); other names
 /// only have ASCII bytes lowercased.
 pub fn fold(name: &OsStr) -> Key {
     let bytes = name.as_bytes();
     match std::str::from_utf8(bytes) {
-        Ok(s) => Key(s.to_lowercase().into_bytes()),
+        Ok(s) => Key(s
+            .chars()
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+            .into_bytes()),
         Err(_) => Key(bytes.to_ascii_lowercase()),
     }
 }
@@ -41,6 +45,11 @@ mod tests {
         assert_eq!(fold(OsStr::new("Textures")), fold(OsStr::new("TEXTURES")));
         assert_eq!(fold(OsStr::new("Ünïcödé")), fold(OsStr::new("üNÏCÖDÉ")));
         assert_ne!(fold(OsStr::new("a")), fold(OsStr::new("b")));
+    }
+
+    #[test]
+    fn fold_is_not_context_sensitive() {
+        assert_eq!(fold(OsStr::new("ΟΔΥΣΣΕΥΣ")), fold(OsStr::new("οδυσσευσ")));
     }
 
     #[test]

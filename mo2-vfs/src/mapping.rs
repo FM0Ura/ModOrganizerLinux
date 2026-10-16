@@ -87,14 +87,15 @@ fn canonicalize_lenient(p: &Path) -> PathBuf {
     }
 }
 
-/// Picks `candidates` as roots in order of increasing depth, skipping any that
-/// lies under an already chosen root.
-fn choose_roots(roots: &mut Vec<PathBuf>, mut candidates: Vec<PathBuf>) {
-    candidates.sort_by_key(|p| p.components().count());
-    for c in candidates {
-        if !roots.iter().any(|r| c.starts_with(r)) {
-            roots.push(c);
-        }
+/// Canonical destination: directories are resolved fully; for files only the
+/// parent is resolved, so a symlinked file does not move the root elsewhere.
+fn canonical_destination(m: &Mapping) -> PathBuf {
+    if m.is_directory {
+        return canonicalize_lenient(&m.destination);
+    }
+    match (m.destination.parent(), m.destination.file_name()) {
+        (Some(parent), Some(name)) => canonicalize_lenient(parent).join(name),
+        _ => canonicalize_lenient(&m.destination),
     }
 }
 
@@ -104,29 +105,34 @@ pub fn plan_roots(mappings: &[Mapping]) -> Result<Vec<RootSpec>, MappingError> {
         validate(&m.source)?;
         validate(&m.destination)?;
     }
-    let dests: Vec<PathBuf> = mappings
-        .iter()
-        .map(|m| canonicalize_lenient(&m.destination))
-        .collect();
+    let dests: Vec<PathBuf> = mappings.iter().map(canonical_destination).collect();
 
-    let mut roots: Vec<PathBuf> = Vec::new();
-    choose_roots(
-        &mut roots,
-        mappings
-            .iter()
-            .zip(&dests)
-            .filter(|(m, _)| m.is_directory)
-            .map(|(_, d)| d.clone())
-            .collect(),
-    );
-    // File mappings outside every directory root get their parent as a root.
-    let parents: Vec<PathBuf> = mappings
+    // Candidates: directory destinations, plus the parent of every file mapping
+    // that is not under a directory destination.
+    let dir_dests: Vec<&PathBuf> = mappings
         .iter()
         .zip(&dests)
-        .filter(|(m, d)| !m.is_directory && !roots.iter().any(|r| d.starts_with(r)))
-        .filter_map(|(_, d)| d.parent().map(Path::to_path_buf))
+        .filter(|(m, _)| m.is_directory)
+        .map(|(_, d)| d)
         .collect();
-    choose_roots(&mut roots, parents);
+    let mut candidates: Vec<PathBuf> = dir_dests.iter().map(|d| (*d).clone()).collect();
+    for (m, d) in mappings.iter().zip(&dests) {
+        if !m.is_directory
+            && !dir_dests.iter().any(|r| d.starts_with(r))
+            && let Some(parent) = d.parent()
+        {
+            candidates.push(parent.to_path_buf());
+        }
+    }
+    // Roots never nest: keep a candidate only if no other candidate is a strict
+    // ancestor of it; identical candidates collapse into one root.
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for c in &candidates {
+        let nested = candidates.iter().any(|o| o != c && c.starts_with(o));
+        if !nested && !roots.contains(c) {
+            roots.push(c.clone());
+        }
+    }
 
     let mut specs: Vec<RootSpec> = roots
         .into_iter()
@@ -136,14 +142,11 @@ pub fn plan_roots(mappings: &[Mapping]) -> Result<Vec<RootSpec>, MappingError> {
         })
         .collect();
     for (priority, (m, d)) in mappings.iter().zip(&dests).enumerate() {
-        // Deepest enclosing root wins (roots never nest, but be explicit).
-        let Some(spec) = specs
+        // Roots never nest, so exactly one root is a prefix of any destination.
+        let spec = specs
             .iter_mut()
-            .filter(|s| d.starts_with(&s.mountpoint))
-            .max_by_key(|s| s.mountpoint.components().count())
-        else {
-            continue;
-        };
+            .find(|s| d.starts_with(&s.mountpoint))
+            .expect("every destination lies under exactly one root");
         let target = d
             .strip_prefix(&spec.mountpoint)
             .map(Path::to_path_buf)
@@ -340,5 +343,64 @@ mod tests {
         )])
         .unwrap();
         assert_eq!(roots[0].mountpoint, p.join("Data/new/sub"));
+    }
+
+    #[test]
+    fn file_mapping_parent_does_not_nest_over_directory_root() {
+        let t = tempdir();
+        let p = t.path().canonicalize().unwrap();
+        let tex = m(
+            "/mods/B",
+            &format!("{}/Data/textures", p.display()),
+            true,
+            false,
+        );
+        let esp = m(
+            "/x.esp",
+            &format!("{}/Data/x.esp", p.display()),
+            false,
+            false,
+        );
+        for input in [[tex.clone(), esp.clone()], [esp, tex]] {
+            let roots = plan_roots(&input).unwrap();
+            assert_eq!(roots.len(), 1);
+            assert_eq!(roots[0].mountpoint, p.join("Data"));
+            let by_src = |s: &str| {
+                roots[0]
+                    .layers
+                    .iter()
+                    .find(|l| l.source == Path::new(s))
+                    .unwrap()
+            };
+            assert_eq!(by_src("/mods/B").target, PathBuf::from("textures"));
+            assert_eq!(by_src("/x.esp").target, PathBuf::from("x.esp"));
+        }
+    }
+
+    #[test]
+    fn symlinked_file_destination_keeps_its_parent_as_root() {
+        let t = tempdir();
+        let p = t.path().canonicalize().unwrap();
+        fs::create_dir_all(p.join("Other")).unwrap();
+        fs::create_dir_all(p.join("Elsewhere")).unwrap();
+        fs::write(p.join("Elsewhere/real.ini"), b"").unwrap();
+        std::os::unix::fs::symlink(p.join("Elsewhere/real.ini"), p.join("Other/y.ini")).unwrap();
+        let roots = plan_roots(&[m(
+            "/y.ini",
+            &format!("{}/Other/y.ini", p.display()),
+            false,
+            false,
+        )])
+        .unwrap();
+        assert_eq!(roots[0].mountpoint, p.join("Other"));
+        assert_eq!(roots[0].layers[0].target, PathBuf::from("y.ini"));
+    }
+
+    #[test]
+    fn rejects_relative_destination() {
+        assert!(matches!(
+            plan_roots(&[m("/mods/A", "g/Data", true, false)]),
+            Err(MappingError::Relative(_))
+        ));
     }
 }
