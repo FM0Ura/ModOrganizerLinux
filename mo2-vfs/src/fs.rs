@@ -805,6 +805,20 @@ impl Filesystem for Vfs {
         }
     }
 
+    /// Not implemented on purpose: on `ENOSYS` the kernel stops sending `opendir` and
+    /// `releasedir` (two round trips per directory read) and opens directories with its
+    /// no-open defaults, `FOPEN_KEEP_CACHE | FOPEN_CACHE_DIR`: listings are cached in the
+    /// kernel and served without asking again. That cache stays coherent with the tree,
+    /// which only changes through this filesystem: the kernel drops a directory's cached
+    /// listing itself after a create, mkdir, unlink, rmdir or rename in it (and when its
+    /// mtime changes), and a hot update sends `inval_inode` (which discards the cached
+    /// pages) and `inval_entry` (which resets the listing cache of the parent) for every
+    /// directory whose entries changed (`session::changes`; tests/session.rs
+    /// `update_refreshes_cached_listings`).
+    fn opendir(&self, _req: &Request, _ino: INodeNo, _flags: OpenFlags, reply: ReplyOpen) {
+        reply.error(Errno::ENOSYS);
+    }
+
     fn readdir(
         &self,
         _req: &Request,

@@ -381,3 +381,50 @@ fn changes_during_updates_are_not_lost() {
     check(N);
     s.unmount().unwrap();
 }
+
+fn listing(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn update_refreshes_cached_listings() {
+    if !require_fuse() {
+        return;
+    }
+    // The kernel caches directory listings (no opendir): updates and changes through the
+    // mount must still show at once.
+    let e = rock_env();
+    e.write("A/textures/a.dds", "a");
+    e.write("B/textures/b.dds", "b");
+    e.write("C/textures/c.dds", "c");
+    e.write("C/new.txt", "n");
+    e.write("D/TEXTURES/d.dds", "d");
+    let mut s = e.mount(&rock_maps(&e, true));
+    let data = e.p("Data");
+    let tex = e.p("Data/textures");
+    for _ in 0..2 {
+        assert_eq!(listing(&data), ["Skyrim.esm", "textures"]);
+        assert_eq!(listing(&tex), ["a.dds", "b.dds", "rock.dds"]);
+    }
+    let a_c = vec![e.dir_map("A", "Data", false), e.dir_map("C", "Data", false)];
+    s.update(&a_c, Skip::default()).unwrap();
+    assert_eq!(listing(&data), ["Skyrim.esm", "new.txt", "textures"]);
+    assert_eq!(listing(&tex), ["a.dds", "c.dds", "rock.dds"]);
+    // another spelling of the directory wins
+    let a_d = vec![e.dir_map("A", "Data", false), e.dir_map("D", "Data", true)];
+    s.update(&a_d, Skip::default()).unwrap();
+    assert_eq!(listing(&data), ["Skyrim.esm", "TEXTURES"]);
+    assert_eq!(listing(&tex), ["a.dds", "d.dds", "rock.dds"]);
+    // changes made through the mount
+    fs::write(tex.join("made.dds"), "m").unwrap();
+    assert_eq!(listing(&tex), ["a.dds", "d.dds", "made.dds", "rock.dds"]);
+    fs::remove_file(tex.join("a.dds")).unwrap();
+    fs::rename(tex.join("made.dds"), tex.join("moved.dds")).unwrap();
+    assert_eq!(listing(&tex), ["d.dds", "moved.dds", "rock.dds"]);
+    s.unmount().unwrap();
+}
