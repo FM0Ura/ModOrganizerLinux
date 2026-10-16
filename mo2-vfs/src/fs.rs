@@ -584,8 +584,9 @@ impl Vfs {
         r.map_err(errno)
     }
 
-    /// `flush` runs on every close(): like native filesystems it does not sync (that is
-    /// `fsync`'s job). It only checks that the handle exists.
+    /// `flush` runs on close() (`open` asks the kernel not to send it, `create` does not):
+    /// like native filesystems it does not sync (that is `fsync`'s job). It only checks
+    /// that the handle exists.
     fn do_flush(&self, fh: u64) -> Res<()> {
         self.handle(fh).map(|_| ())
     }
@@ -884,11 +885,13 @@ impl Filesystem for Vfs {
     fn open(&self, _req: &Request, ino: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
         match guarded("open", || self.do_open(ino.into(), flags, &reply)) {
             Ok((fh, backing, keep_cache)) => {
-                let flags = if keep_cache {
-                    FopenFlags::FOPEN_KEEP_CACHE
-                } else {
-                    FopenFlags::empty()
-                };
+                // No flush on close: `flush` does nothing but check the handle (there is no
+                // writeback cache to push and no remote locking), so the round trip on
+                // every close() is saved.
+                let mut flags = FopenFlags::FOPEN_NOFLUSH;
+                if keep_cache {
+                    flags |= FopenFlags::FOPEN_KEEP_CACHE;
+                }
                 match backing {
                     Some(backing) => {
                         let mut backings = self.shared.backings.lock();
