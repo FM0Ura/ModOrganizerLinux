@@ -2,7 +2,7 @@
 
 use crate::inodes::Inodes;
 use crate::layer::Layers;
-use crate::name::fold_path;
+use crate::name::{Key, fold, fold_path};
 use crate::ops;
 use crate::tree::{Kind, NodeId, Origin, Tree, Whiteouts};
 use fuser::{
@@ -57,6 +57,11 @@ pub struct VfsShared {
     layers: RwLock<Arc<Layers>>,
     /// See `generation()`.
     generation: AtomicU64,
+    /// Bumped (under the tree write lock) by every change of the tree, swaps included.
+    /// Tells whether a cached directory listing still matches the tree.
+    version: AtomicU64,
+    /// Directory listings being read page by page, by directory inode.
+    listings: Mutex<HashMap<u64, Arc<Listing>>>,
     pub handles: Mutex<HashMap<u64, Arc<OwnedFd>>>,
     /// Kernel passthrough backing ids, alive as long as their file handle.
     backings: Mutex<HashMap<u64, BackingId>>,
@@ -96,6 +101,7 @@ impl VfsShared {
         if self.generation() != generation {
             return Err(tree);
         }
+        self.version.fetch_add(1, Ordering::AcqRel);
         let old_tree = std::mem::replace(&mut *t, tree);
         let old_layers = std::mem::replace(&mut *self.layers.write(), layers);
         Ok((old_tree, old_layers))
@@ -109,6 +115,7 @@ impl VfsShared {
         build: impl FnOnce(&Whiteouts) -> Tree,
     ) -> (Tree, Arc<Layers>) {
         let mut t = self.tree.write();
+        self.version.fetch_add(1, Ordering::AcqRel);
         let tree = build(t.whiteouts());
         let old_tree = std::mem::replace(&mut *t, tree);
         let old_layers = std::mem::replace(&mut *self.layers.write(), layers);
@@ -118,6 +125,30 @@ impl VfsShared {
 
 pub struct Vfs {
     shared: Arc<VfsShared>,
+}
+
+/// A directory listing for `readdir`: built when a listing starts (offset 0) and reused for
+/// the next pages while the tree does not change, so each page costs only its own entries.
+struct Listing {
+    /// `VfsShared::version` when it was built.
+    version: u64,
+    /// Inode of "..".
+    parent: u64,
+    /// The children in map order: inode, type, displayed name.
+    entries: Vec<(u64, FileType, OsString)>,
+}
+
+/// Most listings kept at once (a reader that stops half-way leaves its listing behind).
+const MAX_LISTINGS: usize = 1024;
+
+/// Key of the child `folded` (a folded name) of the directory `parent` (a folded path).
+fn child_key_into(parent: &[u8], folded: &[u8], out: &mut Vec<u8>) {
+    out.clear();
+    out.extend_from_slice(parent);
+    if !parent.is_empty() {
+        out.push(b'/');
+    }
+    out.extend_from_slice(folded);
 }
 
 /// What a handler needs of a node after the tree lock is released.
@@ -199,6 +230,8 @@ impl Vfs {
                 inodes: Mutex::new(Inodes::new()),
                 layers: RwLock::new(Arc::new(layers)),
                 generation: AtomicU64::new(0),
+                version: AtomicU64::new(0),
+                listings: Mutex::new(HashMap::new()),
                 handles: Mutex::new(HashMap::new()),
                 backings: Mutex::new(HashMap::new()),
                 next_fh: AtomicU64::new(1),
@@ -282,13 +315,16 @@ impl Vfs {
             if tree.node(pid).kind != Kind::Dir {
                 return Err(Errno::ENOTDIR);
             }
-            let id = tree.child(pid, name).ok_or(Errno::ENOENT)?;
+            let folded = fold(name);
+            let id = *tree.node(pid).children.get(&folded).ok_or(Errno::ENOENT)?;
             let node = tree.node(id);
+            let mut key = Vec::new();
+            child_key_into(&pkey.0, &folded.0, &mut key);
             (
                 node.kind,
                 node.origin.clone(),
                 self.shared.layers(),
-                fold_path(&tree.path_of(id)),
+                Key(key),
                 node.name == name,
             )
         };
@@ -301,39 +337,77 @@ impl Vfs {
         self.attr_of(&s.layers, ino, s.kind, &s.origin)
     }
 
-    fn do_readdir(&self, ino: u64, offset: u64, reply: &mut ReplyDirectory) -> Res<()> {
-        let key = self
-            .shared
-            .inodes
-            .lock()
-            .key_of(ino)
-            .cloned()
-            .ok_or(Errno::ENOENT)?;
+    /// The listing of the directory `ino` for a `readdir` at `offset`: the cached one when
+    /// the listing is under way and the tree has not changed since, a new one otherwise.
+    fn listing(&self, ino: u64, offset: u64) -> Res<Arc<Listing>> {
+        let key = self.key_of(ino)?;
+        // Tree first, then inodes; `listings` is a leaf lock.
         let tree = self.shared.tree.read();
+        let version = self.shared.version.load(Ordering::Acquire);
+        if offset > 0
+            && let Some(l) = self.shared.listings.lock().get(&ino)
+            && l.version == version
+        {
+            return Ok(l.clone());
+        }
         let id = tree.lookup_folded(&key).ok_or(Errno::ENOENT)?;
-        if tree.node(id).kind != Kind::Dir {
+        let node = tree.node(id);
+        if node.kind != Kind::Dir {
             return Err(Errno::ENOTDIR);
         }
         let mut inodes = self.shared.inodes.lock();
+        let parent_key = match key.0.iter().rposition(|&b| b == b'/') {
+            Some(i) => &key.0[..i],
+            None => &[][..],
+        };
+        let mut buf = Key(Vec::new());
+        buf.0.extend_from_slice(parent_key);
+        let parent = inodes.ino_for(&buf);
+        let mut entries = Vec::with_capacity(node.children.len());
+        for (k, &cid) in &node.children {
+            child_key_into(&key.0, &k.0, &mut buf.0);
+            let child = tree.node(cid);
+            let ft = match child.kind {
+                Kind::File => FileType::RegularFile,
+                Kind::Dir => FileType::Directory,
+            };
+            entries.push((inodes.ino_for(&buf), ft, child.name.clone()));
+        }
+        drop(inodes);
+        let listing = Arc::new(Listing {
+            version,
+            parent,
+            entries,
+        });
+        let mut listings = self.shared.listings.lock();
+        if listings.len() >= MAX_LISTINGS {
+            listings.clear();
+        }
+        listings.insert(ino, listing.clone());
+        Ok(listing)
+    }
+
+    fn do_readdir(&self, ino: u64, offset: u64, reply: &mut ReplyDirectory) -> Res<()> {
+        let listing = self.listing(ino, offset)?;
         // Entry i (0 = ".", 1 = "..", 2.. = children in map order) has offset i + 1.
         if offset == 0 && reply.add(INodeNo(ino), 1, FileType::Directory, ".") {
             return Ok(());
         }
-        if offset <= 1 {
-            let parent = tree.node(id).parent;
-            let pino = inodes.ino_for(&fold_path(&tree.path_of(parent)));
-            if reply.add(INodeNo(pino), 2, FileType::Directory, "..") {
-                return Ok(());
-            }
+        if offset <= 1 && reply.add(INodeNo(listing.parent), 2, FileType::Directory, "..") {
+            return Ok(());
         }
         let skip = offset.saturating_sub(2) as usize;
-        for (i, (cid, node)) in tree.children(id).enumerate().skip(skip) {
-            let cino = inodes.ino_for(&fold_path(&tree.path_of(cid)));
-            let ft = match node.kind {
-                Kind::File => FileType::RegularFile,
-                Kind::Dir => FileType::Directory,
-            };
-            if reply.add(INodeNo(cino), (i + 3) as u64, ft, &node.name) {
+        let rest = listing.entries.get(skip..).unwrap_or_default();
+        if rest.is_empty() {
+            // Past the end (the call that returns nothing): the reader is done with it.
+            let mut listings = self.shared.listings.lock();
+            if offset > 0 && listings.get(&ino).is_some_and(|l| Arc::ptr_eq(l, &listing)) {
+                listings.remove(&ino);
+            }
+            return Ok(());
+        }
+        for (i, (cino, ft, name)) in rest.iter().enumerate() {
+            if reply.add(INodeNo(*cino), (skip + i + 3) as u64, *ft, name) {
                 break;
             }
         }
@@ -418,7 +492,7 @@ impl Vfs {
             .ok_or(Errno::EBADF)
     }
 
-    fn key_of(&self, ino: u64) -> Res<crate::name::Key> {
+    fn key_of(&self, ino: u64) -> Res<Key> {
         self.shared
             .inodes
             .lock()
@@ -432,6 +506,7 @@ impl Vfs {
         // Tree first, then inodes.
         let mut tree = self.shared.tree.write();
         self.shared.generation.fetch_add(1, Ordering::AcqRel);
+        self.shared.version.fetch_add(1, Ordering::AcqRel);
         let pkey = self.key_of(parent)?;
         let pid = tree.lookup_folded(&pkey).ok_or(Errno::ENOENT)?;
         f(&mut tree, pid)
