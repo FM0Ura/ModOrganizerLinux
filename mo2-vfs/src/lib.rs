@@ -8,5 +8,7 @@
 //! - `ipc`: line-delimited JSON protocol over stdin/stdout.
 //! - `bin/mo2-vfs.rs`: arguments, logging, signals and the `ipc` loop.
 
+pub mod layer;
 pub mod mapping;
 pub mod name;
+pub mod tree;
