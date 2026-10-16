@@ -127,6 +127,21 @@ impl Mounted {
     pub fn path(&self) -> &std::path::Path {
         &self.mountpoint
     }
+
+    /// The real directory of a layer, bypassing the mount. The original layer is the
+    /// mountpoint itself, so it is reached through the fd the VFS holds on it.
+    pub fn real(&self, layer: &str) -> PathBuf {
+        let idx = self.fixture.names.iter().position(|n| n == layer).unwrap();
+        if idx == 0 {
+            use std::os::fd::AsRawFd;
+            PathBuf::from(format!(
+                "/proc/self/fd/{}",
+                self.shared.layers.list[0].dir.as_raw_fd()
+            ))
+        } else {
+            self.fixture.dir(layer)
+        }
+    }
 }
 
 impl Drop for Mounted {

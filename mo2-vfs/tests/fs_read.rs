@@ -154,8 +154,21 @@ fn passthrough_falls_back_to_pread() {
         fs::read_to_string(m.path().join("Skyrim.esm")).unwrap(),
         "original:Skyrim.esm"
     );
+    // Reads are correct whichever way they were served; a refusal turns passthrough off.
     let refused = m.shared.passthrough_refused.load(Ordering::Relaxed);
-    assert_eq!(m.shared.passthrough.load(Ordering::Relaxed), !refused);
+    if refused {
+        assert!(!m.shared.passthrough.load(Ordering::Relaxed));
+    } else {
+        assert!(m.shared.passthrough.load(Ordering::Relaxed));
+    }
+    // Registering a backing file needs CAP_SYS_ADMIN: without privilege the kernel refuses.
+    if rustix::process::geteuid().as_raw() != 0 {
+        assert!(refused, "unprivileged passthrough must be refused");
+    }
+    assert_eq!(
+        fs::read_to_string(m.path().join("textures/rock.dds")).unwrap(),
+        "B:textures/rock.dds"
+    );
 }
 
 #[test]

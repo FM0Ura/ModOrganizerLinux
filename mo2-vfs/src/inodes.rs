@@ -45,12 +45,14 @@ impl Inodes {
     }
 
     /// A directory moved from `old` to `new`: every known key at or under `old` keeps its
-    /// inode under the new prefix. Inodes already known under `new` are forgotten (that name
-    /// was replaced).
+    /// inode under the new prefix. Inodes already known under `new` (that name was replaced)
+    /// stay valid as aliases of the new path: the kernel may still hold a dentry for another
+    /// spelling of it, and the path is what an inode number stands for.
     pub fn rekey_prefix(&mut self, old: &Key, new: &Key) {
         if old == new {
             return;
         }
+        let mut aliases: Vec<(u64, Key)> = Vec::new();
         let under = |k: &Key, p: &Key| {
             k == p || (k.0.len() > p.0.len() && k.0.starts_with(&p.0) && k.0[p.0.len()] == b'/')
         };
@@ -62,7 +64,7 @@ impl Inodes {
             .collect();
         for k in stale {
             if let Some(ino) = self.by_key.remove(&k) {
-                self.by_ino.remove(&ino);
+                aliases.push((ino, k));
             }
         }
         let moved: Vec<Key> = self
@@ -78,6 +80,10 @@ impl Inodes {
             let nk = Key(bytes);
             self.by_ino.insert(ino, nk.clone());
             self.by_key.insert(nk, ino);
+        }
+        // Their path is now served by the moved entry.
+        for (ino, k) in aliases {
+            self.by_ino.insert(ino, k);
         }
     }
 
@@ -123,15 +129,17 @@ mod tests {
     }
 
     #[test]
-    fn rekey_forgets_replaced_target() {
+    fn rekey_keeps_replaced_target_as_alias() {
         let mut i = Inodes::new();
         let a = i.ino_for(&k("a"));
         let b = i.ino_for(&k("b"));
         let bf = i.ino_for(&k("b/f"));
         i.rekey_prefix(&k("a"), &k("b"));
         assert_eq!(i.key_of(a), Some(&k("b")));
-        assert_eq!(i.key_of(b), None);
-        assert_eq!(i.key_of(bf), None);
+        // Still resolves to the path, but the path's number is the moved entry's.
+        assert_eq!(i.key_of(b), Some(&k("b")));
+        assert_eq!(i.key_of(bf), Some(&k("b/f")));
+        assert_eq!(i.ino_for(&k("b")), a);
     }
 
     #[test]
