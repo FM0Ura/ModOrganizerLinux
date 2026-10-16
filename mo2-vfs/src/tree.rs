@@ -37,14 +37,34 @@ pub struct Node {
     pub children: BTreeMap<Key, NodeId>,
 }
 
+/// Prefix of the temporary files the VFS creates while copying an original file; never
+/// shown from mapping layers.
+pub const TMP_PREFIX: &str = ".mo2-vfs-tmp-";
+
+/// Entries hidden by the VFS itself (deletions and renames); they outlive tree rebuilds.
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct Whiteouts {
+    /// Hide every layer at this (folded) virtual path.
+    pub paths: BTreeSet<Key>,
+    /// Hide one layer's entry at a path: (`source` of the layer, folded virtual path).
+    pub origins: BTreeSet<(PathBuf, Key)>,
+}
+
 pub struct Tree {
     nodes: Vec<Node>,
-    masks: BTreeSet<Key>,
+    whiteouts: Whiteouts,
 }
 
 impl Tree {
-    /// Builds the merged tree: layers in increasing priority, the last one wins.
+    /// Builds the merged tree without whiteouts.
     pub fn build(layers: &Layers, skip: &Skip) -> Tree {
+        Tree::build_with(layers, skip, &Whiteouts::default())
+    }
+
+    /// Builds the merged tree: layers in increasing priority, the last one wins. Origin
+    /// whiteouts are applied while scanning (the next layer down then shows through); path
+    /// whiteouts remove the node afterwards.
+    pub fn build_with(layers: &Layers, skip: &Skip, whiteouts: &Whiteouts) -> Tree {
         let root = Node {
             name: OsString::new(),
             kind: Kind::Dir,
@@ -58,10 +78,15 @@ impl Tree {
         };
         let mut tree = Tree {
             nodes: vec![root],
-            masks: BTreeSet::new(),
+            whiteouts: whiteouts.clone(),
         };
         for layer in &layers.list {
             tree.add_layer(layer, skip);
+        }
+        for key in &whiteouts.paths {
+            if let Some(id) = tree.lookup_key(key) {
+                tree.remove(id);
+            }
         }
         tree
     }
@@ -81,6 +106,9 @@ impl Tree {
             let Some(name) = comps.pop() else { return };
             for c in comps {
                 parent = self.ensure_dir(parent, c, layer.id);
+            }
+            if self.origin_hidden(layer, &self.path_of(parent).join(name)) {
+                return;
             }
             match entry_kind(&layer.dir, file, &layer.source) {
                 Some(kind) => {
@@ -203,8 +231,19 @@ impl Tree {
             }
         };
         names.sort();
+        let vdir = if self.whiteouts.origins.is_empty() {
+            PathBuf::new()
+        } else {
+            self.path_of(node)
+        };
         for name in names {
             let child_rel = rel.join(&name);
+            if !layer.original && name.as_bytes().starts_with(TMP_PREFIX.as_bytes()) {
+                continue;
+            }
+            if self.origin_hidden(layer, &vdir.join(&name)) {
+                continue;
+            }
             let st = match statat(dirfd, name.as_bytes(), AtFlags::empty()) {
                 Ok(st) => st,
                 Err(e) => {
@@ -250,45 +289,48 @@ impl Tree {
         }
     }
 
-    /// Paths hidden by the VFS itself (deletions and renames), folded.
-    pub fn masks(&self) -> &BTreeSet<Key> {
-        &self.masks
+    /// What the VFS itself has hidden; pass it to `build_with` when rebuilding.
+    pub fn whiteouts(&self) -> &Whiteouts {
+        &self.whiteouts
     }
 
-    /// Hides `vpath` on rebuilds (see `apply_masks`). Does not touch the nodes.
-    pub fn mask(&mut self, vpath: &Path) {
+    /// Hides every layer at `vpath` on rebuilds. Does not touch the nodes.
+    pub fn whiteout_path(&mut self, vpath: &Path) {
         let key = fold_path(vpath);
         if !key.0.is_empty() {
-            self.masks.insert(key);
+            self.whiteouts.paths.insert(key);
         }
     }
 
-    /// Adopts `masks` and detaches the nodes at those paths.
-    pub fn apply_masks(&mut self, masks: &BTreeSet<Key>) {
-        for key in masks {
-            if key.0.is_empty() {
-                continue;
-            }
-            self.masks.insert(key.clone());
-            let mut cur = 0;
-            let mut found = true;
-            for comp in key.0.split(|&b| b == b'/') {
-                match self.nodes[cur].children.get(&Key(comp.to_vec())) {
-                    Some(&id) => cur = id,
-                    None => {
-                        found = false;
-                        break;
-                    }
-                }
-            }
-            if found {
-                self.remove(cur);
-            }
+    /// Hides the entry of the layer whose `source` is given at `vpath` on rebuilds.
+    pub fn whiteout_origin(&mut self, source: &Path, vpath: &Path) {
+        self.whiteouts
+            .origins
+            .insert((source.to_path_buf(), fold_path(vpath)));
+    }
+
+    fn origin_hidden(&self, layer: &Layer, vpath: &Path) -> bool {
+        !self.whiteouts.origins.is_empty()
+            && self
+                .whiteouts
+                .origins
+                .contains(&(layer.source.clone(), fold_path(vpath)))
+    }
+
+    /// Node at a folded path key (components joined by `/`).
+    fn lookup_key(&self, key: &Key) -> Option<NodeId> {
+        if key.0.is_empty() {
+            return None;
         }
+        let mut cur = 0;
+        for comp in key.0.split(|&b| b == b'/') {
+            cur = *self.nodes[cur].children.get(&Key(comp.to_vec()))?;
+        }
+        Some(cur)
     }
 
     /// Adds `node` as a child of `parent`, replacing a child with the same folded name
-    /// (the replaced node keeps its id). Clears the mask on the resulting path.
+    /// (the replaced node keeps its id). Clears the path whiteout on the resulting path.
     pub fn insert(&mut self, parent: NodeId, mut node: Node) -> NodeId {
         let key = fold(&node.name);
         node.parent = parent;
@@ -321,7 +363,7 @@ impl Tree {
     }
 
     /// Moves `id` (keeping its id and subtree) under `new_parent` as `new_name`. A node that
-    /// already has that name there is detached. Clears masks on the moved paths.
+    /// already has that name there is detached. Clears path whiteouts on the moved paths.
     pub fn move_node(&mut self, id: NodeId, new_parent: NodeId, new_name: &OsStr) {
         if id == 0 {
             return;
@@ -337,12 +379,12 @@ impl Tree {
     }
 
     fn unmask_subtree(&mut self, id: NodeId) {
-        if self.masks.is_empty() {
+        if self.whiteouts.paths.is_empty() {
             return;
         }
         let mut todo = vec![(id, self.path_of(id))];
         while let Some((n, path)) = todo.pop() {
-            self.masks.remove(&fold_path(&path));
+            self.whiteouts.paths.remove(&fold_path(&path));
             for &c in self.nodes[n].children.values() {
                 todo.push((c, path.join(&self.nodes[c].name)));
             }

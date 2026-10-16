@@ -5,7 +5,7 @@
 
 use crate::layer::{LayerId, Layers};
 use crate::name::fold;
-use crate::tree::{Kind, Node, NodeId, Origin, Tree};
+use crate::tree::{Kind, Node, NodeId, Origin, TMP_PREFIX, Tree};
 use rustix::fs::FileType;
 use rustix::fs::{AtFlags, Mode, OFlags, RenameFlags, Timestamps, fchmod, futimens};
 use rustix::fs::{fstat, mkdirat, openat, renameat, statat, unlinkat};
@@ -232,18 +232,31 @@ pub fn unlink(tree: &mut Tree, layers: &Layers, parent: NodeId, name: &OsStr) ->
     }
     let vpath = tree.path_of(id);
     tree.remove(id);
-    tree.mask(&vpath);
+    tree.whiteout_path(&vpath);
     Ok(())
 }
 
 /// Removes the empty real directories behind the virtual directory `id`, in every layer
 /// except the original one. A directory that still holds (hidden) entries is left alone.
-fn remove_real_dirs(tree: &Tree, layers: &Layers, id: NodeId) -> Result<(), Errno> {
+/// `keep` is a directory that must survive (same layer and same inode): the one a rename
+/// just moved into place.
+fn remove_real_dirs(
+    tree: &Tree,
+    layers: &Layers,
+    id: NodeId,
+    keep: Option<(LayerId, &Path)>,
+) -> Result<(), Errno> {
     for o in &tree.node(id).dir_origins {
         let Some(layer) = layers.list.get(o.layer) else {
             continue;
         };
         if layer.original || layer.file.is_some() || safe_rel(&o.rel).is_err() {
+            continue;
+        }
+        if let Some((kl, kp)) = keep
+            && kl == o.layer
+            && (o.rel == kp || same_file(&layer.dir, &o.rel, kp) == Ok(true))
+        {
             continue;
         }
         match unlinkat(&layer.dir, &o.rel, AtFlags::REMOVEDIR) {
@@ -263,10 +276,10 @@ pub fn rmdir(tree: &mut Tree, layers: &Layers, parent: NodeId, name: &OsStr) -> 
     if !tree.node(id).children.is_empty() {
         return Err(Errno::NOTEMPTY);
     }
-    remove_real_dirs(tree, layers, id)?;
+    remove_real_dirs(tree, layers, id, None)?;
     let vpath = tree.path_of(id);
     tree.remove(id);
-    tree.mask(&vpath);
+    tree.whiteout_path(&vpath);
     Ok(())
 }
 
@@ -489,11 +502,6 @@ pub fn rename(
     }
 
     // Side effects.
-    if let Some(d) = dest
-        && tree.node(d).kind == Kind::Dir
-    {
-        remove_real_dirs(tree, layers, d)?;
-    }
     ensure_parents(layers, dest_layer, &rel_dir)?;
     let dir = &layers.list[dest_layer].dir;
     match plan {
@@ -507,7 +515,7 @@ pub fn rename(
         }
         Plan::CopyOriginal { create } => {
             let tmp = rel_dir.join(format!(
-                ".mo2-vfs-tmp-{}-{}",
+                "{TMP_PREFIX}{}-{}",
                 std::process::id(),
                 TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
             ));
@@ -523,20 +531,80 @@ pub fn rename(
             };
         }
     }
-    // A replaced file of the same layer that was spelled differently is still on disk.
+    // The real rename is done; what follows must not fail the operation.
     if let Some(d) = dest {
-        let dn = tree.node(d);
-        if dn.kind == Kind::File
-            && dn.origin.layer == dest_layer
-            && dn.origin.rel != new_rel
-            && safe_rel(&dn.origin.rel).is_ok()
-        {
-            let _ = unlinkat(dir, &dn.origin.rel, AtFlags::empty());
+        match tree.node(d).kind {
+            Kind::File => {
+                let victim = tree.node(d).origin.clone();
+                if victim.layer == dest_layer && safe_rel(&victim.rel).is_ok() {
+                    remove_replaced_file(dir, &victim.rel, &new_rel);
+                }
+            }
+            Kind::Dir => {
+                if let Err(e) =
+                    remove_real_dirs(tree, layers, d, Some((dest_layer, new_rel.as_path())))
+                {
+                    tracing::warn!(error = %e, "cannot remove the replaced empty directory");
+                }
+            }
         }
+        // Entries of the replaced node in other layers must stay hidden after a rebuild.
+        record_replaced(tree, layers, d, &new_vpath, dest_layer);
     }
-    tree.mask(&old_vpath);
+    tree.whiteout_path(&old_vpath);
     tree.move_node(src, new_parent, new_name);
     Ok(())
+}
+
+/// Hides, for the replaced node `id` and its descendants, the entries of every layer other
+/// than `keep` (the layer that now holds the moved entry).
+fn record_replaced(tree: &mut Tree, layers: &Layers, id: NodeId, vpath: &Path, keep: LayerId) {
+    let node = tree.node(id);
+    let mut hidden: Vec<LayerId> = match node.kind {
+        Kind::File => vec![node.origin.layer],
+        Kind::Dir => node.dir_origins.iter().map(|o| o.layer).collect(),
+    };
+    hidden.sort_unstable();
+    hidden.dedup();
+    let children: Vec<(NodeId, PathBuf)> = tree
+        .children(id)
+        .map(|(c, n)| (c, vpath.join(&n.name)))
+        .collect();
+    for l in hidden {
+        if l != keep
+            && let Some(layer) = layers.list.get(l)
+        {
+            tree.whiteout_origin(&layer.source, vpath);
+        }
+    }
+    for (c, p) in children {
+        record_replaced(tree, layers, c, &p, keep);
+    }
+}
+
+fn same_file(dir: &OwnedFd, a: &Path, b: &Path) -> Result<bool, Errno> {
+    let x = statat(dir, a, AtFlags::SYMLINK_NOFOLLOW)?;
+    let y = statat(dir, b, AtFlags::SYMLINK_NOFOLLOW)?;
+    Ok(x.st_dev == y.st_dev && x.st_ino == y.st_ino)
+}
+
+/// Deletes the file a rename replaced when it was spelled differently from the new name.
+/// On a case-insensitive filesystem both spellings are one entry (the file just renamed),
+/// which `same_file` detects; when that cannot be established nothing is deleted.
+fn remove_replaced_file(dir: &OwnedFd, old: &Path, new: &Path) {
+    if old == new {
+        return;
+    }
+    match same_file(dir, old, new) {
+        Ok(false) => match unlinkat(dir, old, AtFlags::empty()) {
+            Ok(()) | Err(Errno::NOENT) => {}
+            Err(e) => {
+                tracing::warn!(path = %old.display(), error = %e, "cannot remove replaced file")
+            }
+        },
+        Ok(true) | Err(Errno::NOENT) => {}
+        Err(e) => tracing::warn!(path = %old.display(), error = %e, "cannot compare replaced file"),
+    }
 }
 
 #[cfg(test)]
@@ -603,6 +671,10 @@ mod tests {
                 OsStr::new(nname),
                 flags,
             )
+        }
+        /// What a rebuild (tree update) produces from the current whiteouts.
+        fn rebuild(&self) -> Tree {
+            Tree::build_with(&self.layers, &Skip::default(), self.tree.whiteouts())
         }
         fn layer_of(&self, vpath: &str) -> LayerId {
             self.tree.node(self.id(vpath)).origin.layer
@@ -789,7 +861,8 @@ mod tests {
         assert!(fx.gone("textures/rock.dds"));
         assert!(
             fx.tree
-                .masks()
+                .whiteouts()
+                .paths
                 .contains(&crate::name::fold_path(Path::new("Textures/rock.dds")))
         );
     }
@@ -803,7 +876,7 @@ mod tests {
             "orig:Skyrim.esm"
         );
         assert!(fx.gone("Skyrim.esm"));
-        assert_eq!(fx.tree.masks().len(), 1);
+        assert_eq!(fx.tree.whiteouts().paths.len(), 1);
     }
 
     #[test]
@@ -813,7 +886,7 @@ mod tests {
         assert!(fx.p("A/textures").is_dir());
         assert!(!fx.gone("textures"));
         fx.unlink("textures", "rock.dds").unwrap();
-        fx.unlink("Textures", "ROCK.dds").ok(); // already gone from the tree
+        assert_eq!(fx.unlink("Textures", "ROCK.dds").err(), Some(Errno::NOENT));
         assert!(fx.gone("textures/rock.dds"));
         // A's and B's real dirs: A still holds rock.dds (shadowed, masked); B's is empty
         fx.rmdir("", "Textures").unwrap();
@@ -829,7 +902,8 @@ mod tests {
         assert!(fx.gone("textures"));
         assert!(
             fx.tree
-                .masks()
+                .whiteouts()
+                .paths
                 .contains(&crate::name::fold_path(Path::new("textures")))
         );
     }
@@ -862,16 +936,15 @@ mod tests {
     fn create_after_unlink_clears_mask() {
         let mut fx = std_fixture();
         fx.unlink("textures", "rock.dds").unwrap();
-        assert!(!fx.tree.masks().is_empty());
+        assert!(!fx.tree.whiteouts().paths.is_empty());
         fx.create("textures", "rock.dds").unwrap();
-        assert!(fx.tree.masks().is_empty());
+        assert!(fx.tree.whiteouts().paths.is_empty());
         assert!(fx.p("overwrite/textures/rock.dds").is_file());
         assert_eq!(fx.layer_of("textures/rock.dds"), 3);
-        // and a rebuild with the (now empty) masks shows it
-        let masks = fx.tree.masks().clone();
-        let mut t = Tree::build(&fx.layers, &Skip::default());
-        t.apply_masks(&masks);
-        assert!(t.lookup(Path::new("textures/rock.dds")).is_some());
+        // and a rebuild with the (now empty) whiteouts shows it, from the create layer
+        let t = fx.rebuild();
+        let n = t.node(t.lookup(Path::new("textures/rock.dds")).unwrap());
+        assert_eq!(n.origin.layer, 3);
     }
 
     #[test]
@@ -901,7 +974,8 @@ mod tests {
         assert!(fx.gone("a.txt"));
         assert!(
             fx.tree
-                .masks()
+                .whiteouts()
+                .paths
                 .contains(&crate::name::fold_path(Path::new("a.txt")))
         );
         assert_eq!(fx.tree.node(id).parent, fx.tree.root());
@@ -957,7 +1031,7 @@ mod tests {
         assert_eq!(r.err(), Some(Errno::EXIST));
         assert!(fx.p("A/a.txt").is_file());
         assert_eq!(fx.layer_of("b.txt"), 2);
-        assert!(fx.tree.masks().is_empty());
+        assert!(fx.tree.whiteouts().paths.is_empty());
         // without an existing destination it works
         fx.rename_with("", "a.txt", "", "free.txt", RenameFlags::NOREPLACE)
             .unwrap();
@@ -990,7 +1064,8 @@ mod tests {
         assert_eq!(fx.layer_of("skyrim.bak"), 3);
         assert!(
             fx.tree
-                .masks()
+                .whiteouts()
+                .paths
                 .contains(&crate::name::fold_path(Path::new("skyrim.esm")))
         );
         let leftovers: Vec<_> = std::fs::read_dir(fx.p("overwrite"))
@@ -1006,7 +1081,7 @@ mod tests {
         assert_eq!(fx.rename("", "x", "", "y").err(), Some(Errno::ROFS));
         assert!(fx.p("orig/x").exists());
         assert!(fx.tree.lookup(Path::new("x")).is_some());
-        assert!(fx.tree.masks().is_empty());
+        assert!(fx.tree.whiteouts().paths.is_empty());
     }
 
     #[test]
@@ -1023,7 +1098,7 @@ mod tests {
         assert!(fx2.p("orig/od/f").exists());
         assert!(fx2.tree.lookup(Path::new("od/f")).is_some());
         assert!(fx.p("A/textures").is_dir());
-        assert!(fx.tree.masks().is_empty() && fx2.tree.masks().is_empty());
+        assert!(fx.tree.whiteouts().paths.is_empty() && fx2.tree.whiteouts().paths.is_empty());
     }
 
     #[test]
@@ -1107,7 +1182,13 @@ mod tests {
         fx.rename("", "f.txt", "", "F.TXT").unwrap();
         assert!(fx.p("A/F.TXT").exists());
         assert_eq!(fx.tree.node(fx.id("f.txt")).name, "F.TXT");
-        assert!(fx.tree.masks().is_empty() || fx.tree.lookup(Path::new("f.txt")).is_some());
+        assert!(fx.tree.whiteouts().paths.is_empty());
+        let t = fx.rebuild();
+        let n = t.node(t.lookup(Path::new("f.txt")).unwrap());
+        assert_eq!(
+            (n.name.as_os_str(), n.origin.layer),
+            (OsStr::new("F.TXT"), 1)
+        );
     }
 
     #[test]
@@ -1157,21 +1238,168 @@ mod tests {
     }
 
     #[test]
-    fn masks_survive_rebuild() {
+    fn whiteouts_survive_rebuild() {
         let mut fx = std_fixture();
         fx.unlink("", "Skyrim.esm").unwrap();
         fx.unlink("textures", "rock.dds").unwrap();
         fx.rename("", "a.txt", "", "moved.txt").unwrap();
-        let masks = fx.tree.masks().clone();
-        let mut t = Tree::build(&fx.layers, &Skip::default());
-        assert!(t.lookup(Path::new("Skyrim.esm")).is_some());
-        t.apply_masks(&masks);
+        let plain = Tree::build(&fx.layers, &Skip::default());
+        assert!(plain.lookup(Path::new("Skyrim.esm")).is_some());
+        let t = fx.rebuild();
         assert!(t.lookup(Path::new("Skyrim.esm")).is_none());
         assert!(t.lookup(Path::new("textures/rock.dds")).is_none());
         assert!(t.lookup(Path::new("a.txt")).is_none());
         assert!(t.lookup(Path::new("moved.txt")).is_some());
         assert!(t.lookup(Path::new("textures")).is_some());
-        assert_eq!(t.masks(), &masks);
+        assert_eq!(t.whiteouts(), fx.tree.whiteouts());
+    }
+
+    #[test]
+    fn rename_over_higher_layer_file_stays_winning_after_rebuild() {
+        let mut fx = std_fixture();
+        fx.rename("", "a.txt", "", "b.txt").unwrap();
+        assert!(fx.p("B/b.txt").is_file(), "the replaced file is untouched");
+        assert!(!fx.tree.whiteouts().origins.is_empty());
+        assert!(
+            !fx.tree
+                .whiteouts()
+                .paths
+                .contains(&crate::name::fold_path(Path::new("b.txt")))
+        );
+        let t = fx.rebuild();
+        let n = t.node(t.lookup(Path::new("b.txt")).unwrap());
+        assert_eq!(n.origin.layer, 1, "A wins, B's entry stays hidden");
+        assert_eq!(n.origin.rel, Path::new("b.txt"));
+        assert!(t.lookup(Path::new("a.txt")).is_none());
+        // a rebuild without the whiteouts would let B win again
+        let plain = Tree::build(&fx.layers, &Skip::default());
+        assert_eq!(
+            plain
+                .node(plain.lookup(Path::new("b.txt")).unwrap())
+                .origin
+                .layer,
+            2
+        );
+    }
+
+    #[test]
+    fn rename_dir_over_empty_dir_keeps_higher_layer_dir_hidden_after_rebuild() {
+        let mut fx = fixture(
+            &[
+                ("orig", &[]),
+                ("A", &["src/f.txt"]),
+                ("B", &["dst/keep.mohidden"]),
+                ("o", &[]),
+            ],
+            true,
+        );
+        let skip = Skip::new(&[".mohidden".to_string()], &[]);
+        fx.tree = Tree::build(&fx.layers, &skip);
+        assert!(fx.tree.children(fx.id("dst")).next().is_none());
+        fx.rename("", "src", "", "dst").unwrap();
+        assert!(fx.p("A/dst/f.txt").is_file());
+        assert!(!fx.p("A/src").exists());
+        assert!(
+            fx.p("B/dst/keep.mohidden").exists(),
+            "B's real dir untouched"
+        );
+        let t = Tree::build_with(&fx.layers, &skip, fx.tree.whiteouts());
+        let dst = t.node(t.lookup(Path::new("dst")).unwrap());
+        let layers: Vec<_> = dst.dir_origins.iter().map(|o| o.layer).collect();
+        assert_eq!(layers, [1], "B's dst no longer takes part");
+        assert_eq!(dst.origin.layer, 1);
+        assert!(t.lookup(Path::new("dst/f.txt")).is_some());
+        assert!(t.lookup(Path::new("src")).is_none());
+        // in-memory tree agrees
+        let n = fx.tree.node(fx.id("dst"));
+        assert_eq!(
+            n.dir_origins.iter().map(|o| o.layer).collect::<Vec<_>>(),
+            [1]
+        );
+    }
+
+    #[test]
+    fn rename_dir_over_empty_dir_removes_its_empty_real_dirs_after_the_move() {
+        let mut fx = fixture(
+            &[("orig", &[]), ("A", &["src/f.txt"]), ("B", &[]), ("o", &[])],
+            true,
+        );
+        std::fs::create_dir_all(fx.p("B/dst")).unwrap();
+        std::fs::create_dir_all(fx.p("A/DST")).unwrap();
+        fx.tree = Tree::build(&fx.layers, &Skip::default());
+        fx.rename("", "src", "", "dst").unwrap();
+        assert!(
+            !fx.p("B/dst").exists(),
+            "empty dir of the replaced node removed"
+        );
+        assert!(fx.p("A/dst/f.txt").is_file(), "moved dir survives");
+        assert!(!fx.p("A/DST").exists());
+        assert!(fx.tree.lookup(Path::new("dst/f.txt")).is_some());
+    }
+
+    #[test]
+    fn replaced_file_that_aliases_the_new_name_is_not_deleted() {
+        // Simulates a case-insensitive layer: the victim's recorded name is another name of
+        // the very file the rename just put in place.
+        let mut fx = fixture(
+            &[("orig", &[]), ("A", &["a.txt", "old.txt"]), ("o", &[])],
+            true,
+        );
+        std::fs::hard_link(fx.p("A/a.txt"), fx.p("A/alias")).unwrap();
+        let victim = fx.id("old.txt");
+        fx.tree.node_mut(victim).origin.rel = PathBuf::from("alias");
+        fx.rename("", "a.txt", "", "old.txt").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(fx.p("A/old.txt")).unwrap(),
+            "A:a.txt"
+        );
+        assert!(fx.p("A/alias").exists(), "alias of the new file must stay");
+        // a genuinely different file with another spelling is removed
+        write(&fx.p("A"), "Other.TXT", "v");
+        write(&fx.p("A"), "c.txt", "c");
+        fx.tree = Tree::build(&fx.layers, &Skip::default());
+        fx.rename("", "c.txt", "", "other.txt").unwrap();
+        assert!(!fx.p("A/Other.TXT").exists());
+        assert_eq!(std::fs::read_to_string(fx.p("A/other.txt")).unwrap(), "c");
+    }
+
+    #[test]
+    fn remove_replaced_file_compares_inodes() {
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "x", "x");
+        std::fs::hard_link(tmp.path().join("x"), tmp.path().join("y")).unwrap();
+        write(tmp.path(), "z", "z");
+        let dir = openat(
+            rustix::fs::CWD,
+            tmp.path(),
+            OFlags::RDONLY | OFlags::DIRECTORY,
+            Mode::empty(),
+        )
+        .unwrap();
+        remove_replaced_file(&dir, Path::new("y"), Path::new("x"));
+        assert!(tmp.path().join("y").exists());
+        remove_replaced_file(&dir, Path::new("gone"), Path::new("x"));
+        remove_replaced_file(&dir, Path::new("z"), Path::new("missing"));
+        assert!(
+            tmp.path().join("z").exists(),
+            "unknown new name: nothing deleted"
+        );
+        remove_replaced_file(&dir, Path::new("z"), Path::new("x"));
+        assert!(!tmp.path().join("z").exists());
+    }
+
+    #[test]
+    fn temp_copy_files_are_not_shown_from_mapping_layers() {
+        let fx = fixture(
+            &[
+                ("orig", &[".mo2-vfs-tmp-keepme"]),
+                ("A", &[".mo2-vfs-tmp-1-1", "ok.txt"]),
+            ],
+            false,
+        );
+        assert!(fx.tree.lookup(Path::new("ok.txt")).is_some());
+        assert!(fx.tree.lookup(Path::new(".mo2-vfs-tmp-1-1")).is_none());
+        assert!(fx.tree.lookup(Path::new(".mo2-vfs-tmp-keepme")).is_some());
     }
 
     #[test]
