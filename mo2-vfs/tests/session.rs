@@ -359,14 +359,24 @@ fn changes_during_updates_are_not_lost() {
         }
     };
     let mut flip = false;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
     while done.load(Ordering::Acquire) < N {
+        if worker.is_finished() {
+            break; // a finished worker that did not reach N panicked; join reports it below
+        }
+        if std::time::Instant::now() > deadline {
+            panic!(
+                "changes_during_updates_are_not_lost: worker did not finish in 60 s ({} of {N} done)",
+                done.load(Ordering::Acquire)
+            );
+        }
         let before = done.load(Ordering::Acquire);
         flip = !flip;
         s.update(if flip { &only_a } else { &both }, Skip::default())
             .unwrap();
         check(before);
     }
-    worker.join().unwrap();
+    worker.join().expect("worker thread panicked");
     s.update(&both, Skip::default()).unwrap();
     check(N);
     s.unmount().unwrap();
