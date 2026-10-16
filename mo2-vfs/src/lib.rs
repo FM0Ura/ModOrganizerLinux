@@ -7,3 +7,6 @@
 //! - `session`: one mount per root; opens the original layer fd before mounting; state file.
 //! - `ipc`: line-delimited JSON protocol over stdin/stdout.
 //! - `bin/mo2-vfs.rs`: arguments, logging, signals and the `ipc` loop.
+
+pub mod mapping;
+pub mod name;
