@@ -55,6 +55,8 @@ pub struct VfsShared {
     /// Swapped together with the tree (under the tree write lock) by a hot update. Handlers
     /// read it while holding the tree lock, so a node's layer id always matches this list.
     layers: RwLock<Arc<Layers>>,
+    /// See `generation()`.
+    generation: AtomicU64,
     pub handles: Mutex<HashMap<u64, Arc<OwnedFd>>>,
     /// Kernel passthrough backing ids, alive as long as their file handle.
     backings: Mutex<HashMap<u64, BackingId>>,
@@ -75,17 +77,23 @@ impl VfsShared {
         self.layers.read().clone()
     }
 
-    /// Replaces tree and layers together if the tree's whiteouts are still `whiteouts` (a
-    /// handler may have added one since the new tree was built); otherwise gives the tree
+    /// The tree generation: bumped by every operation that may change the tree. Read it while
+    /// holding the tree lock (read) together with whatever is copied from the tree.
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
+    /// Replaces tree and layers together if no operation touched the tree since `generation`
+    /// was read (the new tree was built from a scan that missed it); otherwise gives the tree
     /// back. Returns the previous pair.
     pub fn swap_if(
         &self,
         tree: Tree,
         layers: Arc<Layers>,
-        whiteouts: &Whiteouts,
+        generation: u64,
     ) -> Result<(Tree, Arc<Layers>), Tree> {
         let mut t = self.tree.write();
-        if t.whiteouts() != whiteouts {
+        if self.generation() != generation {
             return Err(tree);
         }
         let old_tree = std::mem::replace(&mut *t, tree);
@@ -190,6 +198,7 @@ impl Vfs {
                 tree: RwLock::new(tree),
                 inodes: Mutex::new(Inodes::new()),
                 layers: RwLock::new(Arc::new(layers)),
+                generation: AtomicU64::new(0),
                 handles: Mutex::new(HashMap::new()),
                 backings: Mutex::new(HashMap::new()),
                 next_fh: AtomicU64::new(1),
@@ -422,6 +431,7 @@ impl Vfs {
     fn mutate<T>(&self, parent: u64, f: impl FnOnce(&mut Tree, NodeId) -> Res<T>) -> Res<T> {
         // Tree first, then inodes.
         let mut tree = self.shared.tree.write();
+        self.shared.generation.fetch_add(1, Ordering::AcqRel);
         let pkey = self.key_of(parent)?;
         let pid = tree.lookup_folded(&pkey).ok_or(Errno::ENOENT)?;
         f(&mut tree, pid)

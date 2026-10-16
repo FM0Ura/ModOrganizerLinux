@@ -312,3 +312,62 @@ fn stale_state_of_a_dead_process_is_cleaned() {
     drop(s); // the filesystem thread has ended; Drop must cope with the missing mount
     let _ = fs::remove_dir_all(&e.state);
 }
+
+#[test]
+fn parent_dir_in_destination_is_bad_mapping() {
+    let e = Env::new();
+    e.write("mod/a.txt", "a");
+    let mut m = e.dir_map("mod", "Data", false);
+    m.destination = e.p("Data/../Other");
+    let err = Session::mount_in(&e.state, &[m], Skip::default())
+        .err()
+        .expect("must fail");
+    assert_eq!(err.code, ErrorCode::BadMapping);
+}
+
+#[test]
+fn changes_during_updates_are_not_lost() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    // B first, A (the create layer) last
+    let both = vec![e.dir_map("B", "Data", false), e.dir_map("A", "Data", true)];
+    let only_a = vec![e.dir_map("A", "Data", true)];
+    let mut s = e.mount(&both);
+    let data = e.p("Data");
+    let done = std::sync::Arc::new(AtomicUsize::new(0));
+    const N: usize = 150;
+    let worker = {
+        let (data, done) = (data.clone(), done.clone());
+        std::thread::spawn(move || {
+            for i in 0..N {
+                let tmp = data.join(format!("tmp-{i}.part"));
+                fs::write(&tmp, format!("{i}")).unwrap();
+                fs::create_dir_all(data.join(format!("d{}", i % 5))).unwrap();
+                fs::rename(&tmp, data.join(format!("d{}/final-{i}.txt", i % 5))).unwrap();
+                done.store(i + 1, Ordering::Release);
+            }
+        })
+    };
+    let check = |upto: usize| {
+        for i in 0..upto {
+            let f = data.join(format!("d{}/final-{i}.txt", i % 5));
+            assert_eq!(fs::read_to_string(&f).unwrap(), format!("{i}"), "{f:?}");
+            assert!(!data.join(format!("tmp-{i}.part")).exists());
+        }
+    };
+    let mut flip = false;
+    while done.load(Ordering::Acquire) < N {
+        let before = done.load(Ordering::Acquire);
+        flip = !flip;
+        s.update(if flip { &only_a } else { &both }, Skip::default())
+            .unwrap();
+        check(before);
+    }
+    worker.join().unwrap();
+    s.update(&both, Skip::default()).unwrap();
+    check(N);
+    s.unmount().unwrap();
+}

@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt;
 use std::io;
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -109,9 +110,12 @@ fn check_fuse() -> Result<(), SessionError> {
 }
 
 impl Session {
-    /// Mounts every root of `mappings`, with the state file in `state::state_dir()`.
+    /// Mounts every root of `mappings`, with the state file in `state::state_dir()`. State
+    /// files are keyed by pid, so a process holds one `Session` at a time.
     pub fn mount(mappings: &[Mapping], skip: Skip) -> Result<Session, SessionError> {
-        Session::mount_in(&state::state_dir(), mappings, skip)
+        let dir = state::ensure_state_dir()
+            .map_err(|e| SessionError::new(ErrorCode::Io, format!("state directory: {e}"), None))?;
+        Session::mount_in(&dir, mappings, skip)
     }
 
     pub fn mount_in(
@@ -310,16 +314,20 @@ fn mount_root(
     }
 }
 
-/// Builds the tree for `layers` (carrying the current whiteouts) and swaps both in.
+/// Builds the tree for `layers` (carrying the current whiteouts) and swaps both in. The swap
+/// only happens if no handler changed the tree since the scan started.
 fn swap_in(shared: &VfsShared, layers: Arc<Layers>, skip: &Skip) -> (Tree, Arc<Layers>) {
     for _ in 0..3 {
-        let whiteouts = shared.tree.read().whiteouts().clone();
+        let (generation, whiteouts) = {
+            let tree = shared.tree.read();
+            (shared.generation(), tree.whiteouts().clone())
+        };
         let tree = Tree::build_with(&layers, skip, &whiteouts);
-        if let Ok(old) = shared.swap_if(tree, layers.clone(), &whiteouts) {
+        if let Ok(old) = shared.swap_if(tree, layers.clone(), generation) {
             return old;
         }
     }
-    // Handlers keep adding whiteouts; stop racing them.
+    tracing::warn!("tree changed during every rebuild attempt; rebuilding under the lock");
     shared.rebuild_locked(layers.clone(), |w| Tree::build_with(&layers, skip, w))
 }
 
@@ -393,10 +401,7 @@ fn changes(shared: &VfsShared, old_tree: &Tree, old_layers: &Layers) -> Vec<Inva
             continue;
         };
         out.insert(Inval::Inode(pino));
-        let last = OsString::from(
-            String::from_utf8_lossy(key.0.rsplit(|&b| b == b'/').next().unwrap_or(&[]))
-                .into_owned(),
-        );
+        let last = OsString::from_vec(key.0.rsplit(|&b| b == b'/').next().unwrap_or(&[]).to_vec());
         for name in [before.map(|b| b.1), after.map(|a| a.1)]
             .into_iter()
             .flatten()

@@ -10,25 +10,62 @@ use std::path::{Path, PathBuf};
 
 pub const FSTYPE: &str = "fuse.mo2-vfs";
 
+/// One state file per process (`state-<pid>.json`), hence one `Session` per process.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct StateFile {
     pub pid: u32,
     pub roots: Vec<PathBuf>,
 }
 
-/// `$MO2_VFS_STATE_DIR` if set, else `$XDG_RUNTIME_DIR/mo2-vfs`.
+fn fallback_dir() -> PathBuf {
+    PathBuf::from(format!(
+        "/tmp/mo2-vfs-{}",
+        rustix::process::getuid().as_raw()
+    ))
+}
+
+/// `$MO2_VFS_STATE_DIR` if set, else `$XDG_RUNTIME_DIR/mo2-vfs`, else a per-user directory
+/// under /tmp (use `ensure_state_dir` to get that one checked).
 pub fn state_dir() -> PathBuf {
     if let Some(d) = std::env::var_os("MO2_VFS_STATE_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(d);
     }
     match std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty()) {
         Some(d) => PathBuf::from(d).join("mo2-vfs"),
-        // No runtime dir: a per-user directory under /tmp.
-        None => PathBuf::from(format!(
-            "/tmp/mo2-vfs-{}",
-            rustix::process::getuid().as_raw()
-        )),
+        None => fallback_dir(),
     }
+}
+
+/// Creates `dir` with mode 0700 if missing; fails unless it is a real directory owned by the
+/// current user with mode 0700 (a world-writable /tmp path may have been planted).
+pub fn ensure_private_dir(dir: &Path) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    match fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    let md = fs::symlink_metadata(dir)?;
+    if !md.is_dir() || md.uid() != rustix::process::getuid().as_raw() || md.mode() & 0o777 != 0o700
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is not a private (0700) directory owned by the current user",
+                dir.display()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// `state_dir()`, verified when it is the /tmp fallback.
+pub fn ensure_state_dir() -> io::Result<PathBuf> {
+    let dir = state_dir();
+    if dir == fallback_dir() {
+        ensure_private_dir(&dir)?;
+    }
+    Ok(dir)
 }
 
 fn file_for(dir: &Path, pid: u32) -> PathBuf {
@@ -37,7 +74,7 @@ fn file_for(dir: &Path, pid: u32) -> PathBuf {
 
 impl StateFile {
     pub fn write(pid: u32, roots: &[PathBuf]) -> io::Result<()> {
-        Self::write_in(&state_dir(), pid, roots)
+        Self::write_in(&ensure_state_dir()?, pid, roots)
     }
 
     pub fn remove(pid: u32) {
@@ -122,7 +159,13 @@ fn pid_alive(pid: u32) -> bool {
 }
 
 pub fn cleanup_stale() -> Vec<(PathBuf, Result<(), String>)> {
-    cleanup_stale_in(&state_dir())
+    match ensure_state_dir() {
+        Ok(d) => cleanup_stale_in(&d),
+        Err(e) => {
+            tracing::warn!(error = %e, "state directory unusable, no stale cleanup");
+            Vec::new()
+        }
+    }
 }
 
 /// Unmounts the roots left by dead processes (state files whose pid no longer exists). Only
@@ -196,6 +239,24 @@ mod tests {
         StateFile::remove_in(d.path(), 7);
         StateFile::remove_in(d.path(), 7);
         assert!(!d.path().join("state-7.json").exists());
+    }
+
+    #[test]
+    fn private_dir_is_checked() {
+        use std::os::unix::fs::PermissionsExt;
+        let t = tempfile::tempdir().unwrap();
+        let d = t.path().join("new");
+        ensure_private_dir(&d).unwrap();
+        assert_eq!(
+            fs::metadata(&d).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        ensure_private_dir(&d).unwrap(); // existing and fine
+        fs::set_permissions(&d, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(ensure_private_dir(&d).is_err());
+        let link = t.path().join("link");
+        std::os::unix::fs::symlink(t.path(), &link).unwrap();
+        assert!(ensure_private_dir(&link).is_err());
     }
 
     #[test]
