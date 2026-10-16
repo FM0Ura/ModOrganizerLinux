@@ -29,7 +29,8 @@ Each run appends a section below.
 
 All four targets were missed in this run.
 
-- Method: the instance lives in `/var/tmp` (overlay on NVMe, so not tmpfs); the mountpoint is
+- Method: the instance lives in `/var/tmp` of the distrobox (an overlay filesystem, which
+  flatters the native baseline; use `--tmpdir` to place it on a real filesystem); the mountpoint is
   the generated empty `data` directory with one directory mapping per mod, alphabetical order
   = priority. The "native" tree is a plain copy of the mounted view made by the bench through
   the view before timing (untimed). The first walk of each kind is an untimed warm-up, then
@@ -45,7 +46,7 @@ All four targets were missed in this run.
   readdir page restarts the child iterator with `.skip(offset)`, which is quadratic in the
   size of big directories. The FUSE round trips (one per page) add to that.
 - `open`+`read`+`close` (about 107 us per file versus 17 us native) pays for FUSE lookups,
-  open and read round trips to the daemon on each file (a passthrough open is used when the
-  kernel allows it); the 6x ratio is mostly round-trip latency, so the 2x target probably
+  open and read round trips to the daemon on each file (passthrough was off: the bench mounts with
+  `VfsOptions::default()`, `try_passthrough: false`); the 6x ratio is mostly round-trip latency, so the 2x target probably
   needs longer kernel attribute/entry timeouts and cheaper per-call work rather than a
   single fix.

@@ -2,10 +2,11 @@
 # Phase 2 VFS benchmark: generate a synthetic instance, run mo2-vfs-bench 3 times and
 # append the medians (against the spec 8 targets) to benchmarks/results/2026-10-phase2-vfs.md.
 #
-#   benchmarks/run-vfs.sh [--mods N] [--files N] [--seed N] [--runs N] [--results FILE] [--no-record]
+#   benchmarks/run-vfs.sh [--mods N] [--files N] [--seed N] [--runs N] [--tmpdir DIR] [--results FILE] [--no-record]
 #
 # Defaults: 2000 mods, 200000 files, seed 1, 3 runs. The instance is generated in a
-# temporary directory (BENCH_TMPDIR, default $TMPDIR or /tmp) and removed afterwards; when
+# temporary directory (--tmpdir or BENCH_TMPDIR, default $TMPDIR or /tmp; put it on a real
+# filesystem, not tmpfs or a container overlay, which flatter the native baseline) and removed afterwards; when
 # the disk has too little free space the size is scaled down (mods and files by the same
 # factor) and the size actually used is recorded. The merged tree is also copied once to a
 # plain directory (the "native" comparison), so about twice the instance size is needed.
@@ -33,9 +34,10 @@ while [[ $# -gt 0 ]]; do
         --files) FILES="$2"; shift 2 ;;
         --seed) SEED="$2"; shift 2 ;;
         --runs) RUNS="$2"; shift 2 ;;
+        --tmpdir) BENCH_TMPDIR="$2"; shift 2 ;;
         --results) RESULTS="$2"; shift 2 ;;
         --no-record) RECORD=0; shift ;;
-        -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
         *) die "unknown argument: $1" ;;
     esac
 done
@@ -73,8 +75,11 @@ fi
 
 WORK="$(mktemp -d "$TMPBASE/mo2-vfs-bench.XXXXXX")"
 cleanup() {
-    findmnt -rn -t fuse.mo2-vfs -o TARGET | grep -F "$WORK" | while read -r m; do fusermount3 -u -z "$m" || true; done
+    # nothing in here may abort: errexit must not stop the rm
+    set +e
+    findmnt -rn -t fuse.mo2-vfs -o TARGET 2>/dev/null | grep -F "$WORK" | while read -r m; do fusermount3 -u -z "$m"; done
     rm -rf "$WORK"
+    return 0
 }
 trap cleanup EXIT
 

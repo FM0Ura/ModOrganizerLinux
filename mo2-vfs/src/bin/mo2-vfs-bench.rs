@@ -149,7 +149,13 @@ fn run(a: &Args) -> Result<(), String> {
         .map_err(io("--mods"))?
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-        .map(|e| e.path().canonicalize().unwrap())
+        .filter_map(|e| match e.path().canonicalize() {
+            Ok(p) => Some(p),
+            Err(err) => {
+                eprintln!("mo2-vfs-bench: skipping {}: {err}", e.path().display());
+                None
+            }
+        })
         .collect();
     mod_dirs.sort();
     let mappings: Vec<Mapping> = mod_dirs
@@ -176,6 +182,9 @@ fn run(a: &Args) -> Result<(), String> {
     let result = (|| -> Result<serde_json::Value, String> {
         // Native comparison tree: the merged view copied to a plain directory, untimed.
         copy_tree(&data, &native).map_err(io("copy of the merged view"))?;
+
+        // Flush the freshly written copy so writeback does not disturb the timed walks.
+        let _ = std::process::Command::new("sync").status();
 
         let mut files = Vec::new();
         let entries = walk(&native, Path::new(""), &mut Some(&mut files)).map_err(io("walk"))?;
