@@ -1,9 +1,9 @@
 //! Merged virtual tree built from the layers.
 
 use crate::layer::{Layer, LayerId, Layers, Skip};
-use crate::name::{Key, fold};
+use crate::name::{Key, fold, fold_path};
 use rustix::fs::{AtFlags, Dir, FileType, Mode, OFlags, openat, statat};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{OsStr, OsString};
 use std::os::fd::OwnedFd;
 use std::os::unix::ffi::OsStrExt;
@@ -39,6 +39,7 @@ pub struct Node {
 
 pub struct Tree {
     nodes: Vec<Node>,
+    masks: BTreeSet<Key>,
 }
 
 impl Tree {
@@ -55,7 +56,10 @@ impl Tree {
             dir_origins: Vec::new(),
             children: BTreeMap::new(),
         };
-        let mut tree = Tree { nodes: vec![root] };
+        let mut tree = Tree {
+            nodes: vec![root],
+            masks: BTreeSet::new(),
+        };
         for layer in &layers.list {
             tree.add_layer(layer, skip);
         }
@@ -84,7 +88,7 @@ impl Tree {
                         layer: layer.id,
                         rel: PathBuf::from(file),
                     };
-                    self.insert(parent, name, kind, origin);
+                    self.put(parent, name, kind, origin);
                 }
                 None => tracing::warn!(source = %layer.source.display(), "mapped file unavailable"),
             }
@@ -134,14 +138,14 @@ impl Tree {
             layer,
             rel: PathBuf::from("."),
         };
-        let id = self.insert(parent, name, Kind::Dir, origin);
+        let id = self.put(parent, name, Kind::Dir, origin);
         self.nodes[id].dir_origins.clear();
         id
     }
 
     /// Inserts or overwrites the child `name` of `parent`. A directory over a directory
     /// merges (keeping the children); any other combination replaces the node.
-    fn insert(&mut self, parent: NodeId, name: &OsStr, kind: Kind, origin: Origin) -> NodeId {
+    fn put(&mut self, parent: NodeId, name: &OsStr, kind: Kind, origin: Origin) -> NodeId {
         let key = fold(name);
         if let Some(&id) = self.nodes[parent].children.get(&key) {
             let node = &mut self.nodes[id];
@@ -233,7 +237,7 @@ impl Tree {
                         continue;
                     }
                 };
-                let id = self.insert(node, &name, Kind::Dir, origin);
+                let id = self.put(node, &name, Kind::Dir, origin);
                 stack.push(id_key);
                 self.scan(layer, &sub, &child_rel, id, skip, stack);
                 stack.pop();
@@ -241,9 +245,132 @@ impl Tree {
                 if skip.skips_file(&name) {
                     continue;
                 }
-                self.insert(node, &name, Kind::File, origin);
+                self.put(node, &name, Kind::File, origin);
             }
         }
+    }
+
+    /// Paths hidden by the VFS itself (deletions and renames), folded.
+    pub fn masks(&self) -> &BTreeSet<Key> {
+        &self.masks
+    }
+
+    /// Hides `vpath` on rebuilds (see `apply_masks`). Does not touch the nodes.
+    pub fn mask(&mut self, vpath: &Path) {
+        let key = fold_path(vpath);
+        if !key.0.is_empty() {
+            self.masks.insert(key);
+        }
+    }
+
+    /// Adopts `masks` and detaches the nodes at those paths.
+    pub fn apply_masks(&mut self, masks: &BTreeSet<Key>) {
+        for key in masks {
+            if key.0.is_empty() {
+                continue;
+            }
+            self.masks.insert(key.clone());
+            let mut cur = 0;
+            let mut found = true;
+            for comp in key.0.split(|&b| b == b'/') {
+                match self.nodes[cur].children.get(&Key(comp.to_vec())) {
+                    Some(&id) => cur = id,
+                    None => {
+                        found = false;
+                        break;
+                    }
+                }
+            }
+            if found {
+                self.remove(cur);
+            }
+        }
+    }
+
+    /// Adds `node` as a child of `parent`, replacing a child with the same folded name
+    /// (the replaced node keeps its id). Clears the mask on the resulting path.
+    pub fn insert(&mut self, parent: NodeId, mut node: Node) -> NodeId {
+        let key = fold(&node.name);
+        node.parent = parent;
+        let id = match self.nodes[parent].children.get(&key) {
+            Some(&id) => {
+                self.nodes[id] = node;
+                id
+            }
+            None => {
+                let id = self.nodes.len();
+                self.nodes.push(node);
+                self.nodes[parent].children.insert(key, id);
+                id
+            }
+        };
+        self.unmask_subtree(id);
+        id
+    }
+
+    /// Detaches `id` from its parent (its subtree becomes unreachable). The root stays.
+    pub fn remove(&mut self, id: NodeId) {
+        if id == 0 {
+            return;
+        }
+        let parent = self.nodes[id].parent;
+        let key = fold(&self.nodes[id].name);
+        if self.nodes[parent].children.get(&key) == Some(&id) {
+            self.nodes[parent].children.remove(&key);
+        }
+    }
+
+    /// Moves `id` (keeping its id and subtree) under `new_parent` as `new_name`. A node that
+    /// already has that name there is detached. Clears masks on the moved paths.
+    pub fn move_node(&mut self, id: NodeId, new_parent: NodeId, new_name: &OsStr) {
+        if id == 0 {
+            return;
+        }
+        self.remove(id);
+        let key = fold(new_name);
+        self.nodes[new_parent].children.remove(&key);
+        let node = &mut self.nodes[id];
+        node.name = new_name.to_os_string();
+        node.parent = new_parent;
+        self.nodes[new_parent].children.insert(key, id);
+        self.unmask_subtree(id);
+    }
+
+    fn unmask_subtree(&mut self, id: NodeId) {
+        if self.masks.is_empty() {
+            return;
+        }
+        let mut todo = vec![(id, self.path_of(id))];
+        while let Some((n, path)) = todo.pop() {
+            self.masks.remove(&fold_path(&path));
+            for &c in self.nodes[n].children.values() {
+                todo.push((c, path.join(&self.nodes[c].name)));
+            }
+        }
+    }
+
+    /// Rewrites, for `id` and its descendants, the origins of `layer` whose `rel` starts with
+    /// `old` so that they start with `new` (after a real directory rename).
+    pub fn rebase_origins(&mut self, id: NodeId, layer: LayerId, old: &Path, new: &Path) {
+        let fix = |o: &mut Origin| {
+            if o.layer == layer
+                && let Ok(rest) = o.rel.strip_prefix(old)
+            {
+                o.rel = new.join(rest);
+            }
+        };
+        let mut todo = vec![id];
+        while let Some(n) = todo.pop() {
+            let node = &mut self.nodes[n];
+            fix(&mut node.origin);
+            node.dir_origins.iter_mut().for_each(fix);
+            todo.extend(node.children.values());
+        }
+    }
+
+    /// Mutable access for operations that retarget a node's origin.
+    pub(crate) fn node_mut(&mut self, id: NodeId) -> &mut Node {
+        &mut self.nodes[id]
     }
 
     pub fn root(&self) -> NodeId {

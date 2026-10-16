@@ -11,4 +11,5 @@
 pub mod layer;
 pub mod mapping;
 pub mod name;
+pub mod ops;
 pub mod tree;
