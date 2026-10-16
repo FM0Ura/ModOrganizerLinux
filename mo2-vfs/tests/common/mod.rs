@@ -136,7 +136,7 @@ impl Mounted {
             use std::os::fd::AsRawFd;
             PathBuf::from(format!(
                 "/proc/self/fd/{}",
-                self.shared.layers.list[0].dir.as_raw_fd()
+                self.shared.layers().list[0].dir.as_raw_fd()
             ))
         } else {
             self.fixture.dir(layer)

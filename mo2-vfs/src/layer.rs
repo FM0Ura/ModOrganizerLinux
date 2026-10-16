@@ -50,9 +50,20 @@ pub fn open_layers(root: &RootSpec) -> io::Result<Layers> {
         std::fs::create_dir_all(&root.mountpoint)?;
         created_mountpoint = true;
     }
+    let original = open_dir(&root.mountpoint)?;
+    layers_over(root, original, created_mountpoint)
+}
+
+/// Opens the mapping layers of `root` on top of an already open original layer. Used by hot
+/// updates, when the mountpoint path leads into the mount itself.
+pub fn layers_over(
+    root: &RootSpec,
+    original: OwnedFd,
+    created_mountpoint: bool,
+) -> io::Result<Layers> {
     let mut list = vec![Layer {
         id: 0,
-        dir: open_dir(&root.mountpoint)?,
+        dir: original,
         file: None,
         target: PathBuf::new(),
         create: false,

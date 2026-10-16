@@ -1,0 +1,314 @@
+mod common;
+
+use common::{require_fuse, tempdir};
+use mo2_vfs::layer::Skip;
+use mo2_vfs::mapping::Mapping;
+use mo2_vfs::session::{ErrorCode, Session};
+use mo2_vfs::state::{self, StateFile};
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+struct Env {
+    _tmp: tempfile::TempDir,
+    root: PathBuf,
+    state: PathBuf,
+}
+
+impl Env {
+    fn new() -> Env {
+        let tmp = tempdir();
+        let root = tmp.path().canonicalize().unwrap();
+        let state = root.join("state");
+        Env {
+            _tmp: tmp,
+            root,
+            state,
+        }
+    }
+
+    fn write(&self, rel: &str, content: &str) {
+        let p = self.root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, content).unwrap();
+    }
+
+    fn p(&self, rel: &str) -> PathBuf {
+        self.root.join(rel)
+    }
+
+    fn dir_map(&self, source: &str, dest: &str, create: bool) -> Mapping {
+        Mapping {
+            source: self.p(source),
+            destination: self.p(dest),
+            is_directory: true,
+            create_target: create,
+        }
+    }
+
+    fn mount(&self, mappings: &[Mapping]) -> Session {
+        Session::mount_in(&self.state, mappings, Skip::default()).expect("mount")
+    }
+}
+
+fn is_mounted(p: &Path) -> bool {
+    state::mounted_mo2_vfs().iter().any(|m| m == p)
+}
+
+/// Data/ holds the original; A and B both ship textures/rock.dds, B wins.
+fn rock_env() -> Env {
+    let e = Env::new();
+    e.write("Data/Skyrim.esm", "orig");
+    e.write("A/textures/rock.dds", "A-rock-is-longer");
+    e.write("B/textures/rock.dds", "B-rock");
+    e
+}
+
+fn rock_maps(e: &Env, with_b: bool) -> Vec<Mapping> {
+    let mut m = vec![e.dir_map("A", "Data", false)];
+    if with_b {
+        m.push(e.dir_map("B", "Data", false));
+    }
+    m
+}
+
+#[test]
+fn mounts_every_root() {
+    if !require_fuse() {
+        return;
+    }
+    let e = Env::new();
+    e.write("Data/orig.esm", "o");
+    e.write("Saves/old.ess", "s");
+    e.write("mod/a.txt", "a");
+    e.write("prof/saves/new.ess", "n");
+    let s = e.mount(&[
+        e.dir_map("mod", "Data", false),
+        e.dir_map("prof/saves", "Saves", true),
+    ]);
+    assert_eq!(s.roots().len(), 2);
+    assert!(is_mounted(&e.p("Data")) && is_mounted(&e.p("Saves")));
+    assert_eq!(fs::read_to_string(e.p("Data/a.txt")).unwrap(), "a");
+    assert_eq!(fs::read_to_string(e.p("Saves/new.ess")).unwrap(), "n");
+    assert_eq!(fs::read_to_string(e.p("Saves/old.ess")).unwrap(), "s");
+    assert!(s.stats().nodes >= 5);
+    s.unmount().unwrap();
+    assert!(!is_mounted(&e.p("Data")) && !is_mounted(&e.p("Saves")));
+}
+
+#[test]
+fn missing_root_is_created_and_removed() {
+    if !require_fuse() {
+        return;
+    }
+    let e = Env::new();
+    e.write("mod/a.txt", "a");
+    let s = e.mount(&[e.dir_map("mod", "NewDir", false)]);
+    assert_eq!(fs::read_to_string(e.p("NewDir/a.txt")).unwrap(), "a");
+    s.unmount().unwrap();
+    assert!(!e.p("NewDir").exists());
+}
+
+#[test]
+fn update_swaps_tree_and_invalidates() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    let mut s = e.mount(&rock_maps(&e, true));
+    let rock = e.p("Data/textures/rock.dds");
+    assert_eq!(fs::read_to_string(&rock).unwrap(), "B-rock");
+    assert_eq!(fs::metadata(&rock).unwrap().len(), 6); // now cached by the kernel for 60 s
+    let before = Instant::now();
+    s.update(&rock_maps(&e, false), Skip::default()).unwrap();
+    assert_eq!(fs::metadata(&rock).unwrap().len(), 16);
+    assert_eq!(fs::read_to_string(&rock).unwrap(), "A-rock-is-longer");
+    assert!(
+        before.elapsed() < Duration::from_secs(10),
+        "waited for the TTL"
+    );
+    // a file that appears with the new mapping is visible at once, a vanished one is gone
+    e.write("C/new.txt", "c");
+    let mut maps = rock_maps(&e, false);
+    maps.push(e.dir_map("C", "Data", false));
+    assert!(!e.p("Data/new.txt").exists()); // caches a negative entry
+    s.update(&maps, Skip::default()).unwrap();
+    assert_eq!(fs::read_to_string(e.p("Data/new.txt")).unwrap(), "c");
+    s.update(&rock_maps(&e, false), Skip::default()).unwrap();
+    assert!(!e.p("Data/new.txt").exists());
+    s.unmount().unwrap();
+}
+
+#[test]
+fn masks_survive_update() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    let mut s = e.mount(&rock_maps(&e, true));
+    fs::remove_file(e.p("Data/Skyrim.esm")).unwrap();
+    assert!(!e.p("Data/Skyrim.esm").exists());
+    assert_eq!(s.stats().masks, 1);
+    s.update(&rock_maps(&e, false), Skip::default()).unwrap();
+    assert!(!e.p("Data/Skyrim.esm").exists());
+    assert_eq!(s.stats().masks, 1);
+    s.unmount().unwrap();
+}
+
+#[test]
+fn open_handle_survives_update() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    let mut s = e.mount(&rock_maps(&e, true));
+    let rock = e.p("Data/textures/rock.dds");
+    let mut old = fs::File::open(&rock).unwrap();
+    s.update(&rock_maps(&e, false), Skip::default()).unwrap();
+    let mut text = String::new();
+    old.read_to_string(&mut text).unwrap();
+    assert_eq!(text, "B-rock");
+    assert_eq!(fs::read_to_string(&rock).unwrap(), "A-rock-is-longer");
+    drop(old);
+    s.unmount().unwrap();
+}
+
+#[test]
+fn update_with_different_roots_is_bad_mapping() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    e.write("Other/x", "x");
+    let mut s = e.mount(&rock_maps(&e, true));
+    let mut maps = rock_maps(&e, true);
+    maps.push(e.dir_map("B", "Other", false));
+    let err = s.update(&maps, Skip::default()).unwrap_err();
+    assert_eq!(err.code, ErrorCode::BadMapping);
+    assert_eq!(
+        err.message,
+        "the set of mount roots changed; unmount and mount again"
+    );
+    // the running mount is untouched
+    assert_eq!(
+        fs::read_to_string(e.p("Data/textures/rock.dds")).unwrap(),
+        "B-rock"
+    );
+    s.unmount().unwrap();
+}
+
+#[test]
+fn busy_unmount_falls_back_to_lazy() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    let s = e.mount(&rock_maps(&e, true));
+    let mut child = std::process::Command::new("sleep")
+        .arg("30")
+        .current_dir(e.p("Data"))
+        .spawn()
+        .unwrap();
+    let t = Instant::now();
+    let r = s.unmount();
+    let took = t.elapsed();
+    let still = is_mounted(&e.p("Data"));
+    let _ = child.kill();
+    let _ = child.wait();
+    r.expect("unmount");
+    assert!(took <= Duration::from_secs(6), "took {took:?}");
+    assert!(!still);
+}
+
+#[test]
+fn mount_over_already_mounted_root_is_busy() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    let s = e.mount(&rock_maps(&e, true));
+    let err = Session::mount_in(&e.state, &rock_maps(&e, true), Skip::default())
+        .err()
+        .expect("second mount must fail");
+    assert_eq!(err.code, ErrorCode::MountBusy);
+    assert_eq!(err.path.as_deref(), Some(e.p("Data").as_path()));
+    s.unmount().unwrap();
+}
+
+#[test]
+fn bad_mapping_error() {
+    // needs no FUSE
+    let e = Env::new();
+    let err = Session::mount_in(
+        &e.state,
+        &[Mapping {
+            source: PathBuf::from("relative/dir"),
+            destination: e.p("Data"),
+            is_directory: true,
+            create_target: false,
+        }],
+        Skip::default(),
+    )
+    .err()
+    .expect("must fail");
+    assert_eq!(err.code, ErrorCode::BadMapping);
+    assert_eq!(serde_json::to_string(&err.code).unwrap(), "\"bad_mapping\"");
+}
+
+#[test]
+fn state_file_written_and_removed() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    let s = e.mount(&rock_maps(&e, true));
+    let file = e.state.join(format!("state-{}.json", std::process::id()));
+    let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(v["pid"], std::process::id());
+    assert_eq!(v["roots"], serde_json::json!([e.p("Data")]));
+    s.unmount().unwrap();
+    assert!(!file.exists());
+}
+
+#[test]
+fn symlinked_mountpoint() {
+    if !require_fuse() {
+        return;
+    }
+    let e = Env::new();
+    e.write("Data/orig.txt", "o");
+    e.write("mod/arquivo-do-mod", "m");
+    std::os::unix::fs::symlink(e.p("Data"), e.p("link")).unwrap();
+    let s = e.mount(&[e.dir_map("mod", "link", false)]);
+    assert!(is_mounted(&e.p("Data")));
+    assert_eq!(fs::read_to_string(e.p("link/arquivo-do-mod")).unwrap(), "m");
+    s.unmount().unwrap();
+}
+
+#[test]
+fn stale_state_of_a_dead_process_is_cleaned() {
+    if !require_fuse() {
+        return;
+    }
+    let e = rock_env();
+    // a "crashed" instance: mounted, state file of a pid that no longer exists
+    let s = e.mount(&rock_maps(&e, true));
+    let mut dead = std::process::Command::new("true").spawn().unwrap();
+    let dead_pid = dead.id();
+    dead.wait().unwrap();
+    StateFile::write_in(&e.state, dead_pid, &[e.p("Data"), e.p("NotMounted")]).unwrap();
+    let results = state::cleanup_stale_in(&e.state);
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().all(|(_, r)| r.is_ok()), "{results:?}");
+    assert!(!is_mounted(&e.p("Data")));
+    assert!(!e.state.join(format!("state-{dead_pid}.json")).exists());
+    // our own state file (live pid) is left alone
+    assert!(
+        e.state
+            .join(format!("state-{}.json", std::process::id()))
+            .exists()
+    );
+    drop(s); // the filesystem thread has ended; Drop must cope with the missing mount
+    let _ = fs::remove_dir_all(&e.state);
+}

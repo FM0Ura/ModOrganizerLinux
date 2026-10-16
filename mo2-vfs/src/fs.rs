@@ -4,7 +4,7 @@ use crate::inodes::Inodes;
 use crate::layer::Layers;
 use crate::name::fold_path;
 use crate::ops;
-use crate::tree::{Kind, NodeId, Origin, Tree};
+use crate::tree::{Kind, NodeId, Origin, Tree, Whiteouts};
 use fuser::{
     BackingId, Errno, FileAttr, FileHandle, FileType, Filesystem, FopenFlags, Generation, INodeNo,
     InitFlags, KernelConfig, LockOwner, OpenAccMode, OpenFlags, RenameFlags, ReplyAttr,
@@ -52,7 +52,9 @@ impl Default for VfsOptions {
 pub struct VfsShared {
     pub tree: RwLock<Tree>,
     pub inodes: Mutex<Inodes>,
-    pub layers: Layers,
+    /// Swapped together with the tree (under the tree write lock) by a hot update. Handlers
+    /// read it while holding the tree lock, so a node's layer id always matches this list.
+    layers: RwLock<Arc<Layers>>,
     pub handles: Mutex<HashMap<u64, Arc<OwnedFd>>>,
     /// Kernel passthrough backing ids, alive as long as their file handle.
     backings: Mutex<HashMap<u64, BackingId>>,
@@ -66,6 +68,46 @@ pub struct VfsShared {
     pub notifier: OnceLock<fuser::Notifier>,
 }
 
+impl VfsShared {
+    /// The current layers. Call it while holding the tree lock to get the list that matches
+    /// the tree's node origins.
+    pub fn layers(&self) -> Arc<Layers> {
+        self.layers.read().clone()
+    }
+
+    /// Replaces tree and layers together if the tree's whiteouts are still `whiteouts` (a
+    /// handler may have added one since the new tree was built); otherwise gives the tree
+    /// back. Returns the previous pair.
+    pub fn swap_if(
+        &self,
+        tree: Tree,
+        layers: Arc<Layers>,
+        whiteouts: &Whiteouts,
+    ) -> Result<(Tree, Arc<Layers>), Tree> {
+        let mut t = self.tree.write();
+        if t.whiteouts() != whiteouts {
+            return Err(tree);
+        }
+        let old_tree = std::mem::replace(&mut *t, tree);
+        let old_layers = std::mem::replace(&mut *self.layers.write(), layers);
+        Ok((old_tree, old_layers))
+    }
+
+    /// Like `swap_if` but builds the tree under the write lock, from the current whiteouts.
+    /// The last resort when `swap_if` keeps losing against concurrent changes.
+    pub fn rebuild_locked(
+        &self,
+        layers: Arc<Layers>,
+        build: impl FnOnce(&Whiteouts) -> Tree,
+    ) -> (Tree, Arc<Layers>) {
+        let mut t = self.tree.write();
+        let tree = build(t.whiteouts());
+        let old_tree = std::mem::replace(&mut *t, tree);
+        let old_layers = std::mem::replace(&mut *self.layers.write(), layers);
+        (old_tree, old_layers)
+    }
+}
+
 pub struct Vfs {
     shared: Arc<VfsShared>,
 }
@@ -74,6 +116,7 @@ pub struct Vfs {
 struct Snap {
     kind: Kind,
     origin: Origin,
+    layers: Arc<Layers>,
 }
 
 type Res<T> = Result<T, Errno>;
@@ -146,7 +189,7 @@ impl Vfs {
             shared: Arc::new(VfsShared {
                 tree: RwLock::new(tree),
                 inodes: Mutex::new(Inodes::new()),
-                layers,
+                layers: RwLock::new(Arc::new(layers)),
                 handles: Mutex::new(HashMap::new()),
                 backings: Mutex::new(HashMap::new()),
                 next_fh: AtomicU64::new(1),
@@ -177,16 +220,12 @@ impl Vfs {
         Ok(Snap {
             kind: node.kind,
             origin: node.origin.clone(),
+            layers: self.shared.layers(),
         })
     }
 
-    fn attr_of(&self, ino: u64, kind: Kind, origin: &Origin) -> Res<FileAttr> {
-        let layer = self
-            .shared
-            .layers
-            .list
-            .get(origin.layer)
-            .ok_or(Errno::EIO)?;
+    fn attr_of(&self, layers: &Layers, ino: u64, kind: Kind, origin: &Origin) -> Res<FileAttr> {
+        let layer = layers.list.get(origin.layer).ok_or(Errno::EIO)?;
         // Symlinks are followed: the node reports the kind of what they point to.
         let st = statat(&layer.dir, &origin.rel, AtFlags::empty()).map_err(errno)?;
         Ok(attr_from_stat(ino, kind, &st))
@@ -228,7 +267,7 @@ impl Vfs {
             .key_of(parent)
             .cloned()
             .ok_or(Errno::ENOENT)?;
-        let (kind, origin, key, exact) = {
+        let (kind, origin, layers, key, exact) = {
             let tree = self.shared.tree.read();
             let pid = tree.lookup_folded(&pkey).ok_or(Errno::ENOENT)?;
             if tree.node(pid).kind != Kind::Dir {
@@ -239,17 +278,18 @@ impl Vfs {
             (
                 node.kind,
                 node.origin.clone(),
+                self.shared.layers(),
                 fold_path(&tree.path_of(id)),
                 node.name == name,
             )
         };
         let ino = self.shared.inodes.lock().ino_for(&key);
-        Ok((self.attr_of(ino, kind, &origin)?, exact))
+        Ok((self.attr_of(&layers, ino, kind, &origin)?, exact))
     }
 
     fn do_getattr(&self, ino: u64) -> Res<FileAttr> {
         let s = self.snap(ino)?;
-        self.attr_of(ino, s.kind, &s.origin)
+        self.attr_of(&s.layers, ino, s.kind, &s.origin)
     }
 
     fn do_readdir(&self, ino: u64, offset: u64, reply: &mut ReplyDirectory) -> Res<()> {
@@ -313,7 +353,7 @@ impl Vfs {
                 return Err(Errno::EISDIR);
             }
             // Editing mod and original files in place is allowed (spec 1.1): no copy-up.
-            ops::open(&self.shared.layers, node, open_oflags(flags.0)).map_err(errno)?
+            ops::open(&self.shared.layers(), node, open_oflags(flags.0)).map_err(errno)?
         };
         let fd = Arc::new(fd);
         let mut backing = None;
@@ -420,10 +460,11 @@ impl Vfs {
     }
 
     fn do_create(&self, parent: u64, name: &OsStr, mode: u32, flags: i32) -> Res<(FileAttr, u64)> {
-        let (ino, origin, fd) = self.mutate(parent, |tree, pid| {
+        let (ino, origin, layers, fd) = self.mutate(parent, |tree, pid| {
+            let layers = self.shared.layers();
             let (id, fd) = ops::create_file(
                 tree,
-                &self.shared.layers,
+                &layers,
                 pid,
                 name,
                 Mode::from_raw_mode(mode & 0o7777),
@@ -432,39 +473,35 @@ impl Vfs {
             .map_err(errno)?;
             let key = fold_path(&tree.path_of(id));
             let ino = self.shared.inodes.lock().ino_for(&key);
-            Ok((ino, tree.node(id).origin.clone(), fd))
+            Ok((ino, tree.node(id).origin.clone(), layers, fd))
         })?;
-        let attr = self.attr_of(ino, Kind::File, &origin)?;
+        let attr = self.attr_of(&layers, ino, Kind::File, &origin)?;
         let fh = self.shared.next_fh.fetch_add(1, Ordering::Relaxed);
         self.shared.handles.lock().insert(fh, Arc::new(fd));
         Ok((attr, fh))
     }
 
     fn do_mkdir(&self, parent: u64, name: &OsStr, mode: u32) -> Res<FileAttr> {
-        let (ino, origin) = self.mutate(parent, |tree, pid| {
-            let id = ops::mkdir(
-                tree,
-                &self.shared.layers,
-                pid,
-                name,
-                Mode::from_raw_mode(mode & 0o7777),
-            )
-            .map_err(errno)?;
+        let (ino, origin, layers) = self.mutate(parent, |tree, pid| {
+            let layers = self.shared.layers();
+            let id = ops::mkdir(tree, &layers, pid, name, Mode::from_raw_mode(mode & 0o7777))
+                .map_err(errno)?;
             let key = fold_path(&tree.path_of(id));
             let ino = self.shared.inodes.lock().ino_for(&key);
-            Ok((ino, tree.node(id).origin.clone()))
+            Ok((ino, tree.node(id).origin.clone(), layers))
         })?;
-        self.attr_of(ino, Kind::Dir, &origin)
+        self.attr_of(&layers, ino, Kind::Dir, &origin)
     }
 
     /// unlink (`dir == false`) or rmdir. Returns the entries the kernel may still cache.
     fn do_remove(&self, parent: u64, name: &OsStr, dir: bool) -> Res<Vec<(u64, OsString)>> {
         self.mutate(parent, |tree, pid| {
             let shown = tree.child(pid, name).map(|c| tree.node(c).name.clone());
+            let layers = self.shared.layers();
             if dir {
-                ops::rmdir(tree, &self.shared.layers, pid, name)
+                ops::rmdir(tree, &layers, pid, name)
             } else {
-                ops::unlink(tree, &self.shared.layers, pid, name)
+                ops::unlink(tree, &layers, pid, name)
             }
             .map_err(errno)?;
             Ok(shown
@@ -494,7 +531,7 @@ impl Vfs {
                 .map(|d| tree.node(d).name.clone());
             ops::rename(
                 tree,
-                &self.shared.layers,
+                &self.shared.layers(),
                 pid,
                 name,
                 npid,
@@ -591,7 +628,7 @@ impl Vfs {
                     return Err(Errno::EISDIR);
                 }
                 self.check_owner(node, uid, gid)?;
-                let fd = ops::open(&self.shared.layers, node, OFlags::WRONLY).map_err(errno)?;
+                let fd = ops::open(&self.shared.layers(), node, OFlags::WRONLY).map_err(errno)?;
                 Some((fd, size))
             }
             None => None,
@@ -603,12 +640,8 @@ impl Vfs {
         let id = tree.lookup_folded(&key).ok_or(Errno::ENOENT)?;
         let node = tree.node(id);
         self.check_owner(node, uid, gid)?;
-        let layer = self
-            .shared
-            .layers
-            .list
-            .get(node.origin.layer)
-            .ok_or(Errno::EIO)?;
+        let layers = self.shared.layers();
+        let layer = layers.list.get(node.origin.layer).ok_or(Errno::EIO)?;
         let rel: &Path = &node.origin.rel;
         if let Some(p) = perm {
             chmodat(&layer.dir, rel, p, AtFlags::empty()).map_err(errno)?;
@@ -616,7 +649,7 @@ impl Vfs {
         if let Some(t) = &times {
             utimensat(&layer.dir, rel, t, AtFlags::empty()).map_err(errno)?;
         }
-        self.attr_of(ino, node.kind, &node.origin)
+        self.attr_of(&layers, ino, node.kind, &node.origin)
     }
 
     /// uid/gid changes are refused unless they change nothing.
@@ -624,12 +657,8 @@ impl Vfs {
         if uid.is_none() && gid.is_none() {
             return Ok(());
         }
-        let layer = self
-            .shared
-            .layers
-            .list
-            .get(node.origin.layer)
-            .ok_or(Errno::EIO)?;
+        let layers = self.shared.layers();
+        let layer = layers.list.get(node.origin.layer).ok_or(Errno::EIO)?;
         let st = statat(&layer.dir, &node.origin.rel, AtFlags::empty()).map_err(errno)?;
         if uid.is_some_and(|u| u != st.st_uid) || gid.is_some_and(|g| g != st.st_gid) {
             return Err(Errno::EPERM);
@@ -638,7 +667,8 @@ impl Vfs {
     }
 
     fn do_statfs(&self) -> Res<rustix::fs::StatVfs> {
-        let layers = &self.shared.layers.list;
+        let layers = self.shared.layers();
+        let layers = &layers.list;
         let layer = layers.iter().find(|l| l.create).unwrap_or(&layers[0]);
         rustix::fs::fstatvfs(&layer.dir).map_err(errno)
     }
