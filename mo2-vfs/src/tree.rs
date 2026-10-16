@@ -435,6 +435,15 @@ impl Tree {
         Some(cur)
     }
 
+    /// Lookup by folded path (the `fold_path` form); the empty key is the root.
+    pub fn lookup_folded(&self, key: &Key) -> Option<NodeId> {
+        if key.0.is_empty() {
+            Some(0)
+        } else {
+            self.lookup_key(key)
+        }
+    }
+
     pub fn child(&self, dir: NodeId, name: &OsStr) -> Option<NodeId> {
         self.nodes[dir].children.get(&fold(name)).copied()
     }
@@ -550,6 +559,20 @@ mod tests {
         t.children(id)
             .map(|(_, n)| n.name.to_string_lossy().into_owned())
             .collect()
+    }
+
+    #[test]
+    fn lookup_folded_matches_lookup() {
+        let fx = fixture(&[("orig", &["Skyrim.esm", "textures/rock.dds"])]);
+        let t = &fx.tree;
+        assert_eq!(t.lookup_folded(&fold_path(Path::new(""))), Some(t.root()));
+        let k = fold_path(Path::new("Textures/ROCK.dds"));
+        assert_eq!(
+            t.lookup_folded(&k),
+            t.lookup(Path::new("textures/rock.dds"))
+        );
+        assert!(t.lookup_folded(&k).is_some());
+        assert_eq!(t.lookup_folded(&fold_path(Path::new("nope/x"))), None);
     }
 
     #[test]
