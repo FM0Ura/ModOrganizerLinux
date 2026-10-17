@@ -28,7 +28,7 @@ jobs:
       - name: Build and test
         run: |
           docker run --rm --device /dev/fuse --cap-add SYS_ADMIN \
-            --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 \
+            --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 -e MO2_SMOKE_STRICT_HOME=1 \
             -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
             mo2-linux-build ./build.sh --tests
 

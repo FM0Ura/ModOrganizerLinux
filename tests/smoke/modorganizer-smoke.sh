@@ -93,11 +93,15 @@ main_window() {
     touch "$marker"
     sleep 1
 
+    # QtWebEngine (the main window's Nexus/browser parts) refuses to run as root (CI
+    # container) without --no-sandbox; the application has no --disable-gpu option, the
+    # Chromium flag is the equivalent
     env HOME="$home" \
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
         XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state" \
         XDG_RUNTIME_DIR="$work/runtime" TMPDIR="$work/tmp" \
         QT_QPA_PLATFORM=offscreen \
+        QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu" \
         "$APP" --logs -i smoke > "$out" 2>&1 < /dev/null &
     pid=$!
 
@@ -112,11 +116,11 @@ main_window() {
         # let the event loop start before stopping it
         sleep 2
         kill -TERM "$pid" 2>/dev/null || true
+        for ((i = 0; i < 20; i++)); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.5
+        done
     fi
-    for ((i = 0; i < 20; i++)); do
-        kill -0 "$pid" 2>/dev/null || break
-        sleep 0.5
-    done
     if kill -0 "$pid" 2>/dev/null; then
         kill -KILL "$pid" 2>/dev/null || true
         wait "$pid" 2>/dev/null || true
