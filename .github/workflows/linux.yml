@@ -14,6 +14,10 @@ jobs:
         with:
           path: ModOrganizerLinux
 
+      # 64-bit save fields must not be read as std::uint64_t (a 4-byte long on Linux)
+      - name: Guard against platform-sized save reads
+        run: ModOrganizerLinux/scripts/check-save-reads.sh
+
       - name: Build container image
         run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
 
