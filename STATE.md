@@ -34,13 +34,13 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 | 15 | FILETIME e INI consolidados (pendência) | ✅ | `db9fc72`..`6fcaa7b` |
 | 16 | Guard de CI contra leituras de tamanho da plataforma nos saves (pendência) | ✅ | `332d016` (+ `bad2cf1`) |
 | 17 | Smoke test até a janela principal (pendência) | ✅ | `75497c2`..`822d68c` |
-| 18 | Documentação, checklist manual e fechamento | 🚧 docs prontas; revisão final do branch e checkpoint de CI com o controlador | — |
+| 18 | Documentação, checklist manual e fechamento | ✅ docs; revisão final do branch + rodada de correções (`7ded04e`..`1fee876`); checkpoint de CI | `3248e6f`..`1fee876` |
 
 ### Critérios de pronto (spec da Fase 2, §10)
 
 | Critério | Status |
 |---|---|
-| 1. Testes da §8 passam no CI Linux; CI Windows continua verde | 🚧 Linux verde nos checkpoints: [#38828968997](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38828968997) (sonda FUSE), [#39026042925](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39026042925) (suíte Rust como root, protocolo, 53/53), [#39049120299](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39049120299) (organizer 66/66, e2e); a execução final do branch (Linux + Windows `[windows-ci]`) será registrada pelo controlador |
+| 1. Testes da §8 passam no CI Linux; CI Windows continua verde | 🚧 Linux verde nos checkpoints: [#38828968997](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38828968997) (sonda FUSE), [#39026042925](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39026042925) (suíte Rust como root, protocolo, 53/53), [#39049120299](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39049120299) (organizer 66/66, e2e); final do branch: Linux [#39067367446](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39067367446) (tudo como root: Rust, organizer, smoke até a janela principal, e2e); Windows: commit `[windows-ci]` deste fechamento |
 | 2. Checklist manual no Bazzite | ⏳ com você — [`docs/testing/phase2-manual-checklist.md`](docs/testing/phase2-manual-checklist.md) |
 | 3. Metas de desempenho registradas | ✅ [`benchmarks/results/2026-10-phase2-vfs.md`](benchmarks/results/2026-10-phase2-vfs.md): mount 916 ms (primeira execução a frio: 2972 ms), update 906 ms, `readdir` 0,84x do nativo, `open`+`read` 3,36x (meta de 2x **não atingida**: um round trip de OPEN por arquivo; passthrough recusado sem `CAP_SYS_ADMIN`) |
 | 4. Pendências da §9 resolvidas | ✅ (Tasks 12 a 17) |
@@ -146,7 +146,9 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 - Identificar processos do Wine/Proton por `/proc/<pid>/cmdline` (aparecem como `wine64-preloader`).
 - `waitForAllUSVFSProcessesWithLock` devolve `Completed` com mount ativo (trocar de perfil mostra a lista nova com a árvore antiga até desmontar); segundo "Executar" faz `update` duplo; diretório de trabalho vazio usa o cwd do MO2.
 - Zumbis não reapados; `waitInactive` espera até 5 s após o Unlock; o destrutor do conector pode bloquear a GUI até 5 s com grupo vivo.
-- Aviso de VFS perdido só aparece no `afterRun` (execuções que o pulam avisam no próximo Run); falha de `activate()` abre modal sem logar `e.what()` (sem UI trava).
+- Aviso de VFS perdido só aparece no `afterRun` (execuções que o pulam avisam no próximo Run).
+- **Revisão final, não corrigido (decidir antes do merge):** helper travado com grupo observado → `helperLost()` chama `deactivated()` com a raiz ainda montada, e o refresh adiado pode varrer um mount vivo ou travado (só quando `update`/`watch` expira durante uma execução; correção sugerida: `keepLeftMounted()` + `m_cleanupNeeded`).
+- Estado "não foi possível desmontar" nunca reconfere o mountinfo (refresh fica adiado até o próximo Run); `reportError()` do `uibase` Linux abre modal mesmo offscreen (`run` pela linha de comando não termina após erro); no Windows, `run` sem UI perde o motivo no diálogo (mudança do `beforeRun` sem `#ifndef _WIN32`).
 - Passthrough (desligado por padrão): `O_RDWR` reaberto sem necessidade, janela create-vs-open, `ETXTBSY` espúrio após release tardio, contagem de `io_modes` vaza em open interrompido.
 - Whiteouts: o caminho antigo de um rename continua mascarado até desmontar (esconde mod instalado depois); whiteouts por origem superdisfarçam quando uma fonte tem dois destinos; nunca são coletados.
 - Espera de processos: `AsyncPipe` (fds); `UntouchedCommandLineArguments` ainda usa aspas no estilo Windows.
