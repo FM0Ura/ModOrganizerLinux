@@ -1,7 +1,7 @@
 # Fase 2 — VFS FUSE (`mo2-vfs`) — Design
 
 - **Data:** 2026-10-15
-- **Status:** aguardando revisão
+- **Status:** aprovada; implementada
 - **Spec geral:** [`2026-10-14-mo2-linux-port-design.md`](2026-10-14-mo2-linux-port-design.md) (§3.1 resume esta fase; este documento a substitui onde divergirem)
 - **Branch:** `fase-2-vfs-fuse` (o app está em `deps/modorganizer` desde 2026-10-15)
 
@@ -67,7 +67,7 @@ O CMake do fork não compila Rust: o `mo2-vfs` é um executável à parte, encon
 | `ipc` | Protocolo JSON com delimitação por linha sobre stdin/stdout (§5). | `session` |
 | `bin/mo2-vfs.rs` | Argumentos, log, sinais, laço do `ipc`. | todos |
 
-Dependências externas previstas: `fuser` 0.18 (com passthrough), `parking_lot`, `serde`/`serde_json`, `nix` ou `rustix`, `tracing`/`tracing-appender`. Testes: `tempfile`. Benchmarks: `criterion`.
+Dependências externas previstas: `fuser` 0.18 (com passthrough), `parking_lot`, `serde`/`serde_json`, `nix` ou `rustix`, `tracing`/`tracing-appender`. Testes: `tempfile`. Benchmarks: o binário próprio `mo2-vfs-bench` (`src/bin/mo2-vfs-bench.rs`), sem `criterion`.
 
 ## 3. Modelo de dados
 
@@ -138,6 +138,8 @@ O caso mais comum — o jogo grava `save.tmp` e renomeia para `save.ess` — fic
 - O `LinuxVfsConnector` inicia `mo2-vfs --log <instância>/logs/mo2-vfs.log --log-level <nível>` com `QProcess`. O canal é o stdin (pedidos) e o stdout (respostas) do processo; o log vai só para o arquivo e o stderr.
 - O `mo2-vfs` desmonta **sozinho** quando o último grupo de processos informado em `watch` termina, esteja o MO2 vivo ou não, e avisa com o evento `unmounted`.
 - Se o stdin fechar (o MO2 saiu ou travou): sem grupo vivo, desmonta e sai; com grupo vivo, mantém os mounts até o último grupo terminar, desmonta e sai.
+- O `mo2-vfs` roda numa sessão própria (`setsid()` no filho, via `QProcess::setChildProcessModifier`): Ctrl+C no terminal do MO2 e o fechamento desse terminal não o atingem. Ele ignora `SIGHUP`; com `SIGINT`/`SIGTERM`, sem grupo vivo desmonta e sai com 0; com grupo vivo registra um aviso no log e age como no fim do stdin (mantém os mounts até o último grupo terminar, desmonta e sai).
+- Se a desmontagem automática falhar, o `mo2-vfs` não envia `unmounted`: envia um `error` espontâneo (§5.2), mantém as raízes no arquivo de estado e tenta de novo (`fusermount3 -uz`) a cada verificação; quando consegue, envia `unmounted`. Enquanto isso, um novo `mount` é recusado com `error io`.
 
 ### 5.2 Mensagens (JSON, uma por linha)
 
@@ -152,16 +154,18 @@ O caso mais comum — o jogo grava `save.tmp` e renomeia para `save.ess` — fic
 | `mo2-vfs` → MO2 | Conteúdo |
 |---|---|
 | `ready` | raízes montadas |
-| `error` | `code` (`fuse_unavailable`, `mount_busy`, `bad_mapping`, `io`), `message`, `path` |
+| `error` | `code` (`fuse_unavailable`, `mount_busy`, `bad_mapping`, `io`, `bad_request`), `message`, `path`; `"spontaneous": true` (omitido quando falso) no erro espontâneo da desmontagem automática que falhou |
 | `unmounted` | — (resposta a `unmount`, ou evento espontâneo da desmontagem automática) |
 | `status` | raízes, contagem de nós, máscaras, grupos acompanhados |
 | `hello` | versão; enviado uma vez ao iniciar |
 
-Cada pedido recebe exatamente uma resposta (`watch` responde `{"event":"ok"}`); `mount`/`update` respondem só quando todos os mounts estão prontos. O único evento espontâneo é o `unmounted` da desmontagem automática.
+Cada pedido recebe exatamente uma resposta (`watch` responde `{"event":"ok"}`); `mount`/`update` respondem só quando todos os mounts estão prontos. Os únicos eventos espontâneos são os da desmontagem automática: `unmounted` quando ela (ou uma nova tentativa) dá certo, e `{"event":"error","code":"io","message":…,"path":…,"spontaneous":true}` quando ela falha; o campo `spontaneous` distingue esse erro da resposta a um pedido, e o cliente nunca o toma como resposta.
 
 ### 5.3 Arquivo de estado e limpeza
 
-`$XDG_RUNTIME_DIR/mo2-vfs/state-<pid>.json` lista as raízes montadas. Na inicialização, o `LinuxVfsConnector` roda `mo2-vfs --cleanup`, que procura arquivos de estado cujo pid não existe mais e, para cada raiz ainda montada com tipo `fuse.mo2-vfs` (`/proc/self/mountinfo`), roda `fusermount3 -u` (e `-uz` se falhar). Raízes que não forem desmontadas são informadas ao usuário.
+`$XDG_RUNTIME_DIR/mo2-vfs/state-<pid>.json` lista as raízes montadas. Na inicialização, o `LinuxVfsConnector` roda `mo2-vfs --cleanup`, que procura arquivos de estado cujo pid não existe mais e, para cada raiz ainda montada com tipo `fuse.mo2-vfs` — ou, em mounts feitos como root, tipo `fuse` com fonte `mo2-vfs` (`/proc/self/mountinfo`) —, roda `fusermount3 -u` (e `-uz` se falhar). Raízes que não forem desmontadas são informadas ao usuário. Uma raiz que o próprio `mo2-vfs` não conseguiu desmontar continua no arquivo de estado dele.
+
+A mesma limpeza roda quando o auxiliar se perde com o VFS ativo (o `QProcess` terminou, ou um pedido expirou: sem grupo acompanhado o auxiliar travado é morto antes): o `LinuxVfsConnector` roda `mo2-vfs --cleanup` e confere o `mountinfo` **antes** de se declarar inativo, para que o refresh não varra um mount morto (`ENOTCONN`: a `Data` pareceria vazia e o `plugins.txt`/`loadorder.txt` seriam reescritos sem os plugins do jogo). Se alguma raiz continuar montada, `isActive()` continua verdadeiro (o refresh segue adiado), a raiz vai para `staleMounts()` e o motivo (`takeLostReason()`) diz que ela não pôde ser desmontada; a limpeza é tentada de novo na próxima `activate()`, que falha enquanto a raiz continuar montada.
 
 ### 5.4 Desmontagem
 
@@ -177,8 +181,9 @@ Cada pedido recebe exatamente uma resposta (`watch` responde `{"event":"ok"}`); 
   - `activate()`: inicia o `mo2-vfs` se preciso e envia `mount` (ou `update`, se já ativo) com os últimos mappings. Timeout de 30 s; `error` vira `std::runtime_error` com a mensagem do auxiliar, que o `OrganizerCore` mostra e que cancela a execução.
   - `watchProcessGroup(pgid)`: envia `watch`.
   - `releaseIfIdle()`: envia `unmount` se nenhum grupo foi informado (o programa não iniciou).
-  - `isActive()` e `waitInactive(timeout)`.
-  - `setDeactivatedCallback(f)`: chamado (na thread da interface) quando chega `unmounted`.
+  - `isActive()` e `waitInactive(timeout)`. `isActive()` também é verdadeiro durante a própria `activate()` (o refresh iniciado nos laços de eventos dos pedidos fica adiado, em vez de varrer o mount que está subindo) e enquanto um mount inutilizável não pôde ser desmontado (§5.3) — inclusive depois de um `error` espontâneo da desmontagem automática, até o `unmounted` da nova tentativa.
+  - `setDeactivatedCallback(f)`: chamado (na thread da interface) quando chega `unmounted`, e também quando uma `activate()` falha (o refresh adiado durante ela roda).
+  - Falha de `activate()` no `beforeRun`: registrada no log como erro; a caixa de mensagem só aparece com interface (execuções pela linha de comando não ficam esperando uma resposta).
 - `name()`: `"mo2-vfs"`.
 - **O mount vale para o sistema inteiro, inclusive para o próprio MO2.** Enquanto `isActive()`, o `OrganizerCore::refreshDirectoryStructure` não varre: marca a atualização como pendente e a executa no callback de desativação. Sem isso, o MO2 leria a `Data` montada e confundiria arquivos de mods com os originais do jogo.
 
@@ -198,7 +203,9 @@ Cada pedido recebe exatamente uma resposta (`watch` responde `{"event":"ok"}`); 
 | Raiz já montada (por outro MO2 ou resto de falha) | Limpeza da §5.3; se continuar ocupada, `error mount_busy`. |
 | Mapping com origem inexistente | Camada ignorada com aviso no log (o MO2 pode mandar mods removidos entre o refresh e a execução). |
 | Erro de E/S num arquivo real | Repassado ao programa com o mesmo `errno`. |
-| `mo2-vfs` morre durante a execução | O MO2 detecta o fim do `QProcess`, registra no log e avisa o usuário ao fim da execução; limpeza da §5.3 na próxima abertura. |
+| `mo2-vfs` morre durante a execução | O MO2 detecta o fim do `QProcess`, registra no log, roda a limpeza da §5.3 na hora (antes de se declarar inativo) e avisa o usuário ao fim da execução. |
+| A desmontagem automática falha | `error` espontâneo em vez de `unmounted` (§5.1); o MO2 continua ativo (refresh adiado) até o `unmounted` da nova tentativa. |
+| Ctrl+C / fechar o terminal do MO2 | Não atinge o `mo2-vfs` (sessão própria); `SIGINT`/`SIGTERM` diretos com grupo vivo não desmontam antes do fim do grupo (§5.1). |
 | `panic` no `mo2-vfs` | Cada operação FUSE roda sob `catch_unwind`: o `panic` vira `EIO` para aquela operação e um erro no log; o mount continua. |
 
 ## 8. Testes e desempenho
