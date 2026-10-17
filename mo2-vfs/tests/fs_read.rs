@@ -3,6 +3,7 @@ mod common;
 use common::Fixture;
 use mo2_vfs::fs::VfsOptions;
 use std::fs;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::FileExt;
 use std::sync::atomic::Ordering;
 
@@ -165,9 +166,40 @@ fn passthrough_falls_back_to_pread() {
     if rustix::process::geteuid().as_raw() != 0 {
         assert!(refused, "unprivileged passthrough must be refused");
     }
+    let rock = m.path().join("textures/rock.dds");
+    assert_eq!(fs::read_to_string(&rock).unwrap(), "B:textures/rock.dds");
+    // Repeated opens of an unchanged file (the page cache flag must not reach a
+    // passthrough open), and two readers at once (they share the backing file).
+    for _ in 0..5 {
+        assert_eq!(fs::read_to_string(&rock).unwrap(), "B:textures/rock.dds");
+    }
+    let mut r1 = fs::File::open(&rock).unwrap();
+    let mut r2 = fs::File::open(&rock).unwrap();
+    for r in [&mut r1, &mut r2] {
+        let mut text = String::new();
+        r.read_to_string(&mut text).unwrap();
+        assert_eq!(text, "B:textures/rock.dds");
+    }
+    // A write while a reader is open (it must go the same way as the reader), then reads.
+    fs::write(&rock, "rewritten").unwrap();
+    assert_eq!(fs::read_to_string(&rock).unwrap(), "rewritten");
+    r1.seek(SeekFrom::Start(0)).unwrap();
+    let mut text = String::new();
+    r1.read_to_string(&mut text).unwrap();
+    assert_eq!(text, "rewritten");
+    drop((r1, r2));
+    // A write with nothing open, then several reads.
+    {
+        let mut w = fs::File::options().write(true).open(&rock).unwrap();
+        w.write_all(b"again").unwrap();
+    }
+    for _ in 0..3 {
+        assert_eq!(fs::read_to_string(&rock).unwrap(), "againtten");
+    }
     assert_eq!(
-        fs::read_to_string(m.path().join("textures/rock.dds")).unwrap(),
-        "B:textures/rock.dds"
+        fs::read_to_string(m.real("B").join("textures/rock.dds")).unwrap(),
+        "againtten",
+        "the write reached the real file"
     );
 }
 

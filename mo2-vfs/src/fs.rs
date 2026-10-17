@@ -45,7 +45,7 @@ impl Default for VfsOptions {
 /// State shared between the filesystem handlers, the session and the IPC loop.
 ///
 /// Lock order is always `tree`, then `inodes` (never the other way round, and never the tree
-/// write lock while holding `inodes`). `handles`/`backings` are leaf locks. The tree write
+/// write lock while holding `inodes`). `handles`/`io_modes` are leaf locks. The tree write
 /// lock is held only around the `ops::*` call and the inode bookkeeping that must be atomic
 /// with it, never during `pread`/`pwrite`/`fsync`. Kernel notifications are sent after the
 /// reply and with no lock held.
@@ -66,7 +66,8 @@ pub struct VfsShared {
     stamps: Mutex<HashMap<u64, Stamp>>,
     pub handles: Mutex<HashMap<u64, Arc<OwnedFd>>>,
     /// Kernel passthrough backing ids, alive as long as their file handle.
-    backings: Mutex<HashMap<u64, BackingId>>,
+    /// The kernel I/O mode of every inode with open files (see `IoMode`).
+    io_modes: Mutex<HashMap<u64, IoMode>>,
     next_fh: AtomicU64,
     /// False once passthrough was found unavailable (or never requested).
     pub passthrough: AtomicBool,
@@ -140,12 +141,36 @@ struct Listing {
     entries: Vec<(u64, FileType, OsString)>,
 }
 
+/// How the kernel does I/O on an inode's open files. With FUSE passthrough the kernel
+/// allows, per inode, either cached opens (served by this daemon, through the page cache) or
+/// passthrough opens that all share one backing file, never both at once (a mismatch fails
+/// the open with EIO). Counted from the open/create replies to `release`; `release` arrives
+/// after the kernel has let go of the file, so the count can only be late, and a late count
+/// at worst reuses a backing the kernel no longer holds, which it accepts.
+enum IoMode {
+    /// Open files served by the daemon.
+    Cached(usize),
+    Passthrough {
+        backing: Arc<BackingId>,
+        /// Device and inode of the backing file.
+        file: (u64, u64),
+        /// The backing file is open for writing too.
+        writable: bool,
+        open: usize,
+    },
+}
+
 /// Identity and change times of a real file: equal stamps mean the content the kernel
 /// cached at one open is still the content at the next.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Stamp([i64; 7]);
 
 impl Stamp {
+    /// Device and inode.
+    fn file(&self) -> (u64, u64) {
+        (self.0[0] as u64, self.0[1] as u64)
+    }
+
     #[allow(clippy::unnecessary_cast)] // the integer widths of `Stat` differ per target
     fn of(st: &Stat) -> Stamp {
         Stamp([
@@ -259,7 +284,7 @@ impl Vfs {
                 listings: Mutex::new(HashMap::new()),
                 stamps: Mutex::new(HashMap::new()),
                 handles: Mutex::new(HashMap::new()),
-                backings: Mutex::new(HashMap::new()),
+                io_modes: Mutex::new(HashMap::new()),
                 next_fh: AtomicU64::new(1),
                 passthrough: AtomicBool::new(passthrough),
                 passthrough_refused: AtomicBool::new(false),
@@ -457,7 +482,7 @@ impl Vfs {
         ino: u64,
         flags: OpenFlags,
         reply: &ReplyOpen,
-    ) -> Res<(u64, Option<BackingId>, bool)> {
+    ) -> Res<(u64, Option<Arc<BackingId>>, bool)> {
         let writable = flags.acc_mode() != OpenAccMode::O_RDONLY;
         let key = self
             .shared
@@ -466,48 +491,142 @@ impl Vfs {
             .key_of(ino)
             .cloned()
             .ok_or(Errno::ENOENT)?;
-        let fd = {
+        let (fd, layers, origin) = {
             let tree = self.shared.tree.read();
             let id = tree.lookup_folded(&key).ok_or(Errno::ENOENT)?;
             let node = tree.node(id);
             if node.kind == Kind::Dir {
                 return Err(Errno::EISDIR);
             }
+            let layers = self.shared.layers();
             // Editing mod and original files in place is allowed (spec 1.1): no copy-up.
-            ops::open(&self.shared.layers(), node, open_oflags(flags.0)).map_err(errno)?
+            let fd = ops::open(&layers, node, open_oflags(flags.0)).map_err(errno)?;
+            (fd, layers, node.origin.clone())
         };
-        let keep_cache = match fstat(&fd) {
-            Ok(st) => {
-                let stamp = Stamp::of(&st);
+        let stamp = fstat(&fd).ok().map(|st| Stamp::of(&st));
+        let mut keep_cache = match stamp {
+            Some(stamp) => {
                 let mut stamps = self.shared.stamps.lock();
                 if stamps.len() >= MAX_STAMPS {
                     stamps.clear();
                 }
                 stamps.insert(ino, stamp) == Some(stamp)
             }
-            Err(_) => false,
+            None => false,
         };
-        let fd = Arc::new(fd);
-        let mut backing = None;
-        if !writable
-            && self.shared.options.try_passthrough
-            && self.shared.passthrough.load(Ordering::Relaxed)
-        {
-            match reply.open_backing(&*fd) {
-                Ok(b) => backing = Some(b),
-                Err(e) => {
-                    if self.shared.passthrough.swap(false, Ordering::Relaxed) {
-                        tracing::info!(error = %e, "kernel passthrough unavailable, using pread");
+        let backing = {
+            let mut modes = self.shared.io_modes.lock();
+            match modes.get_mut(&ino) {
+                Some(IoMode::Cached(open)) => {
+                    *open += 1;
+                    None
+                }
+                Some(IoMode::Passthrough {
+                    backing,
+                    file,
+                    writable: backing_writable,
+                    open,
+                }) => {
+                    // The kernel needs this open to use the same backing file. Refused when
+                    // the name now leads to another real file (an update while the old one
+                    // is open) or when writing through a read-only backing file.
+                    if stamp.map(|s| s.file()) != Some(*file) || (writable && !*backing_writable) {
+                        return Err(Errno::ETXTBSY);
                     }
-                    self.shared
-                        .passthrough_refused
-                        .store(true, Ordering::Relaxed);
+                    *open += 1;
+                    Some(backing.clone())
+                }
+                None => {
+                    let mode = if !writable
+                        && self.shared.options.try_passthrough
+                        && self.shared.passthrough.load(Ordering::Relaxed)
+                    {
+                        self.new_backing(reply, &fd, &layers, &origin, stamp)
+                    } else {
+                        None
+                    };
+                    let mode = mode.unwrap_or(IoMode::Cached(1));
+                    let backing = match &mode {
+                        IoMode::Passthrough { backing, .. } => Some(backing.clone()),
+                        IoMode::Cached(_) => None,
+                    };
+                    modes.insert(ino, mode);
+                    backing
                 }
             }
+        };
+        // The kernel accepts no page cache flag with passthrough (there is no page cache).
+        if backing.is_some() {
+            keep_cache = false;
         }
         let fh = self.shared.next_fh.fetch_add(1, Ordering::Relaxed);
-        self.shared.handles.lock().insert(fh, fd);
+        self.shared.handles.lock().insert(fh, Arc::new(fd));
         Ok((fh, backing, keep_cache))
+    }
+
+    /// Registers a backing file for the first passthrough open of an inode. The backing file
+    /// is opened for reading and writing when the real file allows it, so that a later
+    /// writable open of the same inode (which must share it) can still be served. A refusal
+    /// by the kernel turns passthrough off until unmount.
+    fn new_backing(
+        &self,
+        reply: &ReplyOpen,
+        fd: &OwnedFd,
+        layers: &Layers,
+        origin: &Origin,
+        stamp: Option<Stamp>,
+    ) -> Option<IoMode> {
+        let file = stamp?.file();
+        let rw = layers.list.get(origin.layer).and_then(|layer| {
+            let rw = rustix::fs::openat(
+                &layer.dir,
+                &origin.rel,
+                OFlags::RDWR | OFlags::CLOEXEC,
+                Mode::empty(),
+            )
+            .ok()?;
+            // The same real file as the one just opened, or nothing.
+            let same = fstat(&rw).is_ok_and(|st| Stamp::of(&st).file() == file);
+            same.then_some(rw)
+        });
+        let writable = rw.is_some();
+        let result = match &rw {
+            Some(rw) => reply.open_backing(rw),
+            None => reply.open_backing(fd),
+        };
+        match result {
+            Ok(b) => Some(IoMode::Passthrough {
+                backing: Arc::new(b),
+                file,
+                writable,
+                open: 1,
+            }),
+            Err(e) => {
+                if self.shared.passthrough.swap(false, Ordering::Relaxed) {
+                    tracing::info!(error = %e, "kernel passthrough unavailable, using pread");
+                }
+                self.shared
+                    .passthrough_refused
+                    .store(true, Ordering::Relaxed);
+                None
+            }
+        }
+    }
+
+    /// One open file of `ino` less (see `IoMode`).
+    fn closed(&self, ino: u64) {
+        let mut modes = self.shared.io_modes.lock();
+        let left = match modes.get_mut(&ino) {
+            Some(IoMode::Cached(open)) | Some(IoMode::Passthrough { open, .. }) => {
+                *open = open.saturating_sub(1);
+                *open
+            }
+            None => return,
+        };
+        if left == 0 {
+            // The last user of the backing id: dropping it closes it in the kernel.
+            modes.remove(&ino);
+        }
     }
 
     fn do_read(&self, fh: u64, offset: u64, size: u32) -> Res<Vec<u8>> {
@@ -597,6 +716,18 @@ impl Vfs {
     fn do_create(&self, parent: u64, name: &OsStr, mode: u32, flags: i32) -> Res<(FileAttr, u64)> {
         let (ino, origin, layers, fd) = self.mutate(parent, |tree, pid| {
             let layers = self.shared.layers();
+            // The new file is served by the daemon (cached I/O). Its inode number may still
+            // have passthrough files open (an unlinked file of that name, kept open), and the
+            // kernel would refuse to mix the two.
+            let key = fold_path(&tree.path_of(pid).join(name));
+            if let Some(ino) = self.shared.inodes.lock().ino_of(&key.0)
+                && matches!(
+                    self.shared.io_modes.lock().get(&ino),
+                    Some(IoMode::Passthrough { .. })
+                )
+            {
+                return Err(Errno::ETXTBSY);
+            }
             let (id, fd) = ops::create_file(
                 tree,
                 &layers,
@@ -610,7 +741,22 @@ impl Vfs {
             let ino = self.shared.inodes.lock().ino_for(&key);
             Ok((ino, tree.node(id).origin.clone(), layers, fd))
         })?;
-        let attr = self.attr_of(&layers, ino, Kind::File, &origin)?;
+        {
+            let mut modes = self.shared.io_modes.lock();
+            match modes.get_mut(&ino) {
+                Some(IoMode::Cached(open)) | Some(IoMode::Passthrough { open, .. }) => *open += 1,
+                None => {
+                    modes.insert(ino, IoMode::Cached(1));
+                }
+            }
+        }
+        let attr = match self.attr_of(&layers, ino, Kind::File, &origin) {
+            Ok(attr) => attr,
+            Err(e) => {
+                self.closed(ino);
+                return Err(e);
+            }
+        };
         let fh = self.shared.next_fh.fetch_add(1, Ordering::Relaxed);
         self.shared.handles.lock().insert(fh, Arc::new(fd));
         Ok((attr, fh))
@@ -897,11 +1043,7 @@ impl Filesystem for Vfs {
                     flags |= FopenFlags::FOPEN_KEEP_CACHE;
                 }
                 match backing {
-                    Some(backing) => {
-                        let mut backings = self.shared.backings.lock();
-                        backings.insert(fh, backing);
-                        reply.opened_passthrough(FileHandle(fh), flags, &backings[&fh]);
-                    }
+                    Some(backing) => reply.opened_passthrough(FileHandle(fh), flags, &backing),
                     None => reply.opened(FileHandle(fh), flags),
                 }
             }
@@ -929,7 +1071,7 @@ impl Filesystem for Vfs {
     fn release(
         &self,
         _req: &Request,
-        _ino: INodeNo,
+        ino: INodeNo,
         fh: FileHandle,
         _flags: OpenFlags,
         _lock_owner: Option<LockOwner>,
@@ -938,7 +1080,7 @@ impl Filesystem for Vfs {
     ) {
         let fh: u64 = fh.into();
         self.shared.handles.lock().remove(&fh);
-        self.shared.backings.lock().remove(&fh);
+        self.closed(ino.into());
         reply.ok();
     }
 
