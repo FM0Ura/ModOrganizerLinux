@@ -90,8 +90,11 @@ struct Client {
 
 impl Client {
     fn start(env: &Env) -> Client {
-        let mut child = env
-            .command()
+        Client::start_with(env.command())
+    }
+
+    fn start_with(mut command: Command) -> Client {
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -494,8 +497,163 @@ fn sigterm_unmounts_and_exits() {
     assert!(!is_mounted(&env.p("Data")));
 }
 
-fn kill_term(pid: u32) {
-    use rustix::process::{Pid, Signal, kill_process};
+#[test]
+fn sigint_without_group_unmounts_and_exits() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let mut c = Client::start(&env);
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    kill_signal(c.child.id(), rustix::process::Signal::INT);
+    assert_eq!(c.wait_exit(Duration::from_secs(10)), 0);
+    assert!(!is_mounted(&env.p("Data")));
+}
+
+/// SIGINT/SIGTERM while a watched group lives: the mount stays until the group ends, and
+/// the process exits then (stdin still open).
+fn signal_with_live_group_keeps_mount(sig: rustix::process::Signal) {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let mut c = Client::start(&env);
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    let child = sleeper(2);
+    let started = Instant::now();
+    c.request(json!({"op": "watch", "pgid": child.id() as i32}));
+    kill_signal(c.child.id(), sig);
+    thread::sleep(Duration::from_millis(1000));
+    assert!(
+        is_mounted(&env.p("Data")),
+        "mount dropped on {sig:?} while the group lives"
+    );
+    assert_eq!(fs::read_to_string(env.p("Data/a.txt")).unwrap(), "a");
+    assert!(c.child.try_wait().unwrap().is_none(), "exited early");
+    let ev = c.try_event(Duration::from_secs(5)).expect("no unmounted");
+    assert_eq!(ev, json!({"event": "unmounted"}));
+    assert_eq!(c.wait_exit(Duration::from_secs(10)), 0);
+    assert!(started.elapsed() >= Duration::from_millis(1800));
+    assert!(!is_mounted(&env.p("Data")));
+    drop(child);
+}
+
+#[test]
+fn sigint_with_live_group_keeps_mount_until_group_ends() {
+    signal_with_live_group_keeps_mount(rustix::process::Signal::INT);
+}
+
+#[test]
+fn sigterm_with_live_group_keeps_mount_until_group_ends() {
+    signal_with_live_group_keeps_mount(rustix::process::Signal::TERM);
+}
+
+#[test]
+fn sighup_is_ignored() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let mut c = Client::start(&env);
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    kill_signal(c.child.id(), rustix::process::Signal::HUP);
+    thread::sleep(Duration::from_millis(700));
+    assert!(
+        c.child.try_wait().unwrap().is_none(),
+        "SIGHUP ended mo2-vfs"
+    );
+    assert!(is_mounted(&env.p("Data")));
+    let st = c.request(json!({"op": "status"}));
+    assert_eq!(st["roots"], json!([env.p("Data")]), "{st}");
+    assert_eq!(
+        c.request(json!({"op": "unmount"})),
+        json!({"event": "unmounted"})
+    );
+    assert!(!is_mounted(&env.p("Data")));
+}
+
+/// The real fusermount3, from PATH.
+fn real_fusermount() -> PathBuf {
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|d| d.join("fusermount3"))
+        .find(|p| p.is_file())
+        .expect("fusermount3 in PATH")
+}
+
+#[test]
+fn failed_auto_unmount_is_an_error_and_is_retried() {
+    if !require_fuse() {
+        return;
+    }
+    use std::os::unix::fs::PermissionsExt;
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    // a fusermount3 whose unmounts fail while the flag file exists
+    let bin = env.p("bin");
+    let flag = env.p("fail-unmount");
+    fs::create_dir_all(&bin).unwrap();
+    let fake = bin.join("fusermount3");
+    fs::write(
+        &fake,
+        format!(
+            "#!/bin/sh\ncase \"$1\" in -u*) [ -e '{}' ] && {{ echo 'fake failure' >&2; exit 1; }};; esac\nexec '{}' \"$@\"\n",
+            flag.display(),
+            real_fusermount().display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+
+    let mut cmd = env.command();
+    cmd.env("PATH", path);
+    let mut c = Client::start_with(cmd);
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    let child = sleeper(1);
+    c.request(json!({"op": "watch", "pgid": child.id() as i32}));
+    fs::write(&flag, "").unwrap();
+
+    // not `unmounted`: the mount is still there
+    let ev = c.try_event(Duration::from_secs(10)).expect("no event");
+    assert_eq!(ev["event"], "error", "{ev}");
+    assert_eq!(ev["code"], "io", "{ev}");
+    assert_eq!(ev["spontaneous"], true, "{ev}");
+    assert_eq!(ev["path"], json!(env.p("Data")), "{ev}");
+    assert!(
+        ev["message"].as_str().unwrap().contains("fake failure"),
+        "{ev}"
+    );
+    assert!(is_mounted(&env.p("Data")));
+    // the state file still lists the root, for --cleanup after a crash
+    let state_file = env.state.join(format!("state-{}.json", c.child.id()));
+    assert!(state_file.exists());
+    // a new mount over it is refused
+    let ev = c.request(env.mount_request(&["modA"]));
+    assert_eq!(ev["code"], "io", "{ev}");
+    assert!(ev.get("spontaneous").is_none(), "{ev}");
+
+    // retried lazily until it works, then `unmounted`
+    fs::remove_file(&flag).unwrap();
+    let ev = c.try_event(Duration::from_secs(5)).expect("no unmounted");
+    assert_eq!(ev, json!({"event": "unmounted"}));
+    assert!(!is_mounted(&env.p("Data")));
+    assert!(!state_file.exists());
+    assert_eq!(fs::read_to_string(env.p("Data/base.txt")).unwrap(), "base");
+    drop(child);
+}
+
+fn kill_signal(pid: u32, sig: rustix::process::Signal) {
+    use rustix::process::{Pid, kill_process};
     let pid = Pid::from_raw(pid as i32).expect("pid");
-    kill_process(pid, Signal::TERM).expect("kill -TERM");
+    kill_process(pid, sig).expect("kill");
+}
+
+fn kill_term(pid: u32) {
+    kill_signal(pid, rustix::process::Signal::TERM);
 }

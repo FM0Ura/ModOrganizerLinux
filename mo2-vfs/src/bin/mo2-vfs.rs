@@ -15,7 +15,7 @@ const POLL: Duration = Duration::from_millis(500);
 enum Msg {
     Line(String),
     Eof,
-    Signal,
+    Signal(i32),
 }
 
 struct Args {
@@ -106,15 +106,19 @@ fn shutdown(server: &mut Server) {
     }
 }
 
+/// SIGHUP (the terminal of the application closed) is ignored. SIGINT and SIGTERM
+/// unmount and exit at once when no watched process group is alive; otherwise the mounts
+/// stay until the last group ends, as after the end of stdin, and the process exits then:
+/// a program started by the application keeps its files.
 fn serve() -> ExitCode {
-    use signal_hook::consts::{SIGINT, SIGTERM};
+    use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
     let (tx, rx) = mpsc::channel();
-    match signal_hook::iterator::Signals::new([SIGTERM, SIGINT]) {
+    match signal_hook::iterator::Signals::new([SIGTERM, SIGINT, SIGHUP]) {
         Ok(mut signals) => {
             let tx = tx.clone();
             std::thread::spawn(move || {
-                for _ in signals.forever() {
-                    if tx.send(Msg::Signal).is_err() {
+                for sig in signals.forever() {
+                    if tx.send(Msg::Signal(sig)).is_err() {
                         break;
                     }
                 }
@@ -140,7 +144,8 @@ fn serve() -> ExitCode {
         version: env!("CARGO_PKG_VERSION").to_string(),
     });
     let mut server = Server::new();
-    let mut eof = false;
+    // stdin ended or a termination signal came: exit once no watched group is left
+    let mut ending = false;
     loop {
         match rx.recv_timeout(POLL) {
             Ok(Msg::Line(line)) => {
@@ -153,20 +158,29 @@ fn serve() -> ExitCode {
                 }
             }
             Ok(Msg::Eof) | Err(RecvTimeoutError::Disconnected) => {
-                eof = true;
+                ending = true;
                 tracing::info!("stdin closed");
             }
-            Ok(Msg::Signal) => {
-                tracing::info!("termination signal");
-                shutdown(&mut server);
-                return ExitCode::SUCCESS;
+            Ok(Msg::Signal(SIGHUP)) => tracing::info!("SIGHUP ignored"),
+            Ok(Msg::Signal(sig)) => {
+                if !server.has_groups() {
+                    tracing::info!(signal = sig, "termination signal");
+                    shutdown(&mut server);
+                    return ExitCode::SUCCESS;
+                }
+                tracing::warn!(
+                    signal = sig,
+                    "termination signal while watched process groups are alive: the \
+                     virtual file system stays mounted until they end, then mo2-vfs exits"
+                );
+                ending = true;
             }
             Err(RecvTimeoutError::Timeout) => {}
         }
         if let Some(event) = server.poll_groups() {
             emit(&event);
         }
-        if eof && !server.has_groups() {
+        if ending && !server.has_groups() {
             shutdown(&mut server);
             return ExitCode::SUCCESS;
         }

@@ -3,7 +3,8 @@
 
 use crate::layer::Skip;
 use crate::mapping::Mapping;
-use crate::session::{ErrorCode, Session, SessionError};
+use crate::session::{ErrorCode, Session, SessionError, unmount_lazy};
+use crate::state::{self, StateFile};
 use crate::watch::group_alive;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -46,6 +47,10 @@ pub enum Event {
         code: ErrorCode,
         message: String,
         path: Option<PathBuf>,
+        /// Not the reply to a request: the automatic unmount (every watched group ended)
+        /// failed and is retried; the mount is still there. Left out when false.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        spontaneous: bool,
     },
     Unmounted,
     Status {
@@ -62,6 +67,7 @@ impl Event {
             code: ErrorCode::BadRequest,
             message: message.into(),
             path: None,
+            spontaneous: false,
         }
     }
 }
@@ -72,6 +78,7 @@ impl From<SessionError> for Event {
             code: e.code,
             message: e.message,
             path: e.path,
+            spontaneous: false,
         }
     }
 }
@@ -86,6 +93,10 @@ pub fn parse_request(line: &str) -> Result<Request, Event> {
 pub struct Server {
     session: Option<Session>,
     groups: Vec<i32>,
+    /// Roots whose automatic unmount failed, retried lazily, with the directory of the
+    /// state file that still lists them.
+    stale: Vec<PathBuf>,
+    stale_state_dir: Option<PathBuf>,
 }
 
 impl Server {
@@ -110,6 +121,9 @@ impl Server {
             } => {
                 if self.session.is_some() {
                     return Event::bad_request("already mounted; unmount first");
+                }
+                if let Err(e) = self.retry_stale() {
+                    return e.into();
                 }
                 let skip = Skip::new(&skip_file_suffixes, &skip_directories);
                 match Session::mount(&mappings, skip) {
@@ -166,18 +180,31 @@ impl Server {
         }
     }
 
-    /// Unmounts (if mounted) and forgets the watched groups.
+    /// Unmounts (if mounted) and forgets the watched groups; the roots of a failed
+    /// automatic unmount are tried once more (lazily).
     pub fn unmount(&mut self) -> Result<(), SessionError> {
         self.groups.clear();
-        match self.session.take() {
+        let r = match self.session.take() {
             Some(session) => session.unmount(),
             None => Ok(()),
-        }
+        };
+        r.and(self.retry_stale())
     }
 
     /// Drops the groups that ended. When groups were watched and none is left, unmounts and
-    /// returns the spontaneous `unmounted` event.
+    /// returns the spontaneous `unmounted` event; if that unmount fails, a spontaneous `io`
+    /// error instead (the mount is still there), and the unmount is retried lazily on the
+    /// next polls until it succeeds, which is then reported by `unmounted`.
     pub fn poll_groups(&mut self) -> Option<Event> {
+        if !self.stale.is_empty() {
+            return match self.retry_stale() {
+                Ok(()) => {
+                    tracing::info!("the failed automatic unmount succeeded on retry");
+                    Some(Event::Unmounted)
+                }
+                Err(_) => None,
+            };
+        }
         if self.groups.is_empty() {
             return None;
         }
@@ -186,10 +213,66 @@ impl Server {
             return None;
         }
         tracing::info!("every watched process group has ended; unmounting");
-        if let Err(e) = self.unmount() {
-            tracing::error!(error = %e, "automatic unmount failed");
+        let roots = self
+            .session
+            .as_ref()
+            .map(Session::roots)
+            .unwrap_or_default();
+        let state_dir = self.session.as_ref().map(|s| s.state_dir().to_path_buf());
+        let Err(e) = self.unmount() else {
+            return Some(Event::Unmounted);
+        };
+        let mounted = state::mounted_mo2_vfs();
+        self.stale = roots.into_iter().filter(|r| mounted.contains(r)).collect();
+        if self.stale.is_empty() {
+            tracing::warn!(error = %e, "automatic unmount reported an error, nothing is left mounted");
+            return Some(Event::Unmounted);
         }
-        Some(Event::Unmounted)
+        self.stale_state_dir = state_dir;
+        tracing::error!(error = %e, roots = ?self.stale, "automatic unmount failed; retrying");
+        Some(Event::Error {
+            code: ErrorCode::Io,
+            message: format!("automatic unmount failed: {}", e.message),
+            path: e.path.or_else(|| self.stale.first().cloned()),
+            spontaneous: true,
+        })
+    }
+
+    /// `fusermount3 -uz` on the roots of a failed automatic unmount that are still
+    /// mounted; Ok once none is left (the state file that listed them is then removed).
+    fn retry_stale(&mut self) -> Result<(), SessionError> {
+        if self.stale.is_empty() {
+            return Ok(());
+        }
+        let mounted = state::mounted_mo2_vfs();
+        let mut first_err = None;
+        self.stale.retain(|root| {
+            if !mounted.contains(root) {
+                return false;
+            }
+            match unmount_lazy(root) {
+                Ok(()) => false,
+                Err(m) => {
+                    tracing::debug!(root = %root.display(), error = %m, "unmount retry failed");
+                    first_err.get_or_insert(SessionError {
+                        code: ErrorCode::Io,
+                        message: format!(
+                            "the previous mount on {} cannot be unmounted: {m}",
+                            root.display()
+                        ),
+                        path: Some(root.clone()),
+                    });
+                    true
+                }
+            }
+        });
+        if self.stale.is_empty() {
+            if let Some(dir) = self.stale_state_dir.take() {
+                StateFile::remove_in(&dir, std::process::id());
+            }
+            return Ok(());
+        }
+        first_err.map_or(Ok(()), Err)
     }
 }
 
@@ -235,6 +318,15 @@ mod tests {
         assert_eq!(
             j(&Event::bad_request("m")),
             r#"{"event":"error","code":"bad_request","message":"m","path":null}"#
+        );
+        assert_eq!(
+            j(&Event::Error {
+                code: ErrorCode::Io,
+                message: "m".into(),
+                path: Some("/d".into()),
+                spontaneous: true,
+            }),
+            r#"{"event":"error","code":"io","message":"m","path":"/d","spontaneous":true}"#
         );
     }
 }

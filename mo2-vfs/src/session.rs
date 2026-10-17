@@ -233,8 +233,16 @@ impl Session {
         self.shutdown()
     }
 
+    /// The directory of the state file.
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+
+    /// A root that cannot be unmounted stays in the state file, so that `--cleanup` can
+    /// still find it once this process is gone.
     fn shutdown(&mut self) -> Result<(), SessionError> {
         let mut first_err: Option<SessionError> = None;
+        let mut failed = Vec::new();
         let mounted = state::mounted_mo2_vfs();
         for root in std::mem::take(&mut self.roots) {
             let mut lazy = false;
@@ -242,6 +250,7 @@ impl Session {
                 match unmount_impl(&root.mountpoint) {
                     Ok(l) => lazy = l,
                     Err(m) => {
+                        failed.push(root.mountpoint.clone());
                         first_err.get_or_insert(SessionError::new(
                             ErrorCode::Io,
                             format!("cannot unmount {}: {m}", root.mountpoint.display()),
@@ -272,7 +281,11 @@ impl Session {
                 }
             }
         }
-        StateFile::remove_in(&self.state_dir, std::process::id());
+        if failed.is_empty() {
+            StateFile::remove_in(&self.state_dir, std::process::id());
+        } else if let Err(e) = StateFile::write_in(&self.state_dir, std::process::id(), &failed) {
+            tracing::warn!(error = %e, "cannot rewrite the state file");
+        }
         first_err.map_or(Ok(()), Err)
     }
 }
@@ -675,6 +688,20 @@ fn unmount_impl(path: &Path) -> Result<bool, String> {
 /// `fusermount3 -uz` (lazy).
 pub fn unmount_path(path: &Path) -> Result<(), String> {
     unmount_impl(path).map(|_| ())
+}
+
+/// `fusermount3 -uz` (lazy) at once.
+pub fn unmount_lazy(path: &Path) -> Result<(), String> {
+    let out = Command::new("fusermount3")
+        .arg("-uz")
+        .arg(path)
+        .output()
+        .map_err(|e| format!("cannot run fusermount3: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
 }
 
 #[cfg(test)]
