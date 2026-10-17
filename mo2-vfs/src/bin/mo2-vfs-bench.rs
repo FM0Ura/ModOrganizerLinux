@@ -2,6 +2,7 @@
 //!
 //!     mo2-vfs-bench --data <empty dir> --mods <dir with the mod directories>
 //!                   [--files-sample 10000] [--seed 1] [--reps 3] [--native <dir>] [--json]
+//!                   [--passthrough]
 //!
 //! Mounts one directory mapping per mod (alphabetical order is the priority, the last
 //! wins) on `--data` and measures, in milliseconds: `mount` (until `Session::mount_in`
@@ -10,8 +11,10 @@
 //! are the same two walks over a plain copy of the merged tree. The copy is made by this
 //! program through the mounted view (so it holds exactly the merged content) before the
 //! timed walks and is not part of any timing. Each walk runs once untimed (warm-up) and
-//! `--reps` times timed; the median is reported.
+//! `--reps` times timed; the median is reported. `--passthrough` mounts with
+//! `try_passthrough` (without the privilege the kernel needs it falls back to `pread`).
 
+use mo2_vfs::fs::VfsOptions;
 use mo2_vfs::layer::Skip;
 use mo2_vfs::mapping::Mapping;
 use mo2_vfs::session::Session;
@@ -29,6 +32,7 @@ struct Args {
     reps: usize,
     native: Option<PathBuf>,
     json: bool,
+    passthrough: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -40,6 +44,7 @@ fn parse_args() -> Result<Args, String> {
         reps: 3,
         native: None,
         json: false,
+        passthrough: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -56,6 +61,7 @@ fn parse_args() -> Result<Args, String> {
             "--seed" => a.seed = value("--seed")?.parse().map_err(|e| format!("{e}"))?,
             "--reps" => a.reps = value("--reps")?.parse().map_err(|e| format!("{e}"))?,
             "--json" => a.json = true,
+            "--passthrough" => a.passthrough = true,
             other => return Err(format!("unknown argument: {other}")),
         }
     }
@@ -175,8 +181,12 @@ fn run(a: &Args) -> Result<(), String> {
     };
 
     let t = Instant::now();
-    let mut session =
-        Session::mount_in(&state, &mappings, Skip::default()).map_err(|e| format!("mount: {e}"))?;
+    let options = VfsOptions {
+        try_passthrough: a.passthrough,
+        ..VfsOptions::default()
+    };
+    let mut session = Session::mount_with(&state, &mappings, Skip::default(), options)
+        .map_err(|e| format!("mount: {e}"))?;
     let mount_ms = t.elapsed().as_secs_f64() * 1000.0;
 
     let result = (|| -> Result<serde_json::Value, String> {
@@ -227,6 +237,7 @@ fn run(a: &Args) -> Result<(), String> {
             "sample": n,
             "seed": a.seed,
             "reps": a.reps,
+            "passthrough": a.passthrough,
         }))
     })();
 

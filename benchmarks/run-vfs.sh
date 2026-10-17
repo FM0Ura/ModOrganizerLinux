@@ -78,6 +78,11 @@ cleanup() {
     # nothing in here may abort: errexit must not stop the rm
     set +e
     findmnt -rn -t fuse.mo2-vfs -o TARGET 2>/dev/null | grep -F "$WORK" | while read -r m; do fusermount3 -u -z "$m"; done
+    # never remove through a live view: that would delete the layers behind it
+    if findmnt -rn -o TARGET 2>/dev/null | grep -qF "$WORK"; then
+        echo "run-vfs.sh: a mount is still active under $WORK; not removing it" >&2
+        return 0
+    fi
     rm -rf "$WORK"
     return 0
 }
