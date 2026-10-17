@@ -37,6 +37,13 @@ if (NOT WIN32)
 	# Win32 types and constants used by the public headers
 	list(APPEND root_headers ../include/uibase/win32compat.h)
 endif()
+if (NOT WIN32)
+	# Linux-only helpers (FILETIME, INI files)
+	set(linux_headers
+		../include/uibase/linux/filetime.h
+		../include/uibase/linux/inifile.h
+	)
+endif()
 set(interface_headers
     ../include/uibase/iexecutable.h
     ../include/uibase/iexecutableslist.h
@@ -181,6 +188,7 @@ else()
 		FOLDER src/linux
 		PRIVATE
 		linux/errorcodes_linux.cpp
+		linux/inifile_linux.cpp
 		linux/peversion_linux.cpp
 		linux/peversion_linux.h
 		linux/registry_linux.cpp
@@ -218,6 +226,7 @@ target_sources(uibase
 			${widget_headers}
 			${game_features_header}
 			${formatters_header}
+			${linux_headers}
 )
 
 set_target_properties(uibase PROPERTIES DEBUG_POSTFIX d)
