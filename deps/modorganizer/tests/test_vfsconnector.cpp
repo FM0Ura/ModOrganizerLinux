@@ -1,79 +1,496 @@
 #include <gtest/gtest.h>
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QEventLoop>
+#include <QFile>
 #include <QString>
+#include <QTimer>
 
+#include <csignal>
+#include <fstream>
+#include <set>
+#include <sstream>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "fusetest.h"
 #include "shared/util.h"
+#include "tempdir.h"
 #include "vfsconnector.h"
 
-TEST(VfsConnector, NullStoresMapping)
+namespace fs = std::filesystem;
+
+namespace
 {
+QString q(const fs::path& p)
+{
+  return QString::fromStdString(p.string());
+}
+
+std::string readFile(const fs::path& p)
+{
+  std::ifstream in(p, std::ios::binary);
+  std::stringstream ss;
+  ss << in.rdbuf();
+  return ss.str();
+}
+
+bool mounted(const fs::path& p)
+{
+  const auto info = readFile("/proc/self/mountinfo");
+  return info.find(" " + p.string() + " ") != std::string::npos;
+}
+
+std::set<std::string> list(const fs::path& dir)
+{
+  std::set<std::string> names;
+  for (const auto& e : fs::recursive_directory_iterator(dir)) {
+    names.insert(fs::relative(e.path(), dir).string());
+  }
+  return names;
+}
+
+// the environment of every test: its own state directory and, unless a test sets
+// another one, the real helper
+class VfsConnectorTest : public ::testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    m_oldState  = qgetenv("MO2_VFS_STATE_DIR");
+    m_oldBinary = qgetenv("MO2_VFS_BINARY");
+    qputenv("MO2_VFS_STATE_DIR", QByteArray::fromStdString(m_state.path().string()));
+  }
+
+  void TearDown() override
+  {
+    restore("MO2_VFS_STATE_DIR", m_oldState);
+    restore("MO2_VFS_BINARY", m_oldBinary);
+  }
+
+  // a shell script that is the helper
+  void fakeHelper(const std::string& body)
+  {
+    const auto script = m_state.path() / "fake-mo2-vfs";
+    {
+      std::ofstream out(script);
+      out << "#!/bin/sh\n" << body;
+    }
+    fs::permissions(script, fs::perms::owner_all);
+    qputenv("MO2_VFS_BINARY", QByteArray::fromStdString(script.string()));
+  }
+
+  // data/ (original.esm), mods A and B, overwrite
+  struct Layout
+  {
+    TempDir tmp;
+    fs::path data, a, b, overwrite;
+
+    Layout()
+    {
+      data      = tmp.path() / "data";
+      a         = tmp.path() / "mods/A";
+      b         = tmp.path() / "mods/B";
+      overwrite = tmp.path() / "overwrite";
+      tmp.createFile("data/original.esm");
+      tmp.createFile("mods/A/a.esp");
+      tmp.createFile("mods/A/textures/a.dds");
+      tmp.createFile("mods/B/b.esp");
+      fs::create_directories(overwrite);
+    }
+
+    MappingType mapping() const
+    {
+      return {Mapping{q(a), q(data), true, false}, Mapping{q(b), q(data), true, false},
+              Mapping{q(overwrite), q(data), true, true}};
+    }
+  };
+
+  TempDir m_state;
+
+private:
+  static void restore(const char* name, const QByteArray& value)
+  {
+    if (value.isNull()) {
+      qunsetenv(name);
+    } else {
+      qputenv(name, value);
+    }
+  }
+
+  QByteArray m_oldState, m_oldBinary;
+};
+
+// releases the mount of a test that failed before it
+struct Release
+{
+  VfsConnector& vfs;
+  ~Release()
+  {
+    try {
+      vfs.releaseIfIdle();
+    } catch (...) {
+    }
+  }
+};
+}  // namespace
+
+TEST_F(VfsConnectorTest, LinuxName)
+{
+  fakeHelper("exit 0\n");
+  EXPECT_EQ(createVfsConnector()->name(), "mo2-vfs");
+}
+
+TEST_F(VfsConnectorTest, UpdateMappingDoesNotMount)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
   const auto vfs = createVfsConnector();
-  ASSERT_TRUE(vfs);
-  EXPECT_EQ(vfs->name(), "none");
 
-  auto* null = dynamic_cast<NullVfsConnector*>(vfs.get());
-  ASSERT_NE(null, nullptr);
-  EXPECT_TRUE(null->lastMapping().empty());
+  vfs->updateMapping(l.mapping());
 
-  vfs->updateMapping({Mapping{"/a", "/b", true, false}});
+  EXPECT_FALSE(vfs->isActive());
+  EXPECT_FALSE(mounted(l.data));
+  EXPECT_EQ(list(l.data), std::set<std::string>{"original.esm"});
+}
 
-  ASSERT_EQ(null->lastMapping().size(), 1u);
-  EXPECT_EQ(null->lastMapping()[0].source, "/a");
-  EXPECT_EQ(null->lastMapping()[0].destination, "/b");
-  EXPECT_TRUE(null->lastMapping()[0].isDirectory);
-  EXPECT_FALSE(null->lastMapping()[0].createTarget);
+TEST_F(VfsConnectorTest, ActivateMountsAndMergesMods)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
 
-  // replaced, not appended
-  vfs->updateMapping(
-      {Mapping{"/c", "/d", false, true}, Mapping{"/e", "/f", true, true}});
-  ASSERT_EQ(null->lastMapping().size(), 2u);
-  EXPECT_EQ(null->lastMapping()[0].source, "/c");
-  EXPECT_EQ(null->lastMapping()[1].destination, "/f");
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_TRUE(mounted(l.data));
+  EXPECT_EQ(list(l.data), (std::set<std::string>{"original.esm", "a.esp", "b.esp",
+                                                 "textures", "textures/a.dds"}));
+
+  // a file created in the data directory goes to overwrite
+  {
+    std::ofstream(l.data / "new.txt") << "x";
+  }
+  EXPECT_TRUE(fs::exists(l.overwrite / "new.txt"));
+
+  vfs->releaseIfIdle();
+  EXPECT_FALSE(vfs->isActive());
+  EXPECT_FALSE(mounted(l.data));
 }
 
 // the mappings are disk paths: the ones built by OrganizerCore::fileMapping() and the
 // ones given by plugins (local saves, file mappers) may contain backslashes, which are
 // separators on Windows only
-TEST(VfsConnector, NullMappingPathsAreDiskPaths)
+TEST_F(VfsConnectorTest, BackslashPathsWork)
 {
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
   const auto vfs = createVfsConnector();
-  auto* null     = dynamic_cast<NullVfsConnector*>(vfs.get());
-  ASSERT_NE(null, nullptr);
+  Release release{*vfs};
 
+  // the directory mappings are plain; the file ones join the relative path with '\'
   vfs->updateMapping({
-      // a mod directory mapped to the data directory (fileMapping())
-      Mapping{"/mo2/mods/A", "/games/Skyrim/Data", true, false},
-      // a file of the data tree, relative path joined with '\'
-      Mapping{"/mo2/mods/A\\textures\\a.dds", "/games/Skyrim/Data\\textures\\a.dds",
-              false, false},
-      // the local saves of a game plugin
-      Mapping{"/mo2/profiles/Default/saves", "/games/My Games\\Skyrim\\Saves", true,
-              true},
+      Mapping{q(l.a), q(l.data), true, false},
+      Mapping{q(l.b) + "\\b.esp", q(l.data) + "\\renamed.esp", false, false},
+      Mapping{q(l.overwrite), q(l.data), true, true},
   });
+  vfs->activate();
 
-  ASSERT_EQ(null->lastMapping().size(), 3u);
-
-  EXPECT_EQ(null->lastMapping()[0].source, "/mo2/mods/A");
-  EXPECT_EQ(null->lastMapping()[0].destination, "/games/Skyrim/Data");
-
-  EXPECT_EQ(null->lastMapping()[1].source, "/mo2/mods/A/textures/a.dds");
-  EXPECT_EQ(null->lastMapping()[1].destination, "/games/Skyrim/Data/textures/a.dds");
-
-  EXPECT_EQ(null->lastMapping()[2].source, "/mo2/profiles/Default/saves");
-  EXPECT_EQ(null->lastMapping()[2].destination, "/games/My Games/Skyrim/Saves");
-  EXPECT_TRUE(null->lastMapping()[2].createTarget);
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_TRUE(fs::exists(l.data / "a.esp"));
+  EXPECT_TRUE(fs::exists(l.data / "textures/a.dds"));
+  EXPECT_TRUE(fs::exists(l.data / "renamed.esp"));
 }
 
-TEST(VfsConnector, NullAcceptsParamsAndForcedLibraries)
+TEST_F(VfsConnectorTest, ReleaseIfIdleUnmounts)
 {
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  ASSERT_TRUE(mounted(l.data));
+
+  vfs->releaseIfIdle();
+  EXPECT_FALSE(vfs->isActive());
+  EXPECT_FALSE(mounted(l.data));
+
+  // and it can be mounted again
+  vfs->activate();
+  EXPECT_TRUE(mounted(l.data));
+  vfs->releaseIfIdle();
+  EXPECT_FALSE(mounted(l.data));
+}
+
+TEST_F(VfsConnectorTest, ActivateTwiceUpdates)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateMapping({Mapping{q(l.a), q(l.data), true, false}});
+  vfs->activate();
+  EXPECT_FALSE(fs::exists(l.data / "b.esp"));
+
+  vfs->updateMapping({Mapping{q(l.a), q(l.data), true, false},
+                      Mapping{q(l.b), q(l.data), true, false}});
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_TRUE(fs::exists(l.data / "b.esp"));
+}
+
+TEST_F(VfsConnectorTest, AutoDeactivatesWhenGroupEnds)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  int called = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  ASSERT_TRUE(vfs->isActive());
+
+  // a program in a group of its own (spawn.h is shadowed by the one of the
+  // application, so no posix_spawn)
+  const pid_t pid = ::fork();
+  ASSERT_GE(pid, 0);
+  if (pid == 0) {
+    ::setpgid(0, 0);
+    ::execlp("sleep", "sleep", "1", nullptr);
+    ::_exit(127);
+  }
+  ::setpgid(pid, pid);
+
+  vfs->watchProcessGroup(pid);
+
+  // not released while a group is watched
+  vfs->releaseIfIdle();
+  EXPECT_TRUE(vfs->isActive());
+
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(5)));
+  EXPECT_FALSE(vfs->isActive());
+  EXPECT_FALSE(mounted(l.data));
+
+  // the callback is queued
+  QEventLoop loop;
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+  EXPECT_EQ(called, 1);
+
+  int status = 0;
+  ::waitpid(pid, &status, 0);
+}
+
+TEST_F(VfsConnectorTest, ActivateErrorIsException)
+{
+  fakeHelper("echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"error\",\"code\":\"mount_busy\","
+             "\"message\":\"busy\",\"path\":\"/x\"}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  vfs->updateMapping({Mapping{"/a", "/b", true, false}});
+
+  try {
+    vfs->activate();
+    FAIL() << "activate() did not throw";
+  } catch (const std::runtime_error& e) {
+    const std::string what = e.what();
+    EXPECT_NE(what.find("busy"), std::string::npos) << what;
+    EXPECT_NE(what.find("/x"), std::string::npos) << what;
+  }
+  EXPECT_FALSE(vfs->isActive());
+}
+
+TEST_F(VfsConnectorTest, ErrorWithoutPath)
+{
+  fakeHelper("echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"error\",\"code\":\"bad_request\","
+             "\"message\":\"nope\",\"path\":null}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  try {
+    vfs->activate();
+    FAIL() << "activate() did not throw";
+  } catch (const std::runtime_error& e) {
+    EXPECT_EQ(std::string(e.what()), "nope");
+  }
+}
+
+TEST_F(VfsConnectorTest, MissingBinaryIsException)
+{
+  qputenv("MO2_VFS_BINARY", "/nonexistent/mo2-vfs");
   const auto vfs = createVfsConnector();
 
-  // nothing to configure without a virtual file system, but OrganizerCore calls them
-  vfs->updateParams(MOBase::log::Debug, env::CoreDumpTypes::Mini, "/tmp/dumps",
-                    std::chrono::seconds(0), "a.exe;b.exe", {".txt"}, {"dir"});
-  vfs->updateForcedLibraries({});
+  try {
+    vfs->activate();
+    FAIL() << "activate() did not throw";
+  } catch (const std::runtime_error& e) {
+    EXPECT_NE(std::string(e.what()).find("/nonexistent/mo2-vfs"), std::string::npos)
+        << e.what();
+  }
+  EXPECT_FALSE(vfs->isActive());
+}
 
-  EXPECT_EQ(vfs->name(), "none");
+TEST_F(VfsConnectorTest, HelperThatDiesWithoutHelloIsException)
+{
+  fakeHelper("echo 'boom' >&2\nexit 3\n");
+
+  const auto vfs = createVfsConnector();
+  try {
+    vfs->activate();
+    FAIL() << "activate() did not throw";
+  } catch (const std::runtime_error& e) {
+    const std::string what = e.what();
+    EXPECT_NE(what.find("boom"), std::string::npos) << what;
+  }
+}
+
+TEST_F(VfsConnectorTest, HelperCrashDeactivates)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  int called = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  ASSERT_TRUE(vfs->isActive());
+
+  // the helper is a child of this process
+  pid_t helper = 0;
+  for (const auto& e : fs::directory_iterator("/proc")) {
+    const auto name = e.path().filename().string();
+    if (name.find_first_not_of("0123456789") != std::string::npos) {
+      continue;
+    }
+    std::ifstream stat(e.path() / "stat");
+    std::string line;
+    std::getline(stat, line);
+    // pid (comm) state ppid
+    const auto close = line.rfind(')');
+    if (close == std::string::npos || line.find("(mo2-vfs)") == std::string::npos) {
+      continue;
+    }
+    std::istringstream rest(line.substr(close + 2));
+    char state;
+    int ppid;
+    rest >> state >> ppid;
+    if (ppid == ::getpid()) {
+      helper = std::stoi(name);
+    }
+  }
+  ASSERT_GT(helper, 0);
+
+  ::kill(helper, SIGKILL);
+
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(2)));
+  EXPECT_FALSE(vfs->isActive());
+
+  QEventLoop loop;
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+  EXPECT_EQ(called, 1);
+
+  // the next activation starts a new helper (after cleaning up the dead mount)
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_TRUE(fs::exists(l.data / "a.esp"));
+
+  vfs->releaseIfIdle();
+  EXPECT_FALSE(mounted(l.data));
+}
+
+TEST_F(VfsConnectorTest, StaleMountsReported)
+{
+  fakeHelper("if [ \"$1\" = \"--cleanup\" ]; then\n"
+             "  echo '{\"root\":\"/x\",\"ok\":false}'\n"
+             "  exit 1\n"
+             "fi\n");
+
+  const auto vfs = createVfsConnector();
+  EXPECT_EQ(vfs->staleMounts(), QStringList{"/x"});
+}
+
+TEST_F(VfsConnectorTest, NoStaleMountsWhenCleanupSucceeds)
+{
+  fakeHelper("echo '{\"root\":\"/x\",\"ok\":true}'\nexit 0\n");
+
+  const auto vfs = createVfsConnector();
+  EXPECT_TRUE(vfs->staleMounts().isEmpty());
+}
+
+TEST_F(VfsConnectorTest, ParamsSkipListsAreSent)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  l.tmp.createFile("mods/A/a.esp.mohidden");
+  l.tmp.createFile("mods/A/fomod/info.xml");
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateParams(MOBase::log::Debug, env::CoreDumpTypes::Mini, "/tmp/dumps",
+                    std::chrono::seconds(0), "", {".mohidden"}, {"fomod"});
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+
+  EXPECT_TRUE(fs::exists(l.data / "a.esp"));
+  EXPECT_FALSE(fs::exists(l.data / "a.esp.mohidden"));
+  EXPECT_FALSE(fs::exists(l.data / "fomod"));
+}
+
+TEST_F(VfsConnectorTest, AcceptsForcedLibraries)
+{
+  fakeHelper("exit 0\n");
+  const auto vfs = createVfsConnector();
+
+  // nothing to configure, but OrganizerCore calls it
+  vfs->updateForcedLibraries({});
+  EXPECT_EQ(vfs->name(), "mo2-vfs");
 }
 
 // shown in the about dialog and logged on startup

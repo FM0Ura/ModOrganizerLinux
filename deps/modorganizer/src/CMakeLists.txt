@@ -118,8 +118,10 @@ set(_organizer_env_sources
 	linux/envwindows_linux.cpp)
 
 set(_organizer_launch_sources
+	shared/appconfig.cpp
 	linux/loot_linux.cpp
 	linux/spawn_linux.cpp
+	linux/vfsclient_linux.cpp
 	linux/vfsconnector_linux.cpp)
 
 get_target_property(_organizer_sources organizer SOURCES)

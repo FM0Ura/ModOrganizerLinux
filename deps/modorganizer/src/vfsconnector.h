@@ -5,7 +5,9 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QtGlobal>
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <uibase/executableinfo.h>
 #include <uibase/filemapping.h>
@@ -14,8 +16,13 @@
 // the virtual file system that shows the mods in the game directory to the programs
 // started by Mod Organizer
 //
-// on Windows, this is usvfs (UsvfsConnector, usvfsconnector.h); on Linux, there is no
-// virtual file system yet (NullVfsConnector below, which only remembers the mappings)
+// on Windows, this is usvfs (UsvfsConnector, usvfsconnector.h); on Linux, it is the
+// FUSE file system of the mo2-vfs program (LinuxVfsConnector,
+// linux/vfsconnector_linux.cpp)
+//
+// usvfs is active as long as the process that uses it lives; the Linux file system is
+// mounted explicitly: the methods below the mappings and parameters are for that, and
+// do nothing by default
 //
 class VfsConnector
 {
@@ -35,40 +42,38 @@ public:
   virtual void updateForcedLibraries(
       const QList<MOBase::ExecutableForcedLoadSetting>& forcedLibraries) = 0;
 
-  // name of the virtual file system, for logging: "usvfs" or "none"
+  // name of the virtual file system, for logging: "usvfs" or "mo2-vfs"
   //
   virtual QString name() const = 0;
+
+  // mount points left by a previous run that couldn't be unmounted, for the user
+  virtual QStringList staleMounts() const { return {}; }
+
+  // mounts the virtual file system with the last mappings (or updates it if it is
+  // already mounted); throws std::runtime_error with the reason when it can't
+  virtual void activate() {}
+
+  // the virtual file system stays mounted while this process group has processes
+  virtual void watchProcessGroup(qint64 pgid) { Q_UNUSED(pgid); }
+
+  // unmounts if no process group is watched (the program didn't start)
+  virtual void releaseIfIdle() {}
+
+  virtual bool isActive() const { return false; }
+
+  // true when inactive within the timeout
+  virtual bool waitInactive(std::chrono::milliseconds timeout)
+  {
+    Q_UNUSED(timeout);
+    return true;
+  }
+
+  // called in the thread of the connector's object when the file system was unmounted
+  virtual void setDeactivatedCallback(std::function<void()> f) { Q_UNUSED(f); }
 };
 
 // creates the virtual file system of this platform
 //
 std::unique_ptr<VfsConnector> createVfsConnector();
-
-#ifndef _WIN32
-// Linux has no virtual file system yet: this connector only keeps the last mappings
-// (with '/' separators), for the tests and for the file system that will use them
-// (src/linux/vfsconnector_linux.cpp)
-//
-class NullVfsConnector : public VfsConnector
-{
-public:
-  void updateMapping(const MappingType& mapping) override;
-
-  void updateParams(MOBase::log::Levels logLevel, env::CoreDumpTypes coreDumpType,
-                    const QString& crashDumpsPath, std::chrono::seconds spawnDelay,
-                    QString executableBlacklist, const QStringList& skipFileSuffixes,
-                    const QStringList& skipDirectories) override;
-
-  void updateForcedLibraries(
-      const QList<MOBase::ExecutableForcedLoadSetting>& forcedLibraries) override;
-
-  QString name() const override;
-
-  const MappingType& lastMapping() const;
-
-private:
-  MappingType m_mapping;
-};
-#endif  // _WIN32
 
 #endif  // VFSCONNECTOR_H
