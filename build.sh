@@ -172,19 +172,41 @@ build_mo2_vfs() {
 # modorganizer is the application itself ($MO2_SRC, by default deps/modorganizer),
 # configured with its linux-gcc preset (Ninja, RelWithDebInfo, no vcpkg); -B keeps the
 # build tree out of the source. It installs bin/ModOrganizer with its resources next to it; with --tests,
-# the installed executable must then pass the smoke test.
+# the installed executable must then pass the smoke test (smoke_modorganizer, after the
+# last target).
 build_modorganizer() {
     cmake_build modorganizer "$MO2_SRC" --preset linux-gcc
-    [[ $TESTS == 1 ]] && smoke_modorganizer
-    return 0
 }
 
-# smoke test (tests/smoke/modorganizer-smoke.sh; CI runs it only through here): `ModOrganizer --help`
-# prints the usage, and the application started headless with a fresh HOME gets past
-# its QApplication to the instance selection (it loads the plugins) without crashing
+# With --tests, after every target (like vfs_e2e, below): the smoke test
+# (tests/smoke/modorganizer-smoke.sh; CI runs it only through here): `ModOrganizer --help`
+# prints the usage, the application started headless with a fresh HOME gets past its
+# QApplication to the instance selection (it loads the plugins) without crashing, and
+# with a ready Skyrim SE instance it gets up to the main window. That last step needs
+# the game plugin (game_bethesda, built after the application), hence after the last
+# target. It runs in a full build, and with --only when modorganizer or game_bethesda
+# was built and the application is installed; without an installed Skyrim SE plugin
+# (--only modorganizer in a clean tree, or game_bethesda failed under --allow-fail) the
+# main window step is skipped with a message.
 smoke_modorganizer() {
+    [[ $TESTS == 1 ]] || return 0
+    local main=1
+    if ((${#ONLY[@]})); then
+        [[ " ${ONLY[*]} " == *" modorganizer "* || " ${ONLY[*]} " == *" game_bethesda "* ]] ||
+            return 0
+        if [[ ! -x $INSTALL/bin/ModOrganizer ]]; then
+            log "smoke test skipped: build modorganizer first"
+            return 0
+        fi
+    fi
+    if [[ " ${failed[*]} " == *" game_bethesda "* ||
+        ! -f $INSTALL/bin/plugins/libgame_skyrimse.so ]]; then
+        log "smoke test: the Skyrim SE plugin is not available (game_bethesda), main window step skipped"
+        main=0
+    fi
     log "smoke test: ModOrganizer"
-    "$ROOT/tests/smoke/modorganizer-smoke.sh" "$INSTALL" || die "smoke test failed"
+    MO2_SMOKE_MAIN_WINDOW=$main "$ROOT/tests/smoke/modorganizer-smoke.sh" "$INSTALL" ||
+        die "smoke test failed"
     log "smoke test passed"
 }
 
@@ -324,6 +346,12 @@ for t in "${ALL_TARGETS[@]}"; do
         "$(fn_of "$t")"
     fi
 done
+# after the last target: the smoke test needs the game plugin for its main window step
+if [[ " ${failed[*]} " == *" modorganizer "* ]]; then
+    log "smoke test skipped: modorganizer failed"
+else
+    smoke_modorganizer
+fi
 # skipped when a target it needs failed under --allow-fail
 if [[ " ${failed[*]} " == *" mo2-vfs "* || " ${failed[*]} " == *" modorganizer "* ||
     " ${failed[*]} " == *" game_bethesda "* ]]; then

@@ -4,7 +4,8 @@
 #   tests/smoke/modorganizer-smoke.sh <install prefix>
 #
 # 1. `ModOrganizer --help` exits with 0 and prints the usage (it mentions --instance);
-# 2. started with a fresh HOME and XDG directories (so there is no instance), the
+# 2. started with a fresh HOME and XDG directories (also XDG_RUNTIME_DIR and
+#    MO2_VFS_STATE_DIR; so there is no instance), the
 #    application gets past the creation of its QApplication and reaches the instance
 #    selection: it loads the plugins (log "looking for plugins in ..." and the timing of
 #    PluginContainer::loadPlugins(), which selectInstance() does before showing the
@@ -19,7 +20,9 @@
 #    (deps/modorganizer/src/moapplication.cpp, MOApplication::doOneRun()). The test then
 #    sends SIGTERM (30 s at most to reach the window, 10 s to exit) and checks that the
 #    application did not crash (no crash dump, exit by TERM or 0). Nothing may be
-#    written in the real HOME (checked with a marker file).
+#    written in the real HOME (checked with a marker file). It needs the installed
+#    Skyrim SE plugin; MO2_SMOKE_MAIN_WINDOW=0 skips it (build.sh does that when the
+#    plugin is not installed).
 set -euo pipefail
 
 INSTALL="${1:?usage: $0 <install prefix>}"
@@ -42,9 +45,13 @@ start() {
     local home rc=0 out
     echo "--- ModOrganizer, start $1 (fresh HOME, no instance, ${TIMEOUT}s)"
     home="$(mktemp -d)"
+    # a private runtime directory too: neither it nor the state directory of mo2-vfs
+    # (read by its --cleanup at startup) may be the user's
+    mkdir -m 700 "$home/runtime"
     out="$(env HOME="$home" \
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
         XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state" \
+        XDG_RUNTIME_DIR="$home/runtime" MO2_VFS_STATE_DIR="$home/runtime/mo2-vfs" \
         QT_QPA_PLATFORM=offscreen \
         timeout -k 10 "$TIMEOUT" "$APP" --logs 2>&1)" || rc=$?
     rm -rf "$home"
@@ -167,6 +174,10 @@ main_window() {
 # SIGTERM, left behind (single-process shared memory and local socket)
 start 1
 start 2
-main_window
+if [[ ${MO2_SMOKE_MAIN_WINDOW:-1} == 0 ]]; then
+    echo "--- main window test skipped (MO2_SMOKE_MAIN_WINDOW=0: no game plugin installed)"
+else
+    main_window
+fi
 
 echo "smoke test passed"
