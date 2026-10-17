@@ -1727,6 +1727,9 @@ void OrganizerCore::refreshDirectoryStructure()
     return;
   }
 
+  // this refresh is the one that was deferred, if any
+  m_RefreshPendingAfterVfs = false;
+
   if (m_DirectoryUpdate) {
     log::debug("can't refresh, already in progress");
     return;
@@ -2187,6 +2190,15 @@ void OrganizerCore::afterRun(const QFileInfo& binary, DWORD exitCode)
 #ifndef _WIN32
   if (!m_VFS->waitInactive(std::chrono::seconds(5)))
     log::warn("the virtual file system is still mounted, refreshing when it is not");
+
+  if (const auto reason = m_VFS->takeLostReason(); !reason.isEmpty())
+    QMessageBox::warning(
+        m_UserInterface ? m_UserInterface->mainWindow() : nullptr,
+        tr("Virtual file system"),
+        tr("The virtual file system stopped while the program was running: %1\n\n"
+           "Files the program wrote after that point may be missing from the "
+           "overwrite directory or the mods.")
+            .arg(reason));
 #endif
 
   // need to remove our stored load order because it may be outdated if a

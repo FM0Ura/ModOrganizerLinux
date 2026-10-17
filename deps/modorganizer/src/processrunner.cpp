@@ -915,7 +915,7 @@ ProcessRunner::Results ProcessRunner::postRun()
 
   if (shouldRefresh(r)) {
     QEventLoop loop;
-    const bool wait = m_waitFlags.testFlag(WaitForRefresh);
+    bool wait = m_waitFlags.testFlag(WaitForRefresh);
 
     if (wait) {
       QObject::connect(&m_core, &OrganizerCore::directoryStructureReady, &loop,
@@ -923,6 +923,13 @@ ProcessRunner::Results ProcessRunner::postRun()
     }
 
     m_core.afterRun(m_sp.binary, m_exitCode);
+
+#ifndef _WIN32
+    if (wait && m_core.vfs().isActive()) {
+      log::debug("process runner: not waiting, the refresh follows the unmount");
+      wait = false;
+    }
+#endif
 
     if (wait) {
       log::debug("process runner: waiting until refresh finishes");

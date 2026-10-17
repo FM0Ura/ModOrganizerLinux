@@ -73,6 +73,10 @@ public:
   // connector while a request of the connector is running (activate(),
   // updateMapping(), ...), which throws or is logged as an error
   virtual void setDeactivatedCallback(std::function<void()> f) { Q_UNUSED(f); }
+
+  // why the virtual file system stopped while it was mounted (the helper program ended
+  // or stopped answering), once: empty when it didn't or when it was already taken
+  virtual QString takeLostReason() { return {}; }
 };
 
 // creates the virtual file system of this platform

@@ -23,6 +23,7 @@
 #include <QProcess>
 #include <QTimer>
 #include <stdexcept>
+#include <utility>
 
 using namespace MOBase;
 
@@ -174,6 +175,7 @@ public:
   {
     if (m_client && !m_client->running()) {
       m_client.reset();
+      lost("mo2-vfs is not running");
     }
 
     // a new helper has nothing mounted: always `mount`, never `update`
@@ -257,6 +259,8 @@ public:
 
   bool isActive() const override { return m_active; }
 
+  QString takeLostReason() override { return std::exchange(m_lostReason, {}); }
+
   bool waitInactive(std::chrono::milliseconds timeout) override
   {
     QEventLoop loop;
@@ -315,11 +319,12 @@ private:
   {
     try {
       return m_client->request(r, timeout);
-    } catch (...) {
+    } catch (const std::exception& e) {
       if (!m_client->running()) {
         m_cleanupNeeded = true;
 
         // the file system went down with the helper
+        lost(QString::fromStdString(e.what()));
         deactivated();
       }
       throw;
@@ -361,10 +366,21 @@ private:
       log::error("mo2-vfs ended ({}) while the virtual file system was active: {}", how,
                  stderrTail);
       m_cleanupNeeded = true;
+      lost(stderrTail.isEmpty() ? "mo2-vfs ended (" + how + ")"
+                                : "mo2-vfs ended (" + how + "): " + stderrTail);
       deactivated();
     });
 
     m_client = std::move(client);
+  }
+
+  // the file system stopped while it was mounted; the first reason is kept until
+  // takeLostReason()
+  void lost(const QString& reason)
+  {
+    if (m_active && m_lostReason.isEmpty()) {
+      m_lostReason = reason;
+    }
   }
 
   void deactivated()
@@ -404,6 +420,7 @@ private:
   QStringList m_skipDirectories;
   log::Levels m_logLevel = log::Info;
   QStringList m_stale;
+  QString m_lostReason;
 
   QObject m_context;
   std::unique_ptr<VfsClient> m_client;

@@ -473,6 +473,9 @@ TEST_F(VfsConnectorTest, UpdateTimeoutDeactivatesAndRemounts)
   vfs->updateMapping(l.mapping());  // the update times out (and is only logged)
   EXPECT_FALSE(vfs->isActive());
 
+  // the helper that stopped answering lost the file system
+  EXPECT_TRUE(vfs->takeLostReason().contains("did not reply"));
+
   QEventLoop loop;
   QTimer::singleShot(100, &loop, &QEventLoop::quit);
   loop.exec();
@@ -599,6 +602,9 @@ TEST_F(VfsConnectorTest, HelperCrashDeactivates)
   }
   ASSERT_GT(helper, 0);
 
+  // nothing was lost yet
+  EXPECT_TRUE(vfs->takeLostReason().isEmpty());
+
   ::kill(helper, SIGKILL);
 
   EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(2)));
@@ -609,6 +615,11 @@ TEST_F(VfsConnectorTest, HelperCrashDeactivates)
   loop.exec();
   EXPECT_EQ(called, 1);
 
+  // why the file system stopped, for the user at the end of the run; once
+  const auto reason = vfs->takeLostReason();
+  EXPECT_TRUE(reason.contains("mo2-vfs ended")) << reason.toStdString();
+  EXPECT_TRUE(vfs->takeLostReason().isEmpty());
+
   // the next activation starts a new helper (after cleaning up the dead mount)
   vfs->activate();
   EXPECT_TRUE(vfs->isActive());
@@ -616,6 +627,9 @@ TEST_F(VfsConnectorTest, HelperCrashDeactivates)
 
   vfs->releaseIfIdle();
   EXPECT_FALSE(mounted(l.data));
+
+  // a normal unmount is not a loss
+  EXPECT_TRUE(vfs->takeLostReason().isEmpty());
 }
 
 TEST_F(VfsConnectorTest, StaleMountsReported)
