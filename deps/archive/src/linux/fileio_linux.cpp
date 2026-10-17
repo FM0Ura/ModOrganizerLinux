@@ -26,6 +26,8 @@ namespace
 {
 
   // Win32 FILETIME: 100ns ticks since 1601-01-01, Unix: seconds since 1970-01-01.
+  // Same conversion as uibase/linux/filetime.h; archive does not link uibase, so it
+  // keeps its own copy.
   constexpr Int64 kTicksPerSecond   = 10000000;
   constexpr Int64 kUnixEpochSeconds = 11644473600LL;
 
