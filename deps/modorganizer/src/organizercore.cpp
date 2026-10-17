@@ -2175,11 +2175,13 @@ bool OrganizerCore::beforeRun(
     return false;
 #endif
   } catch (const std::exception& e) {
-    QWidget* w = nullptr;
+    log::error("{}", e.what());
+
+    // no dialog without a user interface (command line runs): it would wait for an
+    // answer nobody can give
     if (m_UserInterface) {
-      w = m_UserInterface->mainWindow();
+      QMessageBox::warning(m_UserInterface->mainWindow(), tr("Error"), e.what());
     }
-    QMessageBox::warning(w, tr("Error"), e.what());
     return false;
   }
 
@@ -2192,14 +2194,19 @@ void OrganizerCore::afterRun(const QFileInfo& binary, DWORD exitCode)
   if (!m_VFS->waitInactive(std::chrono::seconds(5)))
     log::warn("the virtual file system is still mounted, refreshing when it is not");
 
-  if (const auto reason = m_VFS->takeLostReason(); !reason.isEmpty())
-    QMessageBox::warning(
-        m_UserInterface ? m_UserInterface->mainWindow() : nullptr,
-        tr("Virtual file system"),
-        tr("The virtual file system stopped while the program was running: %1\n\n"
-           "Files the program wrote after that point may be missing from the "
-           "overwrite directory or the mods.")
-            .arg(reason));
+  if (const auto reason = m_VFS->takeLostReason(); !reason.isEmpty()) {
+    log::error("the virtual file system stopped while the program was running: {}",
+               reason);
+
+    // without a user interface (command line runs), only logged
+    if (m_UserInterface)
+      QMessageBox::warning(
+          m_UserInterface->mainWindow(), tr("Virtual file system"),
+          tr("The virtual file system stopped while the program was running: %1\n\n"
+             "Files the program wrote after that point may be missing from the "
+             "overwrite directory or the mods.")
+              .arg(reason));
+  }
 #endif
 
   // need to remove our stored load order because it may be outdated if a

@@ -15,6 +15,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -116,6 +117,60 @@ QJsonArray toJson(const QStringList& list)
   }
   return a;
 }
+
+// a mount point field of /proc/self/mountinfo: spaces, tabs, newlines and backslashes
+// are octal escapes (\040)
+QString unescapeMountinfo(const QByteArray& field)
+{
+  QByteArray out;
+  out.reserve(field.size());
+
+  for (qsizetype i = 0; i < field.size(); ++i) {
+    if (field[i] == '\\' && i + 3 < field.size() && field[i + 1] >= '0' &&
+        field[i + 1] <= '7' && field[i + 2] >= '0' && field[i + 2] <= '7' &&
+        field[i + 3] >= '0' && field[i + 3] <= '7') {
+      out.push_back(static_cast<char>((field[i + 1] - '0') * 64 +
+                                      (field[i + 2] - '0') * 8 + (field[i + 3] - '0')));
+      i += 3;
+    } else {
+      out.push_back(field[i]);
+    }
+  }
+
+  return QString::fromUtf8(out);
+}
+
+// the mo2-vfs mount points of this mount namespace: file system type fuse.mo2-vfs, or
+// fuse with the source mo2-vfs (mounts made by root)
+QStringList mountedRoots()
+{
+  QFile file("/proc/self/mountinfo");
+  if (!file.open(QIODevice::ReadOnly)) {
+    log::warn("cannot read /proc/self/mountinfo: {}", file.errorString());
+    return {};
+  }
+
+  QStringList roots;
+
+  for (const auto& line : file.readAll().split('\n')) {
+    const auto sep = line.indexOf(" - ");
+    if (sep < 0) {
+      continue;
+    }
+
+    const auto pre  = line.left(sep).split(' ');
+    const auto post = line.mid(sep + 3).split(' ');
+    if (pre.size() < 5 || post.size() < 2) {
+      continue;
+    }
+
+    if (post[0] == "fuse.mo2-vfs" || (post[0] == "fuse" && post[1] == "mo2-vfs")) {
+      roots.push_back(unescapeMountinfo(pre[4]));
+    }
+  }
+
+  return roots;
+}
 }  // namespace
 
 class LinuxVfsConnector : public VfsConnector
@@ -171,56 +226,24 @@ public:
 
   QStringList staleMounts() const override { return m_stale; }
 
+  // while it runs, the file system counts as active (isActive()): a refresh started
+  // from the event loops of the requests must not walk a mount as it comes up
   void activate() override
   {
-    if (m_client && !m_client->running()) {
-      m_client.reset();
-      lost("mo2-vfs is not running");
-    }
-
-    // a new helper has nothing mounted: always `mount`, never `update`
-    const bool fresh = !m_client;
-
-    if (fresh) {
-      // whatever was mounted is gone with the helper that had it
-      deactivated();
-
-      if (m_cleanupNeeded) {
-        // the helper that ended abnormally may have left its mount behind
-        const auto stale = cleanupStaleMounts();
-        if (!stale.isEmpty()) {
-          m_stale = stale;
-        }
-        m_cleanupNeeded = false;
-      }
-
-      start();
-    }
-
-    const bool update = m_active;
-
-    if (update) {
-      send(mappingRequest("update"), mountTimeout());
-      return;
-    }
-
-    // callbacks queued for earlier deactivations are history, even if they are
-    // delivered while the mount request waits
-    ++m_generation;
+    const bool wasActivating = std::exchange(m_activating, true);
 
     try {
-      send(mappingRequest("mount"), mountTimeout());
+      doActivate();
     } catch (...) {
-      // the deactivation that was not delivered is still news
-      if (m_pendingDeactivation) {
-        queueDeactivatedCallback();
-      }
+      m_activating = wasActivating;
+
+      // what was deferred while activating (and a deactivation that was not delivered)
+      // is still news
+      queueDeactivatedCallback();
       throw;
     }
 
-    m_active              = true;
-    m_watched             = 0;
-    m_pendingDeactivation = false;
+    m_activating = wasActivating;
   }
 
   void watchProcessGroup(qint64 pgid) override
@@ -257,7 +280,12 @@ public:
     deactivated();
   }
 
-  bool isActive() const override { return m_active; }
+  // also while activating, and while a mount that could not be unmounted is left
+  // (the data directory would not show the game's own files)
+  bool isActive() const override
+  {
+    return m_active || m_activating || !m_leftMounted.isEmpty();
+  }
 
   QString takeLostReason() override { return std::exchange(m_lostReason, {}); }
 
@@ -270,13 +298,13 @@ public:
     deadline.setSingleShot(true);
 
     QObject::connect(&tick, &QTimer::timeout, &loop, [&] {
-      if (!m_active) {
+      if (!isActive()) {
         loop.quit();
       }
     });
     QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
 
-    if (!m_active) {
+    if (!isActive()) {
       return true;
     }
 
@@ -284,7 +312,7 @@ public:
     deadline.start(static_cast<int>(timeout.count()));
     loop.exec();
 
-    return !m_active;
+    return !isActive();
   }
 
   void setDeactivatedCallback(std::function<void()> f) override
@@ -293,6 +321,55 @@ public:
   }
 
 private:
+  void doActivate()
+  {
+    if (m_client && !m_client->running()) {
+      helperLost("mo2-vfs is not running");
+      m_client.reset();
+    }
+
+    // a new helper has nothing mounted: always `mount`, never `update`
+    const bool fresh = !m_client;
+
+    if (fresh) {
+      if (m_cleanupNeeded || !m_leftMounted.isEmpty()) {
+        // the helper that ended abnormally may have left its mount behind
+        cleanupLeftMounts();
+      }
+
+      if (!m_leftMounted.isEmpty()) {
+        throw std::runtime_error(
+            "the virtual file system of a previous mo2-vfs is still mounted on " +
+            m_leftMounted.join(", ").toStdString() +
+            " and cannot be unmounted; close the programs that use it and run "
+            "fusermount3 -uz on it");
+      }
+
+      start();
+    }
+
+    if (m_active) {
+      send(mappingRequest("update"), mountTimeout());
+      return;
+    }
+
+    // callbacks queued for earlier deactivations are history, even if they are
+    // delivered while the mount request waits
+    ++m_generation;
+
+    const auto reply = send(mappingRequest("mount"), mountTimeout());
+
+    m_roots.clear();
+    for (const auto& r : reply.value("roots").toArray()) {
+      m_roots.push_back(r.toString());
+    }
+
+    m_active              = true;
+    m_watched             = 0;
+    m_pendingDeactivation = false;
+    m_leftMounted.clear();
+  }
+
   QJsonObject mappingRequest(const char* op) const
   {
     QJsonArray mappings;
@@ -313,21 +390,104 @@ private:
     return r;
   }
 
-  // a helper that is gone (or given up on after a timeout) may have left its mount
-  // behind: it is cleaned up before the next one starts
+  // a helper that is gone, or that stopped answering, loses the file system
+  // (helperLost())
   QJsonObject send(const QJsonObject& r, std::chrono::milliseconds timeout)
   {
     try {
       return m_client->request(r, timeout);
     } catch (const std::exception& e) {
       if (!m_client->running()) {
-        m_cleanupNeeded = true;
-
-        // the file system went down with the helper
-        lost(QString::fromStdString(e.what()));
-        deactivated();
+        helperLost(QString::fromStdString(e.what()));
       }
       throw;
+    }
+  }
+
+  // the helper ended, or stopped answering: one that stopped answering is killed when
+  // no watched program may still use its mount, so that the refresh can't walk a hung
+  // mount; then what it left mounted is unmounted (`mo2-vfs --cleanup`) before the file
+  // system counts as inactive, so that the refresh doesn't walk a dead mount (ENOTCONN:
+  // the data directory would look empty, and the plugin lists would be written without
+  // the game's own plugins); once per helper
+  void helperLost(const QString& reason)
+  {
+    if (m_lossHandled) {
+      return;
+    }
+    m_lossHandled = true;
+
+    lost(reason);
+
+    if (m_client && !m_client->exited() && m_watched > 0) {
+      // not killed: a program may still be using the mount; whatever the helper left
+      // behind is cleaned up before the next one starts
+      log::error("mo2-vfs stopped answering while programs use the virtual file "
+                 "system: {}",
+                 reason);
+      m_cleanupNeeded = true;
+      deactivated();
+      return;
+    }
+
+    if (m_client && !m_client->exited()) {
+      // a hung helper; its exited handler comes back here
+      log::error("killing mo2-vfs, which stopped answering: {}", reason);
+      m_client->kill();
+    }
+
+    if (m_active || m_activating || !m_leftMounted.isEmpty()) {
+      cleanupLeftMounts();
+    }
+  }
+
+  // runs `mo2-vfs --cleanup` and checks the mount table: inactive when none of the
+  // roots of the last mount is still mounted, otherwise they are left mounted
+  // (isActive(), staleMounts()) and the reason says so
+  void cleanupLeftMounts()
+  {
+    cleanupStaleMounts();
+
+    const auto mounted = mountedRoots();
+    QStringList left;
+    for (const auto& root : m_roots + m_leftMounted) {
+      if (mounted.contains(root) && !left.contains(root)) {
+        left.push_back(root);
+      }
+    }
+
+    if (left.isEmpty()) {
+      m_cleanupNeeded = false;
+      deactivated();
+      return;
+    }
+
+    log::error("the virtual file system is still mounted on {} after the cleanup",
+               left.join(", "));
+
+    keepLeftMounted(left, "it could not be unmounted: " + left.join(", ") +
+                              "; the data directory is refreshed once it is "
+                              "unmounted (fusermount3 -uz)");
+    m_cleanupNeeded = true;
+  }
+
+  // the file system is no longer usable but is still mounted on these roots
+  void keepLeftMounted(const QStringList& roots, const QString& why)
+  {
+    if (m_lostReason.isEmpty()) {
+      m_lostReason = why;
+    } else if (!m_lostReason.contains(why)) {
+      m_lostReason += "; " + why;
+    }
+
+    m_active      = false;
+    m_watched     = 0;
+    m_leftMounted = roots;
+
+    for (const auto& root : roots) {
+      if (!m_stale.contains(root)) {
+        m_stale.push_back(root);
+      }
     }
   }
 
@@ -358,20 +518,34 @@ private:
       deactivated();
     });
 
-    client->setExitedHandler([this](QString how, QString stderrTail) {
+    // the helper retries the unmount and reports `unmounted` when it works
+    client->setUnmountFailedHandler([this](QString message, QString path) {
       if (!m_active) {
+        return;
+      }
+
+      QStringList roots = m_roots;
+      if (!path.isEmpty() && !roots.contains(path)) {
+        roots.push_back(path);
+      }
+
+      m_cleanupNeeded = true;
+      keepLeftMounted(roots, message);
+    });
+
+    client->setExitedHandler([this](QString how, QString stderrTail) {
+      if (!isActive()) {
         return;
       }
 
       log::error("mo2-vfs ended ({}) while the virtual file system was active: {}", how,
                  stderrTail);
-      m_cleanupNeeded = true;
-      lost(stderrTail.isEmpty() ? "mo2-vfs ended (" + how + ")"
-                                : "mo2-vfs ended (" + how + "): " + stderrTail);
-      deactivated();
+      helperLost(stderrTail.isEmpty() ? "mo2-vfs ended (" + how + ")"
+                                      : "mo2-vfs ended (" + how + "): " + stderrTail);
     });
 
-    m_client = std::move(client);
+    m_client      = std::move(client);
+    m_lossHandled = false;
   }
 
   // the file system stopped while it was mounted; the first reason is kept until
@@ -383,14 +557,16 @@ private:
     }
   }
 
+  // nothing is mounted any more
   void deactivated()
   {
-    if (!m_active) {
+    if (!m_active && m_leftMounted.isEmpty()) {
       return;
     }
 
     m_active  = false;
     m_watched = 0;
+    m_leftMounted.clear();
 
     m_pendingDeactivation = true;
     queueDeactivatedCallback();
@@ -407,7 +583,7 @@ private:
         &m_context,
         [this, f = m_deactivated, gen = m_generation] {
           // not for a deactivation that is already history
-          if (!m_active && gen == m_generation) {
+          if (!isActive() && gen == m_generation) {
             m_pendingDeactivation = false;
             f();
           }
@@ -424,8 +600,17 @@ private:
 
   QObject m_context;
   std::unique_ptr<VfsClient> m_client;
+
+  // the roots of the last mount (its `ready` event)
+  QStringList m_roots;
+
+  // the roots of a file system that is not usable any more but could not be unmounted
+  QStringList m_leftMounted;
+
   bool m_active              = false;
+  bool m_activating          = false;
   bool m_cleanupNeeded       = false;
+  bool m_lossHandled         = false;
   int m_watched              = 0;
   unsigned m_generation      = 0;
   bool m_pendingDeactivation = false;

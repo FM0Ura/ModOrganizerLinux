@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <stdexcept>
 #include <uibase/log.h>
+#include <unistd.h>
 
 using namespace MOBase;
 
@@ -33,6 +34,7 @@ struct VfsClient::State
   QString exitText;
   QEventLoop* loop = nullptr;
   std::function<void()> unmounted;
+  std::function<void(QString, QString)> unmountFailed;
   std::function<void(QString, QString)> exitedHandler;
 
   void wake()
@@ -51,6 +53,13 @@ VfsClient::VfsClient(QString binary, QStringList args) : m_state(new State)
   s.process.setProcessChannelMode(QProcess::SeparateChannels);
   s.process.setProgram(binary);
   s.process.setArguments(args);
+
+  // out of the session of Mod Organizer: Ctrl+C in its terminal (SIGINT to the
+  // foreground process group) or closing the terminal (SIGHUP to the session) must not
+  // stop the file system of a running game
+  s.process.setChildProcessModifier([] {
+    ::setsid();
+  });
 
   auto* state = m_state.get();
 
@@ -127,6 +136,7 @@ VfsClient::~VfsClient()
   auto& s = *m_state;
 
   s.unmounted     = nullptr;
+  s.unmountFailed = nullptr;
   s.exitedHandler = nullptr;
 
   if (s.process.state() == QProcess::NotRunning) {
@@ -151,6 +161,25 @@ void VfsClient::setUnmountedHandler(std::function<void()> f)
   m_state->unmounted = std::move(f);
 }
 
+void VfsClient::setUnmountFailedHandler(std::function<void(QString, QString)> f)
+{
+  m_state->unmountFailed = std::move(f);
+}
+
+void VfsClient::kill()
+{
+  auto& s = *m_state;
+
+  if (s.process.state() == QProcess::NotRunning) {
+    return;
+  }
+
+  s.process.kill();
+  if (!s.process.waitForFinished(static_cast<int>(ExitTimeout.count()))) {
+    log::error("mo2-vfs did not end after SIGKILL");
+  }
+}
+
 void VfsClient::setExitedHandler(std::function<void(QString, QString)> f)
 {
   m_state->exitedHandler = std::move(f);
@@ -160,6 +189,11 @@ bool VfsClient::running() const
 {
   return !m_state->exited && !m_state->broken &&
          m_state->process.state() == QProcess::Running;
+}
+
+bool VfsClient::exited() const
+{
+  return m_state->exited || m_state->process.state() == QProcess::NotRunning;
 }
 
 bool VfsClient::waitFor(const std::function<bool()>& done,
@@ -286,6 +320,13 @@ void VfsClient::onLine(const QByteArray& line)
   } else if (name == "unmounted" && !s.expectUnmounted) {
     if (s.unmounted) {
       s.unmounted();
+    }
+  } else if (name == "error" && event.value("spontaneous").toBool()) {
+    const auto message = event.value("message").toString();
+    const auto path    = event.value("path").toString();
+    log::error("mo2-vfs: {}", message);
+    if (s.unmountFailed) {
+      s.unmountFailed(message, path);
     }
   } else {
     s.replies.push_back(event);

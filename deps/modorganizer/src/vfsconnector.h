@@ -59,6 +59,9 @@ public:
   // unmounts if no process group is watched (the program didn't start)
   virtual void releaseIfIdle() {}
 
+  // true while mounted, while being mounted (activate()) and, on Linux, while a mount
+  // that is not usable any more could not be unmounted: the data directory would not
+  // show the game's own files, so the directory refresh waits until this is false
   virtual bool isActive() const { return false; }
 
   // true when inactive within the timeout

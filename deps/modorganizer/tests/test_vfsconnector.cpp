@@ -124,6 +124,54 @@ private:
   QByteArray m_oldState, m_oldBinary;
 };
 
+// the fields after the command of /proc/<pid>/stat: state ppid pgrp session
+struct ProcStat
+{
+  char state  = '?';
+  int ppid    = 0;
+  int pgrp    = 0;
+  int session = 0;
+};
+
+ProcStat procStat(const fs::path& statFile)
+{
+  ProcStat st;
+  const auto line  = readFile(statFile);
+  const auto close = line.rfind(')');
+  if (close != std::string::npos) {
+    std::istringstream rest(line.substr(close + 2));
+    rest >> st.state >> st.ppid >> st.pgrp >> st.session;
+  }
+  return st;
+}
+
+// the mo2-vfs child of this process (0 if none)
+pid_t helperPid()
+{
+  for (const auto& e : fs::directory_iterator("/proc")) {
+    const auto name = e.path().filename().string();
+    if (name.find_first_not_of("0123456789") != std::string::npos) {
+      continue;
+    }
+    if (readFile(e.path() / "stat").find("(mo2-vfs)") == std::string::npos) {
+      continue;
+    }
+    const auto st = procStat(e.path() / "stat");
+    if (st.ppid == ::getpid() && st.state != 'Z') {
+      return std::stoi(name);
+    }
+  }
+  return 0;
+}
+
+// runs the event loop for a while
+void processEvents(int ms)
+{
+  QEventLoop loop;
+  QTimer::singleShot(ms, &loop, &QEventLoop::quit);
+  loop.exec();
+}
+
 // releases the mount of a test that failed before it
 struct Release
 {
@@ -452,7 +500,11 @@ TEST_F(VfsConnectorTest, UpdateTimeoutDeactivatesAndRemounts)
   const auto real = vfsBinary();  // before the fake replaces it
 
   // answers the mount and never the update
+  const auto pidFile = m_state.path() / "fake.pid";
   fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "echo $$ > '" +
+             pidFile.string() +
+             "'\n"
              "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
              "read line\n"
              "echo '{\"event\":\"ready\",\"roots\":[]}'\n"
@@ -472,6 +524,10 @@ TEST_F(VfsConnectorTest, UpdateTimeoutDeactivatesAndRemounts)
 
   vfs->updateMapping(l.mapping());  // the update times out (and is only logged)
   EXPECT_FALSE(vfs->isActive());
+
+  // no program is watched: the hung helper was killed (and reaped)
+  const auto fakePid = std::stoi(readFile(pidFile));
+  EXPECT_NE(::kill(fakePid, 0), 0);
 
   // the helper that stopped answering lost the file system
   EXPECT_TRUE(vfs->takeLostReason().contains("did not reply"));
@@ -577,29 +633,7 @@ TEST_F(VfsConnectorTest, HelperCrashDeactivates)
   vfs->activate();
   ASSERT_TRUE(vfs->isActive());
 
-  // the helper is a child of this process
-  pid_t helper = 0;
-  for (const auto& e : fs::directory_iterator("/proc")) {
-    const auto name = e.path().filename().string();
-    if (name.find_first_not_of("0123456789") != std::string::npos) {
-      continue;
-    }
-    std::ifstream stat(e.path() / "stat");
-    std::string line;
-    std::getline(stat, line);
-    // pid (comm) state ppid
-    const auto close = line.rfind(')');
-    if (close == std::string::npos || line.find("(mo2-vfs)") == std::string::npos) {
-      continue;
-    }
-    std::istringstream rest(line.substr(close + 2));
-    char state;
-    int ppid;
-    rest >> state >> ppid;
-    if (ppid == ::getpid()) {
-      helper = std::stoi(name);
-    }
-  }
+  const pid_t helper = helperPid();
   ASSERT_GT(helper, 0);
 
   // nothing was lost yet
@@ -607,8 +641,13 @@ TEST_F(VfsConnectorTest, HelperCrashDeactivates)
 
   ::kill(helper, SIGKILL);
 
-  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(2)));
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(5)));
   EXPECT_FALSE(vfs->isActive());
+
+  // the dead mount (ENOTCONN) was cleaned up before the deactivation: the refresh that
+  // follows sees the original files
+  EXPECT_FALSE(mounted(l.data));
+  EXPECT_EQ(list(l.data), std::set<std::string>{"original.esm"});
 
   QEventLoop loop;
   QTimer::singleShot(100, &loop, &QEventLoop::quit);
@@ -630,6 +669,168 @@ TEST_F(VfsConnectorTest, HelperCrashDeactivates)
 
   // a normal unmount is not a loss
   EXPECT_TRUE(vfs->takeLostReason().isEmpty());
+}
+
+// the game is running when the helper dies: the dead mount is cleaned up all the same
+TEST_F(VfsConnectorTest, HelperCrashWithWatchedGroupCleansUp)
+{
+  if (!requireVfs())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  ASSERT_TRUE(vfs->isActive());
+
+  const pid_t pid = ::fork();
+  ASSERT_GE(pid, 0);
+  if (pid == 0) {
+    ::setpgid(0, 0);
+    ::execlp("sleep", "sleep", "3", nullptr);
+    ::_exit(127);
+  }
+  ::setpgid(pid, pid);
+  vfs->watchProcessGroup(pid);
+
+  const pid_t helper = helperPid();
+  ASSERT_GT(helper, 0);
+  ::kill(helper, SIGKILL);
+
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(5)));
+  EXPECT_FALSE(mounted(l.data));
+  EXPECT_EQ(list(l.data), std::set<std::string>{"original.esm"});
+  EXPECT_TRUE(vfs->takeLostReason().contains("mo2-vfs ended"));
+
+  ::kill(pid, SIGKILL);
+  int status = 0;
+  ::waitpid(pid, &status, 0);
+}
+
+// the helper runs in a session of its own: the signals of the terminal of Mod
+// Organizer don't reach it
+TEST_F(VfsConnectorTest, HelperHasItsOwnSession)
+{
+  const auto statFile = m_state.path() / "fake.stat";
+  fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "cat /proc/$$/stat > '" +
+             statFile.string() +
+             "'\n"
+             "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"error\",\"code\":\"io\",\"message\":\"no\"}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  EXPECT_THROW(vfs->activate(), std::runtime_error);
+
+  const auto st = procStat(statFile);
+  EXPECT_NE(st.session, 0);
+  EXPECT_NE(st.session, ::getsid(0));
+  EXPECT_NE(st.pgrp, ::getpgrp());
+}
+
+// refreshes started from the event loop of the mount request see an active file
+// system (and are deferred)
+TEST_F(VfsConnectorTest, ActiveWhileActivating)
+{
+  fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "sleep 0.5\n"
+             "echo '{\"event\":\"ready\",\"roots\":[]}'\n"
+             "read line\n"
+             "echo '{\"event\":\"unmounted\"}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  bool ran = false, activeInside = false;
+  QTimer::singleShot(100, [&] {
+    ran          = true;
+    activeInside = vfs->isActive();
+  });
+
+  EXPECT_FALSE(vfs->isActive());
+  vfs->activate();
+  EXPECT_TRUE(ran);
+  EXPECT_TRUE(activeInside);
+  EXPECT_TRUE(vfs->isActive());
+
+  vfs->releaseIfIdle();
+  EXPECT_FALSE(vfs->isActive());
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+}
+
+// a failed activation delivers the deactivation callback (the refresh deferred while
+// activating runs)
+TEST_F(VfsConnectorTest, FailedActivationCallsBack)
+{
+  fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"error\",\"code\":\"io\",\"message\":\"no\"}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  EXPECT_THROW(vfs->activate(), std::runtime_error);
+  EXPECT_FALSE(vfs->isActive());
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+}
+
+// the helper could not unmount when the watched programs ended: the file system stays
+// active (no refresh over the mount) until the helper reports the unmount it retries
+TEST_F(VfsConnectorTest, FailedAutoUnmountKeepsActive)
+{
+  fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"ready\",\"roots\":[\"/x/Data\"]}'\n"
+             "read line\n"
+             "echo '{\"event\":\"ok\"}'\n"
+             "echo '{\"event\":\"error\",\"code\":\"io\",\"message\":"
+             "\"automatic unmount failed: boom\",\"path\":\"/x/Data\","
+             "\"spontaneous\":true}'\n"
+             "sleep 1\n"
+             "echo '{\"event\":\"unmounted\"}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->activate();
+  vfs->watchProcessGroup(12345);
+  ASSERT_TRUE(vfs->isActive());
+
+  // the error is not the end of the file system
+  processEvents(300);
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(called, 0);
+  EXPECT_TRUE(vfs->staleMounts().contains("/x/Data"));
+  EXPECT_FALSE(vfs->waitInactive(std::chrono::milliseconds(200)));
+
+  // the retry worked
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(3)));
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+  EXPECT_TRUE(vfs->takeLostReason().contains("boom"));
 }
 
 TEST_F(VfsConnectorTest, StaleMountsReported)

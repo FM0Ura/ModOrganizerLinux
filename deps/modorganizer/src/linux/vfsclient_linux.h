@@ -15,6 +15,9 @@
 // the client of the mo2-vfs protocol: lines of JSON on the standard input and output
 // of a mo2-vfs process (mo2-vfs/src/ipc.rs)
 //
+// the process runs in a session of its own (setsid()): the signals of the terminal of
+// Mod Organizer (Ctrl+C, closing it) don't reach it
+//
 // the process is started by the constructor and the `hello` event is waited for;
 // request() sends a request and runs an event loop until the reply arrives, so the
 // client must be used from the thread it was created in, which must have a
@@ -53,11 +56,24 @@ public:
   // of the client
   void setUnmountedHandler(std::function<void()> f);
 
+  // called for the spontaneous error events (`"spontaneous": true`: the automatic
+  // unmount failed and is retried, the file system is still mounted), with the message
+  // and the path of the event; they are never taken as a reply
+  void setUnmountFailedHandler(std::function<void(QString, QString)> f);
+
   // called when the process has ended, with how ("exit code 1", "crashed (...)") and
   // the end of what it wrote on its standard error
   void setExitedHandler(std::function<void(QString, QString)> f);
 
+  // false once the process has ended or the client is unusable (a request timed out)
   bool running() const;
+
+  // true once the process has ended (not after a timeout only)
+  bool exited() const;
+
+  // kills the process (SIGKILL) and waits for it for up to 5 seconds; the exited
+  // handler is called
+  void kill();
 
 private:
   struct State;
