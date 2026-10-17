@@ -74,14 +74,17 @@ impl Tree {
     /// is the same as scanning and merging them in sequence.
     pub fn build_with(layers: &Layers, skip: &Skip, whiteouts: &Whiteouts) -> Tree {
         let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
-        Tree::build_with_workers(layers, skip, whiteouts, workers)
+        Tree::build_with_workers(layers, skip, whiteouts, workers, None)
     }
 
+    /// `order`: the order in which the layers are handed to the workers (tests use it to
+    /// make scans finish out of priority order); by default, priority order.
     fn build_with_workers(
         layers: &Layers,
         skip: &Skip,
         whiteouts: &Whiteouts,
         workers: usize,
+        order: Option<&[usize]>,
     ) -> Tree {
         let mut b = Builder::new();
         let list = &layers.list;
@@ -98,7 +101,14 @@ impl Tree {
                     let (tx, next) = (tx.clone(), &next);
                     s.spawn(move || {
                         loop {
-                            let i = next.fetch_add(1, Ordering::Relaxed);
+                            let k = next.fetch_add(1, Ordering::Relaxed);
+                            let i = match order {
+                                Some(order) => match order.get(k) {
+                                    Some(&i) => i,
+                                    None => break,
+                                },
+                                None => k,
+                            };
                             let Some(layer) = list.get(i) else { break };
                             if tx.send((i, scan_layer(layer, skip, whiteouts))).is_err() {
                                 break;
@@ -482,7 +492,9 @@ impl Scanner<'_> {
         buf.clear();
         names.clear();
         let mut entries = RawDir::new(&dir, &mut self.dirents);
-        // A read error ends the listing (what was read so far is kept).
+        // A read error ends the listing, keeping what was read: getdents failed, there is no
+        // entry to skip, and calling it again could fail forever. (The `Dir` iterator used
+        // before did the same: after an error it returns `None`.)
         while let Some(Ok(e)) = entries.next() {
             let name = e.file_name().to_bytes();
             if name != b"." && name != b".." {
@@ -859,7 +871,9 @@ impl Builder {
         let freed = std::thread::Builder::new()
             .name("mo2-vfs-drop".into())
             .spawn(move || drop(index));
-        drop(freed);
+        if let Err(e) = freed {
+            tracing::debug!(error = %e, "merge index freed in place");
+        }
         // A node's key is the folded form of its (latest) displayed name.
         let maps = |range: std::ops::Range<usize>| -> Vec<(NodeId, BTreeMap<Key, NodeId>)> {
             range
@@ -1507,12 +1521,26 @@ mod tests {
         }
     }
 
-    /// The current build, sequential and parallel, equals the reference build.
+    /// The current build, sequential and parallel, equals the reference build. The parallel
+    /// builds also get the layers handed out in reverse and in a shuffled order, so scans
+    /// finish out of priority order and the merge has to put them back in order.
     fn assert_equivalent(layers: &Layers, skip: &Skip, whiteouts: &Whiteouts) {
         let reference = reference::build_with(layers, skip, whiteouts);
+        let n = layers.list.len();
+        let reversed: Vec<usize> = (0..n).rev().collect();
+        let mut shuffled: Vec<usize> = (0..n).collect();
+        let mut seed: u64 = 0x9E37_79B9_7F4A_7C15;
+        for i in (1..n).rev() {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            shuffled.swap(i, (seed >> 33) as usize % (i + 1));
+        }
         for workers in [1, 2, 8] {
-            let t = Tree::build_with_workers(layers, skip, whiteouts, workers);
-            assert_same(&reference, &t);
+            for order in [None, Some(&reversed[..]), Some(&shuffled[..])] {
+                let t = Tree::build_with_workers(layers, skip, whiteouts, workers, order);
+                assert_same(&reference, &t);
+            }
         }
         assert_same(&reference, &Tree::build_with(layers, skip, whiteouts));
     }

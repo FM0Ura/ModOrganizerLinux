@@ -426,6 +426,19 @@ fn update_refreshes_cached_listings() {
     fs::remove_file(tex.join("a.dds")).unwrap();
     fs::rename(tex.join("made.dds"), tex.join("moved.dds")).unwrap();
     assert_eq!(listing(&tex), ["d.dds", "moved.dds", "rock.dds"]);
+    // A new layer's target chain respells existing directories without changing what is
+    // behind them ("TEXTURES" from D becomes "textures", "sub2" from A becomes "SUB2").
+    e.write("A/textures/sub2/x.dds", "x");
+    e.write("E/y.dds", "y");
+    s.update(&a_d, Skip::default()).unwrap();
+    assert_eq!(listing(&data), ["Skyrim.esm", "TEXTURES"]);
+    assert_eq!(listing(&tex), ["d.dds", "moved.dds", "rock.dds", "sub2"]);
+    let mut a_d_e = a_d.clone();
+    a_d_e.push(e.dir_map("E", "Data/textures/SUB2/deeper", false));
+    s.update(&a_d_e, Skip::default()).unwrap();
+    assert_eq!(listing(&data), ["Skyrim.esm", "textures"]);
+    assert_eq!(listing(&tex), ["SUB2", "d.dds", "moved.dds", "rock.dds"]);
+    assert_eq!(listing(&tex.join("sub2")), ["deeper", "x.dds"]);
     s.unmount().unwrap();
 }
 

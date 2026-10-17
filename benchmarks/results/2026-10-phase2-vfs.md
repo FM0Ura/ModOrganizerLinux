@@ -79,10 +79,14 @@ the 500-mod profile instance on btrfs had the same ratios before: readdir 6.7x, 
 
 | Measure | Before | After |
 |---|---|---|
-| `mount` | 11388 ms | 916 ms |
+| `mount` | 11388 ms | 916 ms (cold first run: 2972 ms) |
 | recursive `readdir` | 5.45x native | 0.84x native |
 | `open`+`read`+`close` | 6.27x native | 3.36x native |
 | `update` | 13744 ms | 906 ms |
+
+The < 1 s targets for `mount` and `update` are met with a warm metadata cache (the layers'
+dentries and inodes in the kernel's cache); with a cold one the first mount took 2972 ms
+(see below). `update` runs right after a mount and walk, so its runs are always warm.
 
 - Temp dir on btrfs (`--tmpdir $HOME/.cache/mo2-vfs-bench-tmp`), no longer the overlay.
 - `mount` / `update`: the layers are scanned in parallel (12 threads) and merged in priority

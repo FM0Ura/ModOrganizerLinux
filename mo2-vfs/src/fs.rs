@@ -448,7 +448,10 @@ impl Vfs {
     /// another virtual path to the same real file (a source mapped twice) and changes made
     /// behind the VFS. Writes through this inode update its cached pages in the kernel.
     /// What it does not cover is a change behind the VFS while the file is open: pages read
-    /// before it stay until the file is opened again (as without the flag).
+    /// before it stay until the file is opened again (as without the flag). On a filesystem
+    /// with coarse timestamps, a write behind the VFS that keeps the size and lands in the
+    /// same timestamp tick as the previous change leaves the stamp equal, and the old pages
+    /// are kept (writes through the VFS go through the kernel's cache and are not affected).
     fn do_open(
         &self,
         ino: u64,
@@ -860,7 +863,8 @@ impl Filesystem for Vfs {
     /// listing itself after a create, mkdir, unlink, rmdir or rename in it (and when its
     /// mtime changes), and a hot update sends `inval_inode` (which discards the cached
     /// pages) and `inval_entry` (which resets the listing cache of the parent) for every
-    /// directory whose entries changed (`session::changes`; tests/session.rs
+    /// directory whose entries changed, including a child that only changed its displayed
+    /// spelling (`session::changes`; tests/session.rs
     /// `update_refreshes_cached_listings`).
     fn opendir(&self, _req: &Request, _ino: INodeNo, _flags: OpenFlags, reply: ReplyOpen) {
         reply.error(Errno::ENOSYS);

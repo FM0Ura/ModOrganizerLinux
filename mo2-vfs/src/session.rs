@@ -379,7 +379,7 @@ impl<'a> Known<'a> {
 /// kernel cache entries to drop: for each known inode whose path now resolves to another
 /// kind, layer or real path, the inode, its parent and the parent's entries for the old,
 /// new and folded name; for each known directory, the names it gained (they may be cached
-/// as negative entries).
+/// as negative entries); for each name shown with another spelling, the parent's entries.
 struct ChangeWalk<'a> {
     old: &'a Tree,
     old_layers: &'a Layers,
@@ -473,6 +473,22 @@ impl ChangeWalk<'_> {
                 }
             }
         }
+        // A name shown with another spelling over the same real file (a target chain of a
+        // new layer respells an existing directory): the parent's cached listing and the
+        // entry under the old spelling must go, whether this path is known or not.
+        if let (Some(o), Some(n)) = (old, new)
+            && !key.is_empty()
+            && otree.node(o).name != ntree.node(n).name
+        {
+            let names = [otree.node(o).name.clone(), ntree.node(n).name.clone()];
+            for pino in self.known.of(&key[..parent_len]) {
+                self.any = true;
+                self.out.insert(Inval::Inode(pino));
+                for name in &names {
+                    self.out.insert(Inval::Entry(pino, name.clone()));
+                }
+            }
+        }
         // Children of either tree, in key order.
         let empty = BTreeMap::new();
         let oc = old.map_or(&empty, |o| &otree.node(o).children);
@@ -532,6 +548,8 @@ fn changes_on(
 ) -> Vec<Inval> {
     let tree = shared.tree.read();
     let layers = shared.layers();
+    // Held for the whole walk (about 27 ms at 2000 mods / 320000 entries): handlers that
+    // need an inode number wait that long during an update.
     let inodes = shared.inodes.lock();
     let known = Known::new(&inodes);
     let walker = |key: Vec<u8>, defer_at| ChangeWalk {
@@ -862,9 +880,39 @@ mod tests {
             .swap_if(new_tree, new_layers, shared.generation())
             .ok()
             .unwrap();
-        let r: HashSet<Inval> = reference::changes(&shared, &old_tree, &old_layers)
+        let mut r: HashSet<Inval> = reference::changes(&shared, &old_tree, &old_layers)
             .into_iter()
             .collect();
+        // What the reference missed: a path shown with another spelling over the same real
+        // file drops the parent's entries for both spellings (worked out by brute force).
+        let mut respelled = HashSet::new();
+        {
+            let tree = shared.tree.read();
+            let inodes = shared.inodes.lock();
+            for p in all_paths(&old_tree) {
+                let (Some(parent), Some(o), Some(n)) = (
+                    p.parent(),
+                    old_tree.lookup_folded(&fold_path(&p)),
+                    tree.lookup_folded(&fold_path(&p)),
+                ) else {
+                    continue;
+                };
+                let (on, nn) = (&old_tree.node(o).name, &tree.node(n).name);
+                if on == nn {
+                    continue;
+                }
+                let pk = fold_path(parent);
+                for (ino, _) in inodes.known().filter(|(_, k)| **k == pk) {
+                    respelled.insert(Inval::Inode(ino));
+                    respelled.insert(Inval::Entry(ino, on.clone()));
+                    respelled.insert(Inval::Entry(ino, nn.clone()));
+                }
+            }
+        }
+        if !respelled.is_empty() {
+            respelled.insert(Inval::Inode(crate::inodes::ROOT_INO));
+        }
+        r.extend(respelled);
         let w: HashSet<Inval> = changes(&shared, &old_tree, &old_layers)
             .into_iter()
             .collect();
