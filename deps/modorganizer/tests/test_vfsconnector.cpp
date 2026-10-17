@@ -395,6 +395,50 @@ TEST_F(VfsConnectorTest, CallbackOfOldDeactivationDoesNotFire)
   EXPECT_EQ(called, 1);
 }
 
+TEST_F(VfsConnectorTest, UpdateTimeoutDeactivatesAndRemounts)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  const auto real = vfsBinary();  // before the fake replaces it
+
+  // answers the mount and never the update
+  fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"ready\",\"roots\":[]}'\n"
+             "read line\n"
+             "read line\n");
+  qputenv("MO2_VFS_TIMEOUT_MS", "300");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  ASSERT_TRUE(vfs->isActive());
+
+  vfs->updateMapping(l.mapping());  // the update times out (and is only logged)
+  EXPECT_FALSE(vfs->isActive());
+
+  QEventLoop loop;
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+  EXPECT_EQ(called, 1);
+
+  // the next activation starts a new helper, which gets a mount
+  qunsetenv("MO2_VFS_TIMEOUT_MS");
+  qputenv("MO2_VFS_BINARY", real.toUtf8());
+  Release release{*vfs};
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_TRUE(mounted(l.data));
+}
+
 TEST_F(VfsConnectorTest, ActivateErrorIsException)
 {
   fakeHelper("echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"

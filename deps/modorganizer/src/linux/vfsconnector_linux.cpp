@@ -84,6 +84,14 @@ QStringList cleanupStaleMounts()
   return stale;
 }
 
+// the timeout of mount and update requests; MO2_VFS_TIMEOUT_MS replaces it (tests)
+std::chrono::milliseconds mountTimeout()
+{
+  bool ok         = false;
+  const auto test = qEnvironmentVariable("MO2_VFS_TIMEOUT_MS").toInt(&ok);
+  return ok && test > 0 ? std::chrono::milliseconds(test) : 30s;
+}
+
 QString logLevelName(log::Levels level)
 {
   switch (level) {
@@ -131,7 +139,7 @@ public:
       // the mounted file system follows the mappings (also called from the refresh
       // and profile code, which don't expect an exception)
       try {
-        send(mappingRequest("update"), 30s);
+        send(mappingRequest("update"), mountTimeout());
       } catch (const std::exception& e) {
         log::error("cannot update the virtual file system: {}", e.what());
       }
@@ -168,7 +176,13 @@ public:
       m_client.reset();
     }
 
-    if (!m_client) {
+    // a new helper has nothing mounted: always `mount`, never `update`
+    const bool fresh = !m_client;
+
+    if (fresh) {
+      // whatever was mounted is gone with the helper that had it
+      deactivated();
+
       if (m_cleanupNeeded) {
         // the helper that ended abnormally may have left its mount behind
         const auto stale = cleanupStaleMounts();
@@ -183,18 +197,28 @@ public:
 
     const bool update = m_active;
 
-    if (!update) {
-      // callbacks queued for earlier deactivations are history, even if they are
-      // delivered while the mount request waits
-      ++m_generation;
+    if (update) {
+      send(mappingRequest("update"), mountTimeout());
+      return;
     }
 
-    send(mappingRequest(update ? "update" : "mount"), 30s);
+    // callbacks queued for earlier deactivations are history, even if they are
+    // delivered while the mount request waits
+    ++m_generation;
 
-    if (!update) {
-      m_active  = true;
-      m_watched = 0;
+    try {
+      send(mappingRequest("mount"), mountTimeout());
+    } catch (...) {
+      // the deactivation that was not delivered is still news
+      if (m_pendingDeactivation) {
+        queueDeactivatedCallback();
+      }
+      throw;
     }
+
+    m_active              = true;
+    m_watched             = 0;
+    m_pendingDeactivation = false;
   }
 
   void watchProcessGroup(qint64 pgid) override
@@ -294,6 +318,9 @@ private:
     } catch (...) {
       if (!m_client->running()) {
         m_cleanupNeeded = true;
+
+        // the file system went down with the helper
+        deactivated();
       }
       throw;
     }
@@ -349,18 +376,27 @@ private:
     m_active  = false;
     m_watched = 0;
 
-    if (m_deactivated) {
-      // in the thread of the connector, once the event that caused this is handled
-      QMetaObject::invokeMethod(
-          &m_context,
-          [this, f = m_deactivated, gen = m_generation] {
-            // not for a deactivation that is already history
-            if (!m_active && gen == m_generation) {
-              f();
-            }
-          },
-          Qt::QueuedConnection);
+    m_pendingDeactivation = true;
+    queueDeactivatedCallback();
+  }
+
+  void queueDeactivatedCallback()
+  {
+    if (!m_deactivated) {
+      return;
     }
+
+    // in the thread of the connector, once the event that caused this is handled
+    QMetaObject::invokeMethod(
+        &m_context,
+        [this, f = m_deactivated, gen = m_generation] {
+          // not for a deactivation that is already history
+          if (!m_active && gen == m_generation) {
+            m_pendingDeactivation = false;
+            f();
+          }
+        },
+        Qt::QueuedConnection);
   }
 
   MappingType m_mapping;
@@ -371,10 +407,11 @@ private:
 
   QObject m_context;
   std::unique_ptr<VfsClient> m_client;
-  bool m_active         = false;
-  bool m_cleanupNeeded  = false;
-  int m_watched         = 0;
-  unsigned m_generation = 0;
+  bool m_active              = false;
+  bool m_cleanupNeeded       = false;
+  int m_watched              = 0;
+  unsigned m_generation      = 0;
+  bool m_pendingDeactivation = false;
   std::function<void()> m_deactivated;
 };
 
