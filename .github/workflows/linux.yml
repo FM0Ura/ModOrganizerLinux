@@ -17,8 +17,9 @@ jobs:
       - name: Build container image
         run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
 
-      # --tests also runs the unit tests of every target and the smoke test of the
-      # application (build.sh smoke_modorganizer)
+      # --tests also runs the unit tests of every target, the smoke test of the
+      # application (build.sh smoke_modorganizer) and the end-to-end test of the
+      # virtual file system (build.sh vfs_e2e, tests/vfs-e2e)
       - name: Build and test
         run: |
           docker run --rm --device /dev/fuse --cap-add SYS_ADMIN \

@@ -188,6 +188,29 @@ smoke_modorganizer() {
     log "smoke test passed"
 }
 
+# With --tests, after every target: the end-to-end test of the virtual file system
+# (tests/vfs-e2e/run.sh, see there): the installed application runs a native program
+# of a test instance with the mo2-vfs view of the game's data directory. It needs the
+# application, mo2-vfs and the Skyrim SE plugin (game_bethesda, built after the
+# application), so it runs after the last of them: always in a full build, and with
+# --only when one of them was built and the others are installed already. Without
+# /dev/fuse it is skipped with a message, unless MO2_REQUIRE_FUSE=1.
+vfs_e2e() {
+    [[ $TESTS == 1 ]] || return 0
+    if ((${#ONLY[@]})); then
+        [[ " ${ONLY[*]} " == *" mo2-vfs "* || " ${ONLY[*]} " == *" modorganizer "* ||
+            " ${ONLY[*]} " == *" game_bethesda "* ]] || return 0
+        if [[ ! -x $INSTALL/bin/ModOrganizer || ! -x $INSTALL/bin/mo2-vfs ||
+            ! -f $INSTALL/bin/plugins/libgame_skyrimse.so ]]; then
+            log "vfs end-to-end test skipped: build modorganizer, mo2-vfs and game_bethesda first"
+            return 0
+        fi
+    fi
+    log "vfs end-to-end test"
+    "$ROOT/tests/vfs-e2e/run.sh" "$INSTALL" || die "vfs end-to-end test failed"
+    log "vfs end-to-end test passed"
+}
+
 # With --tests, the unit tests of the application (organizer_tests: the data tree and
 # the Linux env layer, which build without the rest of the application) are built and
 # run before the application (with MO2_VFS_BINARY set to the installed mo2-vfs). This
@@ -301,6 +324,13 @@ for t in "${ALL_TARGETS[@]}"; do
         "$(fn_of "$t")"
     fi
 done
+# skipped when a target it needs failed under --allow-fail
+if [[ " ${failed[*]} " == *" mo2-vfs "* || " ${failed[*]} " == *" modorganizer "* ||
+    " ${failed[*]} " == *" game_bethesda "* ]]; then
+    log "vfs end-to-end test skipped: a target it needs failed"
+else
+    vfs_e2e
+fi
 ((${#skipped[@]})) && log "skipped (not implemented yet): ${skipped[*]}"
 ((${#failed[@]})) && log "failed (allowed): ${failed[*]}"
 [[ ! -e $INSTALL/lib64 ]] || die "$INSTALL/lib64 exists: libraries must install into lib/"
