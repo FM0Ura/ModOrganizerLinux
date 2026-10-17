@@ -22,7 +22,8 @@ jobs:
         run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
 
       # --tests also runs the unit tests of every target, the smoke test of the
-      # application (build.sh smoke_modorganizer) and the end-to-end test of the
+      # application, once per run, up to the main window (build.sh smoke_modorganizer,
+      # tests/smoke) and the end-to-end test of the
       # virtual file system (build.sh vfs_e2e, tests/vfs-e2e)
       - name: Build and test
         run: |
@@ -30,15 +31,6 @@ jobs:
             --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 \
             -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
             mo2-linux-build ./build.sh --tests
-
-      # the installed application prints its usage, and starts headless (fresh HOME, no
-      # instance) up to the instance selection without crashing
-      - name: Smoke test
-        run: |
-          docker run --rm --device /dev/fuse --cap-add SYS_ADMIN \
-            --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 \
-            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
-            mo2-linux-build tests/smoke/modorganizer-smoke.sh install
 
       - name: Upload install tree
         uses: actions/upload-artifact@v4

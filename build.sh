@@ -179,7 +179,7 @@ build_modorganizer() {
     return 0
 }
 
-# smoke test (tests/smoke/modorganizer-smoke.sh, also run by CI): `ModOrganizer --help`
+# smoke test (tests/smoke/modorganizer-smoke.sh; CI runs it only through here): `ModOrganizer --help`
 # prints the usage, and the application started headless with a fresh HOME gets past
 # its QApplication to the instance selection (it loads the plugins) without crashing
 smoke_modorganizer() {

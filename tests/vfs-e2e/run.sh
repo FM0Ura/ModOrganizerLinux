@@ -139,13 +139,10 @@ die() { show_logs >&2; fail "$*"; }
 mkdir -p "$HOMEDIR"/{.config,.cache,.local/share,.local/state} "$WORK/tmp" \
     "$WORK/state" "$WORK/bin"
 mkdir -m 700 "$WORK/runtime"
-cp -r "$FIXTURE/game" "$GAME"
-mkdir -p "$(dirname "$INSTANCE")"
-cp -r "$FIXTURE/instance" "$INSTANCE"
-mkdir -p "$INSTANCE/overwrite"
 install -m 755 "$HERE/probe.sh" "$WORK/bin/probe.sh"
-sed -i -e "s|@GAME_PATH@|$GAME|g" -e "s|@PROBE@|$WORK/bin/probe.sh|g" \
-    -e "s|@WORK@|$WORK|g" "$INSTANCE/ModOrganizer.ini"
+# shellcheck source=../lib/instance.sh
+source "$HERE/../lib/instance.sh"
+mo2_make_instance "$FIXTURE" "$WORK" "$GAME" "$INSTANCE" "$WORK/bin/probe.sh"
 
 # the real data directory, to compare with afterwards
 original="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)"
