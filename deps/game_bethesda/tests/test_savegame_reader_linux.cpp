@@ -10,7 +10,9 @@
 
 #include "gamebryosavegame.h"
 
+#include <cstdint>
 #include <stdexcept>
+#include <type_traits>
 
 namespace
 {
@@ -71,4 +73,34 @@ TEST(SaveGameReader, ReadsWindowsLongAnd64BitFields)
   // nothing left
   unsigned char c;
   EXPECT_THROW(file.read(c), std::runtime_error);
+}
+
+// Why scripts/check-save-reads.sh exists: on Linux std::uint64_t is `unsigned long`,
+// the type specialised to the 4-byte Windows long, so read/skip<std::uint64_t> consume
+// 4 bytes. This pins that behaviour; 64-bit fields use unsigned long long or
+// readLong().
+TEST(SaveGameReader, StdUint64IsTheWindowsLongOnLinux)
+{
+  static_assert(std::is_same_v<std::uint64_t, unsigned long>);
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString path = tmp.filePath("test.sav");
+  {
+    QFile file(path);
+    ASSERT_TRUE(file.open(QIODevice::WriteOnly));
+    QDataStream s(&file);
+    s.setByteOrder(QDataStream::LittleEndian);
+    s.writeRawData("TEST", 4);
+    s << quint64(0x1122334455667788);
+  }
+
+  FileWrapper file(path, "TEST");
+
+  std::uint64_t v = 0;
+  file.read(v);  // save-read-ok: pins the 4-byte behaviour
+  EXPECT_EQ(v, 0x55667788ull);
+
+  // the upper half of the field is still unread
+  EXPECT_EQ(file.readInt(), 0x11223344u);
 }

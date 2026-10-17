@@ -21,6 +21,7 @@ template <>
 void GamebryoSaveGame::FileWrapper::read<QString>(QString& value);
 
 template <>
+// save-read-ok: the 32-bit Windows long, on purpose
 inline void GamebryoSaveGame::FileWrapper::read<unsigned long>(unsigned long& value)
 {
   std::uint32_t v;
@@ -29,6 +30,7 @@ inline void GamebryoSaveGame::FileWrapper::read<unsigned long>(unsigned long& va
 }
 
 template <>
+// save-read-ok: the 32-bit Windows long, on purpose
 inline void GamebryoSaveGame::FileWrapper::read<long>(long& value)
 {
   std::int32_t v;
