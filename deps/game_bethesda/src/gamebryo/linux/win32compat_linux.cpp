@@ -10,19 +10,15 @@
 
 #include <QDate>
 #include <QDateTime>
-#include <QFile>
 #include <QString>
-#include <QStringDecoder>
 #include <QStringList>
 #include <QTime>
 #include <QTimeZone>
 
-#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace
 {
