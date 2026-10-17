@@ -3,7 +3,8 @@
 //
 // - processes are read from /proc/<pid>/stat (parent pid, comm) and /proc/<pid>/exe
 //   (the name of a process is the file name of its executable, or its comm when the
-//   executable cannot be read, for processes of other users and kernel threads),
+//   executable cannot be read, for processes of other users and kernel threads);
+//   zombies are not running processes,
 // - the HANDLE of a process is its pid (see HandleCloser in envmodule.h), there are no
 //   jobs,
 // - the loaded modules are the files mapped as executable in /proc/self/maps (the
@@ -60,6 +61,10 @@ namespace
   {
     DWORD ppid = 0;
     QString comm;
+
+    // the process has exited but was not waited for by its parent yet (state Z, or X
+    // while it is being removed)
+    bool exited = false;
   };
 
   // reads /proc/<pid>/stat, "pid (comm) state ppid ...", where comm can contain
@@ -91,8 +96,9 @@ namespace
     }
 
     ProcStat s;
-    s.ppid = static_cast<DWORD>(ppid);
-    s.comm = QString::fromStdString(line.substr(open + 1, close - open - 1));
+    s.ppid   = static_cast<DWORD>(ppid);
+    s.comm   = QString::fromStdString(line.substr(open + 1, close - open - 1));
+    s.exited = (state == "Z" || state == "X");
 
     return s;
   }
@@ -261,8 +267,18 @@ std::vector<Process> getRunningProcesses()
       continue;
     }
 
-    // the process may have exited in the meantime
-    if (auto p = readProcess(static_cast<DWORD>(std::stoul(name)))) {
+    const auto pid = static_cast<DWORD>(std::stoul(name));
+
+    // the process may have exited in the meantime; a zombie is not running either
+    // (like on Windows, where an exited process isn't listed): waiting for the tree
+    // of a program that exited would otherwise never end, since the program is
+    // only reaped after the wait
+    const auto stat = readStat(pid);
+    if (!stat || stat->exited) {
+      continue;
+    }
+
+    if (auto p = readProcess(pid)) {
       v.push_back(std::move(*p));
     }
   }

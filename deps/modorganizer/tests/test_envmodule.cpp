@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -99,6 +100,28 @@ TEST(EnvModule, ProcessTreeHasChildren)
 
   child.kill();
   child.waitForFinished();
+}
+
+// a process that has exited but was not waited for yet (a zombie) is not running: it
+// is not listed, and the tree of a zombie is empty, so waiting for the tree of a
+// program that exited ends (ProcessRunner waits with WNOWAIT and reaps it later)
+TEST(EnvModule, ZombiesAreNotRunning)
+{
+  const pid_t pid = ::fork();
+  ASSERT_NE(pid, -1);
+
+  if (pid == 0) {
+    ::_exit(0);
+  }
+
+  // until it has exited, without reaping it
+  siginfo_t info = {};
+  ASSERT_EQ(::waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOWAIT), 0);
+
+  EXPECT_EQ(findPid(env::getRunningProcesses(), static_cast<DWORD>(pid)), nullptr);
+  EXPECT_TRUE(env::getProcessTree(processHandle(pid)).children().empty());
+
+  ASSERT_EQ(::waitpid(pid, nullptr, 0), pid);
 }
 
 TEST(EnvModule, LoadedModules)
