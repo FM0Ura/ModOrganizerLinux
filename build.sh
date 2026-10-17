@@ -190,14 +190,18 @@ smoke_modorganizer() {
 
 # With --tests, the unit tests of the application (organizer_tests: the data tree and
 # the Linux env layer, which build without the rest of the application) are built and
-# run before the application. This is a pre_ step: it runs even when the application
-# itself is in --allow-fail, and its failure always fails the run.
+# run before the application (with MO2_VFS_BINARY set to the installed mo2-vfs). This
+# is a pre_ step: it runs even when the application itself is in --allow-fail, and its
+# failure always fails the run.
 pre_modorganizer() {
     [[ $TESTS == 1 ]] || return 0
     cmake_configure modorganizer "$MO2_SRC" --preset linux-gcc
     log "build organizer_tests"
     cmake --build "$BUILD_OUT/modorganizer" --target organizer_tests
     log "test organizer_tests"
+    # the tests of the virtual file system connector run the helper built by mo2-vfs
+    # (installed before this step)
+    export MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs"
     ctest --test-dir "$BUILD_OUT/modorganizer" --output-on-failure
 }
 
