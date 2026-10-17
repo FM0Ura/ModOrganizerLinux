@@ -37,8 +37,7 @@ Done:
 
 Limitations of Phase 1:
 
-- No virtual file system (Phase 2): mods are managed but the game does not see them.
-- Launching programs shows a dialog saying it arrives in Phase 3.
+- Virtual file system (Phase 2): the `mo2-vfs` helper mounts the merged view when you run a native Linux program; running Windows programs (`.exe`, via Proton) still shows a dialog saying it arrives in Phase 3. The mount exists only inside the distrobox, not for the host Steam.
 - LOOT is unavailable, creating BSA archives is unavailable, there is no auto-update.
 - Nexus and Steam logins are not persisted on Linux yet (kept in memory only; a secret-store
   integration comes later).

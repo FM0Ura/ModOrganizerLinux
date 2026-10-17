@@ -25,7 +25,7 @@ No Bazzite (plataforma de referência), o usuário consegue:
 |---|---|
 | Público | Ferramenta pública, todos os jogos suportados pelo MO2 |
 | Compatibilidade | O fork `modorganizer` continua compilando no Windows; código específico isolado por plataforma, para continuar recebendo atualizações do upstream |
-| VFS | Sistema de arquivos FUSE próprio (`mo2-vfs`), escrito em **Rust** |
+| VFS | Sistema de arquivos FUSE próprio (`mo2-vfs`), escrito em **Rust**, executado como **processo auxiliar** que conversa com o MO2 por JSON em stdin/stdout (decisão da Fase 2: [spec](2026-10-15-phase2-vfs-fuse-design.md)) |
 | Linguagem do restante | MO2 permanece em C++/Qt 6; não haverá reescrita em Rust |
 | Execução | MO2 inicia jogos e ferramentas **diretamente via Proton** (prefixo do jogo) |
 | Escrita em arquivo de mod | Igual ao USVFS: modifica o arquivo real do mod |
@@ -80,7 +80,7 @@ Estas seções registram as decisões; cada fase terá spec própria.
 ### 3.1 Fase 2 — `mo2-vfs`
 
 - **Entrada:** a mesma `MappingType` (`std::vector<Mapping{source, destination, isDirectory, createTarget}>`) gerada por `OrganizerCore::fileMapping` e hoje enviada ao USVFS.
-- **Interface C++:** classe `VfsConnector` com a interface de `UsvfsConnector` (`updateMapping`, `updateParams`, `updateForcedLibraries`); no Windows delega ao USVFS, no Linux ao `mo2-vfs` via API C (`cxx`/`cbindgen`).
+- **Interface C++:** classe `VfsConnector` com a interface de `UsvfsConnector` (`updateMapping`, `updateParams`, `updateForcedLibraries`); no Windows delega ao USVFS, no Linux (`LinuxVfsConnector`) ao `mo2-vfs`, um **processo auxiliar** iniciado pelo MO2 que recebe comandos JSON (uma linha por mensagem) por stdin e responde por stdout; não há API C, `cxx`, `cbindgen` nem Corrosion, e o CMake do app não compila Rust. Detalhes e justificativa em [`2026-10-15-phase2-vfs-fuse-design.md`](2026-10-15-phase2-vfs-fuse-design.md); o spike de 2026-10-15 está na §1.2 dela.
 - **Pontos de montagem:** um mount FUSE por pasta de destino distinta (ex.: `<jogo>/Data`, `<prefixo>/.../Documents/My Games/<Jogo>`, `<prefixo>/.../AppData/Local/<Jogo>`). Antes de montar, um descritor da pasta original é aberto para que seu conteúdo seja a camada de menor prioridade.
 - **Resolução:** árvore em memória construída a partir dos mappings; lookup case-insensitive (chave normalizada), listagem com a grafia original; vencedor = maior prioridade.
 - **Leitura:** repassada ao arquivo real; FUSE passthrough (kernel ≥ 6.9) quando disponível.
@@ -88,7 +88,7 @@ Estas seções registram as decisões; cada fase terá spec própria.
 - **Modificação:** altera o arquivo real do mod (comportamento do USVFS).
 - **Exclusão/renomeação:** sobre o arquivo real; para a camada base, exclusão mascarada em memória até desmontar.
 - **Atualização a quente:** troca atômica da árvore; invalidação do cache do kernel.
-- **Ciclo de vida:** monta antes de iniciar o executável, desmonta quando o grupo de processos termina; arquivo de estado permite limpeza (`fusermount3 -u`) após falha.
+- **Ciclo de vida:** monta antes de iniciar o executável, desmonta quando o último grupo de processos observado termina (auto-desmonte do próprio `mo2-vfs`); arquivo de estado permite limpeza (`fusermount3 -u`) após falha.
 - **Testes:** unitários da árvore (sem FUSE), integração montando em diretório temporário, benchmarks `readdir`/`open` com ~2.000 mods.
 
 ### 3.2 Fase 3 — Steam/Proton
@@ -98,7 +98,12 @@ Estas seções registram as decisões; cada fase terá spec própria.
 - Execução: monta VFS → `umu-run` (fallback `<proton>/proton run`) com `STEAM_COMPAT_DATA_PATH`, `STEAM_COMPAT_CLIENT_INSTALL_PATH`, `SteamAppId`, `SteamGameId`, `WINEPREFIX` → acompanha processos (`pidfd`, `wineserver -w`) → desmonta.
 - Por executável: versão do Proton, variáveis de ambiente e argumentos configuráveis.
 - Ferramentas usam o prefixo do jogo.
-- **Riscos a validar no início da fase:** visibilidade do mount FUSE dentro do `pressure-vessel`; cache de diretórios do Wine.
+- **Risco resolvido (spike de 2026-10-15):** o mount FUSE feito pelo usuário no host aparece dentro do `pressure-vessel` (inclusive montado depois de o container subir), e o Wine lista, lê e escreve por ele; ver §1.2 da [spec da Fase 2](2026-10-15-phase2-vfs-fuse-design.md). O desenho "monta no host, depois executa" vale.
+- **Riscos a tratar na Fase 3:**
+  1. Processos do Wine/Proton que saem do grupo de processos observado (`setsid`, `wineserver`): o `mo2-vfs` desmonta quando o último grupo observado termina, então o acompanhamento precisa incluir esses processos (`pidfd`, `wineserver -w`) ou o mount some sob o jogo.
+  2. Cache de diretórios do Wine após `update` a quente (não testado no spike).
+  3. O MO2 roda hoje dentro do distrobox `mo2-run`: mounts FUSE feitos lá vivem no namespace de montagem do container e **não** são vistos pela Steam do host. A Fase 3 precisa rodar o `mo2-vfs` no host (ex.: `distrobox-host-exec`) ou antecipar o AppImage.
+  4. O passthrough de FUSE exige `CAP_SYS_ADMIN`; sem privilégio, `open`+`read` fica em cerca de 3,4x o nativo (medido na Fase 2, `benchmarks/results/2026-10-phase2-vfs.md`).
 
 ### 3.3 Fase 4 — Ecossistema
 
