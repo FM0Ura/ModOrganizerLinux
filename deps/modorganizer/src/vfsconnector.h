@@ -69,6 +69,9 @@ public:
   }
 
   // called in the thread of the connector's object when the file system was unmounted
+  // (queued: skipped if it was activated again meanwhile); it must not call the
+  // connector while a request of the connector is running (activate(),
+  // updateMapping(), ...), which throws or is logged as an error
   virtual void setDeactivatedCallback(std::function<void()> f) { Q_UNUSED(f); }
 };
 

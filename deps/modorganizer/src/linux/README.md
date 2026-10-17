@@ -40,7 +40,7 @@ Rules:
   `crash.log` in the log directory of the instance, next to the Mod Organizer log.
 - New platform interfaces are shared headers with one implementation per platform:
   `vfsconnector.h` (`VfsConnector`, `createVfsConnector()`) is implemented by
-  `usvfsconnector.cpp` on Windows and by `vfsconnector_linux.cpp` (`NullVfsConnector`)
+  `usvfsconnector.cpp` on Windows and by `vfsconnector_linux.cpp` (`LinuxVfsConnector`)
   on Linux.
 - `envfs_linux.cpp`, `util_linux.cpp` and `win32compat_linux.cpp` are built, with the
   data tree (`shared/` file register), into the static library `organizer_datatree`

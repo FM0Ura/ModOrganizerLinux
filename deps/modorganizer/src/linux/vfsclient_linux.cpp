@@ -27,10 +27,13 @@ struct VfsClient::State
   bool hello           = false;
   bool expectUnmounted = false;
   bool exited          = false;
+  bool broken          = false;
+  bool busy            = false;
   int exitCode         = 0;
-  QEventLoop* loop     = nullptr;
+  QString exitText;
+  QEventLoop* loop = nullptr;
   std::function<void()> unmounted;
-  std::function<void(int, QString)> exitedHandler;
+  std::function<void(QString, QString)> exitedHandler;
 
   void wake()
   {
@@ -68,19 +71,23 @@ VfsClient::VfsClient(QString binary, QStringList args) : m_state(new State)
     }
   });
 
-  QObject::connect(&s.process, &QProcess::finished, &s.process,
-                   [this, state](int code, QProcess::ExitStatus status) {
-                     // what the process said last may still be in the pipes
-                     onStdout();
-                     state->exited   = true;
-                     state->exitCode = status == QProcess::NormalExit ? code : -1;
-                     state->wake();
-                     if (state->exitedHandler) {
-                       state->exitedHandler(
-                           state->exitCode,
-                           QString::fromUtf8(state->stderrTail).trimmed());
-                     }
-                   });
+  QObject::connect(
+      &s.process, &QProcess::finished, &s.process,
+      [this, state](int code, QProcess::ExitStatus status) {
+        // what the process said last may still be in the pipes
+        onStdout();
+        state->exited   = true;
+        state->exitCode = status == QProcess::NormalExit ? code : -1;
+        state->exitText =
+            status == QProcess::NormalExit
+                ? QString("exit code %1").arg(code)
+                : QString("crashed (%1)").arg(state->process.errorString());
+        state->wake();
+        if (state->exitedHandler) {
+          state->exitedHandler(state->exitText,
+                               QString::fromUtf8(state->stderrTail).trimmed());
+        }
+      });
 
   s.process.start(QIODevice::ReadWrite);
   if (!s.process.waitForStarted(5000)) {
@@ -95,13 +102,22 @@ VfsClient::VfsClient(QString binary, QStringList args) : m_state(new State)
           HelloTimeout) ||
       !s.hello) {
     const auto tail = QString::fromUtf8(s.stderrTail).trimmed();
-    std::string msg = s.exited ? "mo2-vfs ended before saying hello (exit code " +
-                                     std::to_string(s.exitCode) + ")"
+    std::string msg = s.exited ? "mo2-vfs ended before saying hello (" +
+                                     s.exitText.toStdString() + ")"
                                : "mo2-vfs did not say hello in time";
     if (!tail.isEmpty()) {
       msg += ": " + tail.toStdString();
     }
     s.exitedHandler = nullptr;
+
+    // the lambdas above use the state, which is destroyed before the process: the
+    // process must be gone, and silent, before leaving
+    s.process.disconnect();
+    if (s.process.state() != QProcess::NotRunning) {
+      s.process.kill();
+      s.process.waitForFinished(2000);
+    }
+
     throw std::runtime_error(msg);
   }
 }
@@ -135,14 +151,15 @@ void VfsClient::setUnmountedHandler(std::function<void()> f)
   m_state->unmounted = std::move(f);
 }
 
-void VfsClient::setExitedHandler(std::function<void(int, QString)> f)
+void VfsClient::setExitedHandler(std::function<void(QString, QString)> f)
 {
   m_state->exitedHandler = std::move(f);
 }
 
 bool VfsClient::running() const
 {
-  return !m_state->exited && m_state->process.state() == QProcess::Running;
+  return !m_state->exited && !m_state->broken &&
+         m_state->process.state() == QProcess::Running;
 }
 
 bool VfsClient::waitFor(const std::function<bool()>& done,
@@ -174,9 +191,20 @@ QJsonObject VfsClient::request(const QJsonObject& r, std::chrono::milliseconds t
 {
   auto& s = *m_state;
 
+  if (s.busy) {
+    throw std::runtime_error("mo2-vfs request already in progress");
+  }
+
   if (!running()) {
     throw std::runtime_error("mo2-vfs is not running");
   }
+
+  struct Busy
+  {
+    bool& b;
+    explicit Busy(bool& b) : b(b) { b = true; }
+    ~Busy() { b = false; }
+  } busy(s.busy);
 
   s.replies.clear();
   s.expectUnmounted = r.value("op").toString() == "unmount";
@@ -192,10 +220,15 @@ QJsonObject VfsClient::request(const QJsonObject& r, std::chrono::milliseconds t
   s.expectUnmounted = false;
 
   if (s.replies.isEmpty()) {
+    // a late reply must not be taken by the next request
+    if (!got) {
+      s.broken = true;
+    }
+
     const auto op   = r.value("op").toString().toStdString();
     const auto tail = QString::fromUtf8(s.stderrTail).trimmed();
 
-    std::string msg = got ? "mo2-vfs ended (exit code " + std::to_string(s.exitCode) +
+    std::string msg = got ? "mo2-vfs ended (" + s.exitText.toStdString() +
                                 ") before replying to " + op
                           : "mo2-vfs did not reply to " + op + " in time";
     if (got && !tail.isEmpty()) {

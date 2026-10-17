@@ -36,6 +36,9 @@ public:
   VfsClient(const VfsClient&)            = delete;
   VfsClient& operator=(const VfsClient&) = delete;
 
+  // not re-entrant: a call made while another is waiting (from an event processed by
+  // its event loop) throws; after a timeout the client is unusable (running() is false)
+  //
   // sends a request and returns the reply event; throws std::runtime_error on timeout,
   // when the process ends before replying or when the reply is an error event (the
   // message is the one of the event, followed by its path in parentheses if it has
@@ -50,9 +53,9 @@ public:
   // of the client
   void setUnmountedHandler(std::function<void()> f);
 
-  // called when the process has ended, with its exit code and the end of what it wrote
-  // on its standard error
-  void setExitedHandler(std::function<void(int, QString)> f);
+  // called when the process has ended, with how ("exit code 1", "crashed (...)") and
+  // the end of what it wrote on its standard error
+  void setExitedHandler(std::function<void(QString, QString)> f);
 
   bool running() const;
 

@@ -311,6 +311,90 @@ TEST_F(VfsConnectorTest, AutoDeactivatesWhenGroupEnds)
   ::waitpid(pid, &status, 0);
 }
 
+TEST_F(VfsConnectorTest, UpdateMappingWhileActiveUpdates)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateMapping({Mapping{q(l.a), q(l.data), true, false}});
+  vfs->activate();
+  EXPECT_FALSE(fs::exists(l.data / "b.esp"));
+
+  // no activate(): the mounted file system follows
+  vfs->updateMapping({Mapping{q(l.a), q(l.data), true, false},
+                      Mapping{q(l.b), q(l.data), true, false}});
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_TRUE(fs::exists(l.data / "b.esp"));
+}
+
+TEST_F(VfsConnectorTest, NestedRequestThrows)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+
+  // an event processed while the update waits for its reply
+  bool threw = false, ran = false;
+  QTimer::singleShot(0, [&] {
+    ran = true;
+    try {
+      vfs->activate();
+    } catch (const std::runtime_error& e) {
+      threw = std::string(e.what()).find("already in progress") != std::string::npos;
+    }
+  });
+
+  vfs->updateMapping(l.mapping());
+
+  EXPECT_TRUE(ran);
+  EXPECT_TRUE(threw);
+  EXPECT_TRUE(vfs->isActive());
+}
+
+TEST_F(VfsConnectorTest, CallbackOfOldDeactivationDoesNotFire)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  int called = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  vfs->releaseIfIdle();  // callback queued
+  vfs->activate();       // active again before it is delivered
+
+  QEventLoop loop;
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+  EXPECT_EQ(called, 0);
+  EXPECT_TRUE(vfs->isActive());
+
+  vfs->releaseIfIdle();
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+  EXPECT_EQ(called, 1);
+}
+
 TEST_F(VfsConnectorTest, ActivateErrorIsException)
 {
   fakeHelper("echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"

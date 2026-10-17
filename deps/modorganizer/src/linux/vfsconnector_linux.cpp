@@ -126,6 +126,16 @@ public:
     }
 
     log::debug("{} mappings kept", m_mapping.size());
+
+    if (m_active) {
+      // the mounted file system follows the mappings (also called from the refresh
+      // and profile code, which don't expect an exception)
+      try {
+        send(mappingRequest("update"), 30s);
+      } catch (const std::exception& e) {
+        log::error("cannot update the virtual file system: {}", e.what());
+      }
+    }
   }
 
   void updateParams(log::Levels logLevel, env::CoreDumpTypes, const QString&,
@@ -171,25 +181,15 @@ public:
       start();
     }
 
-    QJsonArray mappings;
-    for (const auto& m : m_mapping) {
-      QJsonObject o;
-      o["source"]        = m.source;
-      o["destination"]   = m.destination;
-      o["is_directory"]  = m.isDirectory;
-      o["create_target"] = m.createTarget;
-      mappings.push_back(o);
-    }
-
     const bool update = m_active;
 
-    QJsonObject r;
-    r["op"]                 = update ? "update" : "mount";
-    r["mappings"]           = mappings;
-    r["skip_file_suffixes"] = toJson(m_skipFileSuffixes);
-    r["skip_directories"]   = toJson(m_skipDirectories);
+    if (!update) {
+      // callbacks queued for earlier deactivations are history, even if they are
+      // delivered while the mount request waits
+      ++m_generation;
+    }
 
-    m_client->request(r, 30s);
+    send(mappingRequest(update ? "update" : "mount"), 30s);
 
     if (!update) {
       m_active  = true;
@@ -208,7 +208,7 @@ public:
     r["pgid"] = pgid;
 
     try {
-      m_client->request(r, 10s);
+      send(r, 10s);
       ++m_watched;
     } catch (const std::exception& e) {
       log::error("cannot watch process group {}: {}", pgid, e.what());
@@ -222,7 +222,7 @@ public:
     }
 
     try {
-      m_client->request(QJsonObject{{"op", "unmount"}}, 10s);
+      send(QJsonObject{{"op", "unmount"}}, 10s);
     } catch (const std::exception& e) {
       log::error("cannot unmount the virtual file system: {}", e.what());
       return;
@@ -265,6 +265,40 @@ public:
   }
 
 private:
+  QJsonObject mappingRequest(const char* op) const
+  {
+    QJsonArray mappings;
+    for (const auto& m : m_mapping) {
+      QJsonObject o;
+      o["source"]        = m.source;
+      o["destination"]   = m.destination;
+      o["is_directory"]  = m.isDirectory;
+      o["create_target"] = m.createTarget;
+      mappings.push_back(o);
+    }
+
+    QJsonObject r;
+    r["op"]                 = op;
+    r["mappings"]           = mappings;
+    r["skip_file_suffixes"] = toJson(m_skipFileSuffixes);
+    r["skip_directories"]   = toJson(m_skipDirectories);
+    return r;
+  }
+
+  // a helper that is gone (or given up on after a timeout) may have left its mount
+  // behind: it is cleaned up before the next one starts
+  QJsonObject send(const QJsonObject& r, std::chrono::milliseconds timeout)
+  {
+    try {
+      return m_client->request(r, timeout);
+    } catch (...) {
+      if (!m_client->running()) {
+        m_cleanupNeeded = true;
+      }
+      throw;
+    }
+  }
+
   void start()
   {
     const auto binary = vfsBinary();
@@ -292,14 +326,13 @@ private:
       deactivated();
     });
 
-    client->setExitedHandler([this](int code, QString stderrTail) {
+    client->setExitedHandler([this](QString how, QString stderrTail) {
       if (!m_active) {
         return;
       }
 
-      log::error("mo2-vfs ended with exit code {} while the virtual file system was "
-                 "active: {}",
-                 code, stderrTail);
+      log::error("mo2-vfs ended ({}) while the virtual file system was active: {}", how,
+                 stderrTail);
       m_cleanupNeeded = true;
       deactivated();
     });
@@ -320,8 +353,11 @@ private:
       // in the thread of the connector, once the event that caused this is handled
       QMetaObject::invokeMethod(
           &m_context,
-          [f = m_deactivated] {
-            f();
+          [this, f = m_deactivated, gen = m_generation] {
+            // not for a deactivation that is already history
+            if (!m_active && gen == m_generation) {
+              f();
+            }
           },
           Qt::QueuedConnection);
     }
@@ -335,9 +371,10 @@ private:
 
   QObject m_context;
   std::unique_ptr<VfsClient> m_client;
-  bool m_active        = false;
-  bool m_cleanupNeeded = false;
-  int m_watched        = 0;
+  bool m_active         = false;
+  bool m_cleanupNeeded  = false;
+  int m_watched         = 0;
+  unsigned m_generation = 0;
   std::function<void()> m_deactivated;
 };
 

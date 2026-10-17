@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 // true when FUSE can be used. When it can't, the caller skips the test
 // (`if (!requireFuse()) GTEST_SKIP();`), unless MO2_REQUIRE_FUSE=1, which makes it fail
