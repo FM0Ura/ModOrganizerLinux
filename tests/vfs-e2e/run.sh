@@ -21,6 +21,10 @@
 # - afterwards, overwrite/probe-created.txt has what the probe wrote, the real data
 #   directory has exactly its original files with their original content, and
 #   nothing is mounted under the temporary directory.
+# Then the same run with MO2_VFS_BINARY pointing to a fake helper whose mount fails:
+# beforeRun must return promptly (no dialog waits for an answer without a user
+# interface): the run command logs "Failed to run" within MO2_E2E_FAIL_TIMEOUT seconds
+# (30 by default), the reason of the failure is in the log, and the probe did not run.
 # On failure it prints the probe results, the logs of mo2-vfs and of the application.
 #
 # Without /dev/fuse or fusermount3 the test is skipped with
@@ -192,5 +196,50 @@ for _ in $(seq 10); do
 done
 [[ -z $(helpers) ]] || die "mo2-vfs still running after the application exited: $(helpers)"
 echo "ok mo2-vfs ended"
+
+# --- a helper whose mount fails --------------------------------------------------
+
+fake="$WORK/bin/failing-mo2-vfs"
+cat > "$fake" <<'FAKE'
+#!/bin/sh
+[ "$1" = "--cleanup" ] && exit 0
+echo '{"event":"hello","version":"0"}'
+read -r line
+echo '{"event":"error","code":"io","message":"fake mount failure for the e2e test","path":null}'
+read -r line
+FAKE
+chmod 755 "$fake"
+rm -f "$PROBE_OUT"
+
+FAIL_TIMEOUT="${MO2_E2E_FAIL_TIMEOUT:-30}"
+echo "--- ModOrganizer -i vfs-e2e run -e probe, failing helper (${FAIL_TIMEOUT}s)"
+start=$SECONDS
+env HOME="$HOMEDIR" \
+    XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
+    XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
+    XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
+    MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$fake" \
+    PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
+    timeout -k 5 "$((FAIL_TIMEOUT + 10))" "$APP" --logs -i vfs-e2e run -e probe \
+    > "$APP_OUT" 2>&1 < /dev/null &
+app=$!
+# beforeRun returns at once (no dialog without a user interface): the run command then
+# reports "Failed to run" (its own error dialog, upstream behaviour, is not waited for:
+# the application is stopped once that line is logged)
+log="$INSTANCE/logs/mo_interface.log"
+returned=0
+for ((i = 0; i < FAIL_TIMEOUT * 2; i++)); do
+    grep -q "Failed to run 'probe'" "$log" 2>/dev/null && { returned=1; break; }
+    kill -0 "$app" 2>/dev/null || { returned=1; break; }
+    sleep 0.5
+done
+kill -TERM "$app" 2>/dev/null || true
+wait "$app" 2>/dev/null || true
+((returned)) ||
+    die "the run did not return from the failed mount within ${FAIL_TIMEOUT}s"
+grep -q "fake mount failure for the e2e test" "$log" ||
+    die "the reason of the failed mount is not in the log"
+[[ ! -e $PROBE_OUT ]] || die "the probe ran although the mount failed"
+echo "ok failed mount: run returned in $((SECONDS - start))s, reason logged"
 
 echo "vfs e2e test passed"
