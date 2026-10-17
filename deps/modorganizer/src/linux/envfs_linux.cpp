@@ -30,6 +30,7 @@
 
 #include <QString>
 
+#include <uibase/linux/filetime.h>
 #include <uibase/log.h>
 
 using namespace MOBase;
@@ -43,9 +44,6 @@ namespace
   // size of the buffer given to getdents64(), one per depth level
   constexpr std::size_t BufferSize = 64 * 1024;
 
-  // seconds between 1601-01-01 (FILETIME) and 1970-01-01 (Unix time)
-  constexpr std::int64_t FileTimeEpochOffset = 11'644'473'600;
-
   // the record returned by getdents64(), see getdents(2); not every C library declares
   // it
   struct LinuxDirent64
@@ -56,18 +54,6 @@ namespace
     unsigned char d_type;
     char d_name[1];
   };
-
-  FILETIME toFileTime(const timespec& t)
-  {
-    const auto v = static_cast<std::uint64_t>(
-        (t.tv_sec + FileTimeEpochOffset) * 10'000'000 + t.tv_nsec / 100);
-
-    FILETIME ft;
-    ft.dwLowDateTime  = static_cast<DWORD>(v & 0xffffffff);
-    ft.dwHighDateTime = static_cast<DWORD>(v >> 32);
-
-    return ft;
-  }
 
   std::wstring toWString(const char* name)
   {
@@ -247,7 +233,7 @@ void DirectoryWalker::forEachEntry(const std::wstring& path, void* cx,
     }
 
     if (type == DT_REG) {
-      fileF(cx, toWString(name), toFileTime(st.st_mtim),
+      fileF(cx, toWString(name), MOBase::linux::toFileTime(st.st_mtim),
             static_cast<std::uint64_t>(st.st_size));
       continue;
     }

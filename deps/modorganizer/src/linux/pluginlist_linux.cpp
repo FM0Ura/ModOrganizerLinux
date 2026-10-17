@@ -14,6 +14,7 @@
 #include "../shared/windows_error.h"
 
 #include <uibase/iplugingame.h>
+#include <uibase/linux/filetime.h>
 #include <uibase/log.h>
 
 #include <QDir>
@@ -26,27 +27,6 @@
 
 using namespace MOBase;
 using namespace MOShared;
-
-namespace
-{
-
-// seconds between 1601-01-01 (FILETIME) and 1970-01-01 (Unix time)
-constexpr std::int64_t FileTimeEpochOffset = 11'644'473'600;
-
-timespec toTimespec(FILETIME ft)
-{
-  const auto v = (static_cast<std::uint64_t>(ft.dwHighDateTime) << 32) |
-                 static_cast<std::uint64_t>(ft.dwLowDateTime);
-
-  timespec t;
-  t.tv_sec  = static_cast<time_t>(static_cast<std::int64_t>(v / 10'000'000) -
-                                  FileTimeEpochOffset);
-  t.tv_nsec = static_cast<long>((v % 10'000'000) * 100);
-
-  return t;
-}
-
-}  // namespace
 
 bool PluginList::saveLoadOrder(DirectoryEntry& directoryStructure)
 {
@@ -76,7 +56,7 @@ bool PluginList::saveLoadOrder(DirectoryEntry& directoryStructure)
       newWriteTime.dwLowDateTime  = static_cast<DWORD>(temp & 0xFFFFFFFF);
       newWriteTime.dwHighDateTime = static_cast<DWORD>(temp >> 32);
 
-      const timespec times[2] = {{0, UTIME_OMIT}, toTimespec(newWriteTime)};
+      const timespec times[2] = {{0, UTIME_OMIT}, MOBase::linux::toTimespec(newWriteTime)};
 
       if (::utimensat(AT_FDCWD, QFile::encodeName(fileName).constData(), times, 0) !=
           0) {
