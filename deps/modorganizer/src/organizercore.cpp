@@ -233,6 +233,20 @@ OrganizerCore::OrganizerCore(Settings& settings)
           [this](auto const&... args) {
             m_PluginSettingChanged(args...);
           });
+
+  // the refresh that was deferred while the virtual file system was mounted; in the
+  // next iteration of the event loop because the callback may be called while a
+  // request of the connector is running, which can't be nested (what the refresh
+  // notifies may start a program, which calls the connector)
+  m_VFS->setDeactivatedCallback([this] {
+    QTimer::singleShot(0, this, [this] {
+      if (std::exchange(m_RefreshPendingAfterVfs, false)) {
+        log::debug("the virtual file system was unmounted, running the deferred "
+                   "directory refresh");
+        refreshDirectoryStructure();
+      }
+    });
+  });
 }
 
 OrganizerCore::~OrganizerCore()
@@ -320,6 +334,33 @@ void OrganizerCore::setUserInterface(IUserInterface* ui)
   m_DownloadManager.setParentWidget(w);
 
   checkForUpdates();
+
+  if (m_UserInterface && !m_StaleMountsShown && !m_VFS->staleMounts().isEmpty()) {
+    m_StaleMountsShown = true;
+
+    // once the main window is shown
+    QTimer::singleShot(0, this, [this] {
+      showStaleMounts();
+    });
+  }
+}
+
+void OrganizerCore::showStaleMounts()
+{
+  QStringList commands;
+  for (const auto& root : m_VFS->staleMounts()) {
+    commands.push_back(QString("fusermount3 -uz \"%1\"").arg(root));
+  }
+
+  QWidget* w = (m_UserInterface ? m_UserInterface->mainWindow() : nullptr);
+
+  QMessageBox::warning(
+      w, tr("Virtual file system"),
+      tr("The virtual file system of a previous run of Mod Organizer is still mounted "
+         "on these directories and could not be unmounted:\n\n%1\n\n"
+         "Programs started by Mod Organizer may be using them. Close those programs "
+         "and unmount each directory with:\n\n%2")
+          .arg(m_VFS->staleMounts().join("\n"), commands.join("\n")));
 }
 
 void OrganizerCore::checkForUpdates()
@@ -1354,7 +1395,9 @@ boost::signals2::connection
 OrganizerCore::onNextRefresh(std::function<void()> const& func,
                              RefreshCallbackGroup group, RefreshCallbackMode mode)
 {
-  if (m_DirectoryUpdate || mode == RefreshCallbackMode::FORCE_WAIT_FOR_REFRESH) {
+  // a refresh deferred until the virtual file system is unmounted is coming too
+  if (m_DirectoryUpdate || m_RefreshPendingAfterVfs ||
+      mode == RefreshCallbackMode::FORCE_WAIT_FOR_REFRESH) {
     return m_OnNextRefreshCallbacks.connect(static_cast<int>(group), func);
   } else {
     func();
@@ -1676,6 +1719,14 @@ std::vector<QString> OrganizerCore::enabledArchives()
 
 void OrganizerCore::refreshDirectoryStructure()
 {
+  // the mounted file system is seen by Mod Organizer too: the data directory would
+  // have the files of the mods
+  if (m_VFS->isActive()) {
+    m_RefreshPendingAfterVfs = true;
+    log::debug("directory refresh deferred until the virtual file system is unmounted");
+    return;
+  }
+
   if (m_DirectoryUpdate) {
     log::debug("can't refresh, already in progress");
     return;
@@ -2113,6 +2164,7 @@ bool OrganizerCore::beforeRun(
   try {
     m_VFS->updateMapping(fileMapping(profileName, customOverwrite));
     m_VFS->updateForcedLibraries(forcedLibraries);
+    m_VFS->activate();
 #ifdef _WIN32
   } catch (const UsvfsConnectorException& e) {
     log::debug("{}", e.what());
@@ -2132,6 +2184,11 @@ bool OrganizerCore::beforeRun(
 
 void OrganizerCore::afterRun(const QFileInfo& binary, DWORD exitCode)
 {
+#ifndef _WIN32
+  if (!m_VFS->waitInactive(std::chrono::seconds(5)))
+    log::warn("the virtual file system is still mounted, refreshing when it is not");
+#endif
+
   // need to remove our stored load order because it may be outdated if a
   // foreign tool changed the file time. After removing that file,
   // refreshESPList will use the file time as the order

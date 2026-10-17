@@ -90,8 +90,10 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 # (which needs the settings), as organizer_env, the file tree of archives used by
 # the installation as organizer_archivetree, and the Linux parts of running programs
 # (the virtual file system connector, spawn and the availability of LOOT) as
-# organizer_launch; the application links them and so do the unit tests (tests/),
-# without the rest of the application.
+# organizer_launch, with its posix_spawn() call in organizer_posixspawn (built without
+# src/ in the include path, where spawn.h hides the <spawn.h> of the system); the
+# application links them and so do the unit tests (tests/), without the rest of the
+# application.
 set(_organizer_datatree_sources
 	shared/directoryentry.cpp
 	shared/fileentry.cpp
@@ -139,6 +141,7 @@ foreach(_source IN LISTS _organizer_sources)
 				OR _relative IN_LIST _organizer_datatree_sources
 				OR _relative IN_LIST _organizer_env_sources
 				OR _relative IN_LIST _organizer_launch_sources
+				OR _relative STREQUAL "linux/posixspawn_linux.cpp"
 				OR _relative STREQUAL "archivefiletree.cpp"
 				OR _relative STREQUAL "resources.qrc")
 			continue()
@@ -219,11 +222,18 @@ if (NOT WIN32)
 	target_precompile_headers(organizer_archivetree REUSE_FROM organizer_datatree)
 	target_link_libraries(organizer_archivetree PUBLIC organizer_datatree mo2::archive)
 
+	# no include path, no precompiled header and no libraries: its <spawn.h> must be
+	# the one of the system
+	add_library(organizer_posixspawn STATIC linux/posixspawn_linux.cpp)
+	mo2_configure_target(organizer_posixspawn
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+
 	add_library(organizer_launch STATIC ${_organizer_launch_sources})
 	mo2_configure_target(organizer_launch
 		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
 	target_precompile_headers(organizer_launch REUSE_FROM organizer_datatree)
-	target_link_libraries(organizer_launch PUBLIC organizer_env mo2::lootcli-header)
+	target_link_libraries(organizer_launch PUBLIC
+		organizer_env mo2::lootcli-header organizer_posixspawn)
 
 	target_link_libraries(organizer PRIVATE
 		organizer_launch organizer_archivetree organizer_env organizer_datatree)

@@ -352,6 +352,9 @@ public:
 
   void prepareVFS();
 
+  // the virtual file system of the programs started by Mod Organizer
+  VfsConnector& vfs() { return *m_VFS; }
+
   void updateVFSParams(MOBase::log::Levels logLevel, env::CoreDumpTypes coreDumpType,
                        const QString& coreDumpsPath, std::chrono::seconds spawnDelay,
                        QString executableBlacklist, const QStringList& skipFileSuffixes,
@@ -507,6 +510,10 @@ private:
   void saveCurrentProfile();
   void storeSettings();
 
+  // tells the user about the mounts of the virtual file system that a previous run
+  // left behind (VfsConnector::staleMounts())
+  void showStaleMounts();
+
   void updateModActiveState(int index, bool active);
   void updateModsActiveState(const QList<unsigned int>& modIndices, bool active);
 
@@ -595,6 +602,13 @@ private:
 
   MOBase::DelayedFileWriter m_PluginListsWriter;
   std::unique_ptr<VfsConnector> m_VFS;
+
+  // refreshDirectoryStructure() was called while the virtual file system was mounted
+  // (it would see the mods in the data directory); done when it is unmounted
+  bool m_RefreshPendingAfterVfs = false;
+
+  // the stale mounts of the virtual file system were shown to the user
+  bool m_StaleMountsShown = false;
 
   UILocker m_UILocker;
 };

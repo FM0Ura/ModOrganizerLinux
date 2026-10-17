@@ -17,6 +17,7 @@
 
 #include "fusetest.h"
 #include "shared/util.h"
+#include "spawn.h"
 #include "tempdir.h"
 #include "vfsconnector.h"
 
@@ -309,6 +310,53 @@ TEST_F(VfsConnectorTest, AutoDeactivatesWhenGroupEnds)
 
   int status = 0;
   ::waitpid(pid, &status, 0);
+}
+
+// what ProcessRunner::run() does on Linux, without the rest of the application: mount,
+// start the program with spawn::startBinary() (in a group of its own), watch its group;
+// the program sees the mods and the file system goes away when it ends
+TEST_F(VfsConnectorTest, StartedProgramSeesTheMods)
+{
+  if (!requireFuse())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+
+  const auto out    = l.tmp.path() / "out.txt";
+  const auto script = l.tmp.path() / "tool.sh";
+  {
+    std::ofstream s(script);
+    s << "#!/bin/sh\nls > \"$1\"\nsleep 0.3\n";
+  }
+  fs::permissions(script, fs::perms::owner_all);
+
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  ASSERT_TRUE(vfs->isActive());
+
+  spawn::SpawnParameters sp;
+  sp.binary           = QFileInfo(q(script));
+  sp.arguments        = "\"" + q(out) + "\"";
+  sp.currentDirectory = QDir(q(l.data));
+
+  const HANDLE h = spawn::startBinary(nullptr, sp);
+  ASSERT_NE(h, INVALID_HANDLE_VALUE);
+  const auto pid = static_cast<pid_t>(reinterpret_cast<std::intptr_t>(h));
+
+  vfs->watchProcessGroup(pid);
+
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(5)));
+  EXPECT_FALSE(mounted(l.data));
+
+  int status = 0;
+  ASSERT_EQ(::waitpid(pid, &status, 0), pid);
+  EXPECT_EQ(WEXITSTATUS(status), 0);
+
+  // the working directory is the mounted data directory
+  EXPECT_EQ(readFile(out), "a.esp\nb.esp\noriginal.esm\ntextures\n");
 }
 
 TEST_F(VfsConnectorTest, UpdateMappingWhileActiveUpdates)

@@ -1,23 +1,39 @@
 // Linux implementation of spawn.h (spawn.cpp is Windows-only).
 //
-// Starting programs is not available on Linux before Phase 3 of the port (they will
-// be Windows programs run with Wine/Proton): startBinary() shows why and returns
+// Native programs (ELF executables and #! scripts the user can run, isNativeProgram())
+// are started by startBinary() with posix_spawn() (posixspawn_linux.cpp) in a process
+// group of their own, which mo2-vfs watches to keep the virtual file system mounted
+// while the program runs (ProcessRunner::run(), processrunner_linux.cpp), in the
+// working directory of the parameters and with the environment of Mod Organizer; the
+// HANDLE returned is the pid (envmodule.h). The standard output and error handles of
+// the parameters are not used (they are for lootcli on Windows, see loot_linux.cpp).
+//
+// Windows programs (.exe, .bat, ...) are not started before Phase 3 of the port (they
+// will be run with Wine/Proton): startBinary() shows why and returns
 // INVALID_HANDLE_VALUE, which every caller already handles as a failure to start, and
-// ProcessRunner::run() (processrunner_linux.cpp) shows the same message without
-// preparing anything. There is no Steam check, no executable blacklist (it is a usvfs
-// list) and no helper program: Mod Organizer doesn't need administrative rights on
-// Linux.
+// ProcessRunner::run() shows the same message without preparing anything. There is no
+// Steam check, no executable blacklist (it is a usvfs list) and no helper program: Mod
+// Organizer doesn't need administrative rights on Linux.
 //
 // The type of the files is the same as on Windows, so the "Run" entries of the menus
-// are the same.
+// are the same, plus the native programs, which are executables too.
 
 #include "../spawn.h"
+#include "posixspawn_linux.h"
 
+#include <QFile>
 #include <QMessageBox>
 #include <QObject>
+#include <QProcess>
 #include <QStandardPaths>
 
 #include <uibase/log.h>
+
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <unistd.h>
+#include <vector>
 
 using namespace MOBase;
 
@@ -28,6 +44,24 @@ QString launchUnavailableMessage()
 {
   return QObject::tr("Executar programas ainda não está disponível no Linux. "
                      "Esta funcionalidade chega na Fase 3 do port.");
+}
+
+bool isNativeProgram(const QFileInfo& target)
+{
+  // a regular file (or a link to one) that the user may execute
+  const auto path = target.absoluteFilePath();
+  if (!QFileInfo(path).isFile() ||
+      ::access(QFile::encodeName(path).constData(), X_OK) != 0) {
+    return false;
+  }
+
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    return false;
+  }
+
+  const auto header = f.read(4);
+  return header.startsWith("\177ELF") || header.startsWith("#!");
 }
 
 bool checkSteam(QWidget*, const SpawnParameters&, const QDir&, const QString&,
@@ -43,13 +77,47 @@ bool checkBlacklist(QWidget*, const SpawnParameters&, Settings&)
 
 HANDLE startBinary(QWidget* parent, const SpawnParameters& sp)
 {
-  log::warn("not starting '{}' {}: starting programs is not available on Linux yet",
-            sp.binary.absoluteFilePath(), sp.arguments);
+  const auto program = sp.binary.absoluteFilePath();
 
-  QMessageBox::information(parent, QObject::tr("Mod Organizer"),
-                           launchUnavailableMessage());
+  if (!isNativeProgram(sp.binary)) {
+    log::warn("not starting '{}' {}: starting Windows programs is not available on "
+              "Linux yet",
+              program, sp.arguments);
 
-  return INVALID_HANDLE_VALUE;
+    QMessageBox::information(parent, QObject::tr("Mod Organizer"),
+                             launchUnavailableMessage());
+
+    return INVALID_HANDLE_VALUE;
+  }
+
+  const auto cwd = sp.currentDirectory.absolutePath();
+
+  std::vector<std::string> arguments;
+  for (const auto& a : QProcess::splitCommand(sp.arguments)) {
+    arguments.push_back(QFile::encodeName(a).toStdString());
+  }
+
+  log::debug("starting '{}' {} in '{}'", program, sp.arguments, cwd);
+
+  pid_t pid   = 0;
+  const int e = posixspawn::startInNewProcessGroup(
+      QFile::encodeName(program).toStdString(), arguments,
+      QFile::encodeName(cwd).toStdString(), pid);
+
+  if (e != 0) {
+    const auto reason = QString::fromLocal8Bit(std::strerror(e));
+    log::error("failed to start '{}' in '{}': {}", program, cwd, reason);
+
+    QMessageBox::critical(
+        parent, QObject::tr("Mod Organizer"),
+        QObject::tr("Cannot start \"%1\" in \"%2\": %3").arg(program, cwd, reason));
+
+    return INVALID_HANDLE_VALUE;
+  }
+
+  log::debug("started '{}', pid {} (its own process group)", program, pid);
+
+  return reinterpret_cast<HANDLE>(static_cast<std::intptr_t>(pid));
 }
 
 QString findJavaInstallation(const QString&)
@@ -91,7 +159,8 @@ namespace
 
 FileExecutionTypes getFileExecutionType(const QFileInfo& target)
 {
-  if (isExeFile(target) || isBatchFile(target) || isJavaFile(target)) {
+  if (isExeFile(target) || isBatchFile(target) || isJavaFile(target) ||
+      isNativeProgram(target)) {
     return FileExecutionTypes::Executable;
   }
 
@@ -102,6 +171,10 @@ FileExecutionContext getFileExecutionContext(QWidget*, const QFileInfo& target)
 {
   if (isExeFile(target) || isBatchFile(target)) {
     // how they are started (Wine) is decided by Phase 3
+    return {target, "", FileExecutionTypes::Executable};
+  }
+
+  if (isNativeProgram(target)) {
     return {target, "", FileExecutionTypes::Executable};
   }
 
