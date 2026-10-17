@@ -9,6 +9,8 @@ pub const ROOT_INO: u64 = 1;
 pub struct Inodes {
     by_key: HashMap<Key, u64>,
     by_ino: HashMap<u64, Key>,
+    /// Inodes that are not `by_key`'s number for their key (left by `rekey_prefix`).
+    aliases: Vec<u64>,
     next: u64,
 }
 
@@ -24,6 +26,7 @@ impl Inodes {
         Inodes {
             by_key: HashMap::from([(root.clone(), ROOT_INO)]),
             by_ino: HashMap::from([(ROOT_INO, root)]),
+            aliases: Vec::new(),
             next: ROOT_INO + 1,
         }
     }
@@ -42,6 +45,11 @@ impl Inodes {
 
     pub fn key_of(&self, ino: u64) -> Option<&Key> {
         self.by_ino.get(&ino)
+    }
+
+    /// The number of the folded path `key`, if one was given out (aliases aside).
+    pub fn ino_of(&self, key: &[u8]) -> Option<u64> {
+        self.by_key.get(key).copied()
     }
 
     /// A directory moved from `old` to `new`: every known key at or under `old` keeps its
@@ -84,6 +92,7 @@ impl Inodes {
         // Their path is now served by the moved entry.
         for (ino, k) in aliases {
             self.by_ino.insert(ino, k);
+            self.aliases.push(ino);
         }
     }
 
@@ -91,6 +100,13 @@ impl Inodes {
     /// rename that replaced a name); aliases are never removed before unmount.
     pub fn known(&self) -> impl Iterator<Item = (u64, &Key)> {
         self.by_ino.iter().map(|(&i, k)| (i, k))
+    }
+
+    /// The aliases among `known()`: every known inode is either `ino_of` its key or one
+    /// of these. (A number leaves `by_key` only in `rekey_prefix`, which makes it an alias,
+    /// and never comes back to it.)
+    pub fn aliases(&self) -> impl Iterator<Item = (u64, &Key)> {
+        self.aliases.iter().map(|&i| (i, &self.by_ino[&i]))
     }
 }
 
@@ -142,6 +158,27 @@ mod tests {
         assert_eq!(i.key_of(b), Some(&k("b")));
         assert_eq!(i.key_of(bf), Some(&k("b/f")));
         assert_eq!(i.ino_for(&k("b")), a);
+    }
+
+    #[test]
+    fn known_is_canonical_numbers_plus_aliases() {
+        let mut i = Inodes::new();
+        let a = i.ino_for(&k("a"));
+        let af = i.ino_for(&k("a/f"));
+        let b = i.ino_for(&k("b"));
+        let bf = i.ino_for(&k("b/f"));
+        i.ino_for(&k("c"));
+        i.rekey_prefix(&k("a"), &k("b"));
+        let mut aliases: Vec<u64> = i.aliases().map(|(n, _)| n).collect();
+        aliases.sort();
+        assert_eq!(aliases, [b, bf]);
+        assert_eq!(i.ino_of(&k("b").0), Some(a));
+        assert_eq!(i.ino_of(&k("b/f").0), Some(af));
+        assert_eq!(i.ino_of(&k("a").0), None);
+        for (n, key) in i.known() {
+            let canonical = i.ino_of(&key.0) == Some(n);
+            assert_ne!(canonical, i.aliases().any(|(x, _)| x == n), "{n}");
+        }
     }
 
     #[test]

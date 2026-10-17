@@ -1,14 +1,14 @@
 //! A mount session: one FUSE mount per root, hot updates, orderly unmount and state file.
 
 use crate::fs::{Vfs, VfsOptions, VfsShared};
+use crate::inodes::Inodes;
 use crate::layer::{Layers, Skip, layers_over, open_layers};
 use crate::mapping::{Mapping, RootSpec, plan_roots};
-use crate::name::{Key, fold};
 use crate::state::{self, StateFile};
-use crate::tree::{Kind, Tree};
+use crate::tree::{Kind, NodeId, Tree};
 use fuser::{BackgroundSession, INodeNo};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt;
 use std::io;
@@ -16,6 +16,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -215,6 +216,13 @@ impl Session {
         for (root, layers) in prepared {
             let (old_tree, old_layers) = swap_in(&root.shared, layers, &skip);
             notify_changes(&root.shared, &old_tree, &old_layers);
+            // Freeing a big tree takes a while and nothing waits for it.
+            let dropped = std::thread::Builder::new()
+                .name("mo2-vfs-drop".into())
+                .spawn(move || drop((old_tree, old_layers)));
+            if let Err(e) = dropped {
+                tracing::debug!(error = %e, "old tree freed in place");
+            }
         }
         Ok(())
     }
@@ -333,104 +341,243 @@ fn swap_in(shared: &VfsShared, layers: Arc<Layers>, skip: &Skip) -> (Tree, Arc<L
     shared.rebuild_locked(layers.clone(), |w| Tree::build_with(&layers, skip, w))
 }
 
-/// What a name resolves to: kind, layer source and real path inside it.
-type Resolution = (Kind, PathBuf, PathBuf);
-
-fn resolve(tree: &Tree, layers: &Layers, key: &Key) -> Option<(Resolution, OsString)> {
-    let id = tree.lookup_folded(key)?;
-    let node = tree.node(id);
-    let source = layers
-        .list
-        .get(node.origin.layer)
-        .map(|l| l.source.clone())
-        .unwrap_or_default();
-    Some((
-        (node.kind, source, node.origin.rel.clone()),
-        node.name.clone(),
-    ))
-}
-
-fn parent_key(key: &Key) -> Key {
-    match key.0.iter().rposition(|&b| b == b'/') {
-        Some(i) => Key(key.0[..i].to_vec()),
-        None => Key(Vec::new()),
-    }
-}
-
-fn child_key(parent: &Key, name: &std::ffi::OsStr) -> Key {
-    let mut bytes = parent.0.clone();
-    if !bytes.is_empty() {
-        bytes.push(b'/');
-    }
-    bytes.extend_from_slice(&fold(name).0);
-    Key(bytes)
-}
-
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 enum Inval {
     Inode(u64),
     Entry(u64, OsString),
 }
 
-/// Compares what the known inodes resolved to before and after the swap and returns the
-/// kernel cache entries to drop. Takes the locks itself (tree, then inodes) and releases
-/// them before returning.
-fn changes(shared: &VfsShared, old_tree: &Tree, old_layers: &Layers) -> Vec<Inval> {
-    let tree = shared.tree.read();
-    let layers = shared.layers();
-    let known: Vec<(u64, Key)> = shared
-        .inodes
-        .lock()
-        .known()
-        .map(|(i, k)| (i, k.clone()))
-        .collect();
-    let ino_of: HashMap<&Key, u64> = known.iter().map(|(i, k)| (k, *i)).collect();
+/// The known inode numbers of a folded path: `Inodes::ino_of` plus the aliases.
+struct Known<'a> {
+    inodes: &'a Inodes,
+    aliases: HashMap<&'a [u8], Vec<u64>>,
+}
 
-    let mut out: HashSet<Inval> = HashSet::new();
-    let mut any = false;
-    for (ino, key) in &known {
-        let before = resolve(old_tree, old_layers, key);
-        let after = resolve(&tree, &layers, key);
-        if before.as_ref().map(|b| &b.0) == after.as_ref().map(|a| &a.0) {
-            continue;
+impl<'a> Known<'a> {
+    fn new(inodes: &'a Inodes) -> Known<'a> {
+        let mut aliases: HashMap<&[u8], Vec<u64>> = HashMap::new();
+        for (ino, key) in inodes.aliases() {
+            aliases.entry(key.0.as_slice()).or_default().push(ino);
         }
-        any = true;
-        out.insert(Inval::Inode(*ino));
-        if key.0.is_empty() {
-            continue;
-        }
-        let Some(&pino) = ino_of.get(&parent_key(key)) else {
-            continue;
-        };
-        out.insert(Inval::Inode(pino));
-        let last = OsString::from_vec(key.0.rsplit(|&b| b == b'/').next().unwrap_or(&[]).to_vec());
-        for name in [before.map(|b| b.1), after.map(|a| a.1)]
-            .into_iter()
-            .flatten()
-        {
-            out.insert(Inval::Entry(pino, name));
-        }
-        out.insert(Inval::Entry(pino, last));
+        Known { inodes, aliases }
     }
-    // Names that did not exist before may be cached as negative entries in known
-    // directories.
-    for (ino, key) in &known {
-        let Some(id) = tree.lookup_folded(key) else {
-            continue;
+
+    fn of(&self, key: &[u8]) -> impl Iterator<Item = u64> + '_ {
+        let aliases = if self.aliases.is_empty() {
+            None
+        } else {
+            self.aliases.get(key)
         };
-        if tree.node(id).kind != Kind::Dir {
-            continue;
-        }
-        for (_, child) in tree.children(id) {
-            if old_tree
-                .lookup_folded(&child_key(key, &child.name))
-                .is_none()
+        self.inodes
+            .ino_of(key)
+            .into_iter()
+            .chain(aliases.into_iter().flatten().copied())
+    }
+}
+
+/// Walks the old and the new tree together (every path of either, once) and collects the
+/// kernel cache entries to drop: for each known inode whose path now resolves to another
+/// kind, layer or real path, the inode, its parent and the parent's entries for the old,
+/// new and folded name; for each known directory, the names it gained (they may be cached
+/// as negative entries).
+struct ChangeWalk<'a> {
+    old: &'a Tree,
+    old_layers: &'a Layers,
+    new: &'a Tree,
+    layers: &'a Layers,
+    known: &'a Known<'a>,
+    /// Folded path of the node being visited.
+    key: Vec<u8>,
+    out: HashSet<Inval>,
+    any: bool,
+    /// Paths at this depth are not visited but left in `deferred`, to be walked in
+    /// parallel.
+    defer_at: Option<usize>,
+    deferred: Vec<Deferred>,
+}
+
+/// A subtree left for later by `ChangeWalk::visit`: its key, old and new node and the
+/// length of its parent's key.
+type Deferred = (Vec<u8>, Option<NodeId>, Option<NodeId>, usize);
+
+/// What a node resolves to: kind, layer source and real path inside it.
+type Resolution<'t> = (Kind, &'t Path, &'t Path);
+
+fn resolution<'t>(tree: &'t Tree, layers: &'t Layers, id: NodeId) -> Resolution<'t> {
+    let node = tree.node(id);
+    let source = layers
+        .list
+        .get(node.origin.layer)
+        .map_or(Path::new(""), |l| l.source.as_path());
+    (node.kind, source, node.origin.rel.as_path())
+}
+
+/// Equal resolutions. Paths are equal by components (as `PathBuf ==`); equal bytes are
+/// the quick, common case.
+fn same(a: Option<Resolution>, b: Option<Resolution>) -> bool {
+    let path_eq = |x: &Path, y: &Path| x.as_os_str() == y.as_os_str() || x == y;
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.0 == b.0 && path_eq(a.1, b.1) && path_eq(a.2, b.2),
+        _ => false,
+    }
+}
+
+impl ChangeWalk<'_> {
+    /// Visits the path in `self.key`, at `depth` (the root is 0); `parent_len` is the length
+    /// of its parent's key.
+    fn visit(&mut self, old: Option<NodeId>, new: Option<NodeId>, parent_len: usize, depth: usize) {
+        let (otree, ntree) = (self.old, self.new);
+        let key = self.key.as_slice();
+        let inos: Vec<u64> = self.known.of(key).collect();
+        if !inos.is_empty() {
+            let before = old.map(|o| resolution(otree, self.old_layers, o));
+            let after = new.map(|n| resolution(ntree, self.layers, n));
+            if !same(before, after) {
+                self.any = true;
+                self.out.extend(inos.iter().map(|&i| Inval::Inode(i)));
+                if !key.is_empty() {
+                    // The folded name (past the separator).
+                    let start = if parent_len == 0 { 0 } else { parent_len + 1 };
+                    let last = OsString::from_vec(key[start..].to_vec());
+                    let names: Vec<OsString> =
+                        [old.map(|o| otree.node(o)), new.map(|n| ntree.node(n))]
+                            .into_iter()
+                            .flatten()
+                            .map(|n| n.name.clone())
+                            .chain([last])
+                            .collect();
+                    for pino in self.known.of(&key[..parent_len]) {
+                        self.out.insert(Inval::Inode(pino));
+                        for name in &names {
+                            self.out.insert(Inval::Entry(pino, name.clone()));
+                        }
+                    }
+                }
+            }
+            // Names that did not exist before may be cached as negative entries in known
+            // directories.
+            if let Some(n) = new
+                && ntree.node(n).kind == Kind::Dir
             {
-                any = true;
-                out.insert(Inval::Entry(*ino, child.name.clone()));
-                out.insert(Inval::Inode(*ino));
+                let old_children = old.map(|o| &otree.node(o).children);
+                for (ck, &cid) in &ntree.node(n).children {
+                    if !old_children.is_some_and(|c| c.contains_key(ck)) {
+                        self.any = true;
+                        for &ino in &inos {
+                            self.out
+                                .insert(Inval::Entry(ino, ntree.node(cid).name.clone()));
+                            self.out.insert(Inval::Inode(ino));
+                        }
+                    }
+                }
             }
         }
+        // Children of either tree, in key order.
+        let empty = BTreeMap::new();
+        let oc = old.map_or(&empty, |o| &otree.node(o).children);
+        let nc = new.map_or(&empty, |n| &ntree.node(n).children);
+        let mut oi = oc.iter().peekable();
+        let mut ni = nc.iter().peekable();
+        let len = self.key.len();
+        loop {
+            let (ck, o, n) = match (oi.peek(), ni.peek()) {
+                (None, None) => break,
+                (Some((ok, _)), Some((nk, _))) if ok == nk => {
+                    let (ck, &o) = oi.next().expect("peeked");
+                    let (_, &n) = ni.next().expect("peeked");
+                    (ck, Some(o), Some(n))
+                }
+                (Some((ok, _)), Some((nk, _))) if ok < nk => {
+                    let (ck, &o) = oi.next().expect("peeked");
+                    (ck, Some(o), None)
+                }
+                (Some(_), None) => {
+                    let (ck, &o) = oi.next().expect("peeked");
+                    (ck, Some(o), None)
+                }
+                _ => {
+                    let (ck, &n) = ni.next().expect("peeked");
+                    (ck, None, Some(n))
+                }
+            };
+            if len > 0 {
+                self.key.push(b'/');
+            }
+            self.key.extend_from_slice(&ck.0);
+            if self.defer_at == Some(depth + 1) {
+                self.deferred.push((self.key.clone(), o, n, len));
+            } else {
+                self.visit(o, n, len, depth + 1);
+            }
+            self.key.truncate(len);
+        }
+    }
+}
+
+/// Compares what the known inodes resolved to before and after the swap and returns the
+/// kernel cache entries to drop. Takes the locks itself (tree, then inodes) and releases
+/// them before returning. Each path of the two trees is visited once; the subtrees two
+/// levels down are walked in parallel.
+fn changes(shared: &VfsShared, old_tree: &Tree, old_layers: &Layers) -> Vec<Inval> {
+    changes_on(shared, old_tree, old_layers, 64)
+}
+
+/// `changes` with at least `per_worker` subtrees per thread.
+fn changes_on(
+    shared: &VfsShared,
+    old_tree: &Tree,
+    old_layers: &Layers,
+    per_worker: usize,
+) -> Vec<Inval> {
+    let tree = shared.tree.read();
+    let layers = shared.layers();
+    let inodes = shared.inodes.lock();
+    let known = Known::new(&inodes);
+    let walker = |key: Vec<u8>, defer_at| ChangeWalk {
+        old: old_tree,
+        old_layers,
+        new: &tree,
+        layers: &layers,
+        known: &known,
+        key,
+        out: HashSet::new(),
+        any: false,
+        defer_at,
+        deferred: Vec::new(),
+    };
+    let mut top = walker(Vec::new(), Some(2));
+    top.visit(Some(old_tree.root()), Some(tree.root()), 0, 0);
+    let deferred = std::mem::take(&mut top.deferred);
+    let (mut out, mut any) = (top.out, top.any);
+    let workers = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(deferred.len().div_ceil(per_worker))
+        .max(1);
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut w = walker(Vec::new(), None);
+        while let Some((key, o, n, parent_len)) = deferred.get(next.fetch_add(1, Ordering::Relaxed))
+        {
+            w.key.clone_from(key);
+            w.visit(*o, *n, *parent_len, 2);
+        }
+        (w.out, w.any)
+    };
+    let parts: Vec<(HashSet<Inval>, bool)> = if workers == 1 {
+        vec![work()]
+    } else {
+        std::thread::scope(|s| {
+            let handles: Vec<_> = (0..workers).map(|_| s.spawn(work)).collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("change walk thread panicked"))
+                .collect()
+        })
+    };
+    for (o, a) in parts {
+        out.extend(o);
+        any |= a;
     }
     if any {
         out.insert(Inval::Inode(crate::inodes::ROOT_INO));
@@ -510,4 +657,287 @@ fn unmount_impl(path: &Path) -> Result<bool, String> {
 /// `fusermount3 -uz` (lazy).
 pub fn unmount_path(path: &Path) -> Result<(), String> {
     unmount_impl(path).map(|_| ())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::Vfs;
+    use crate::mapping::LayerSpec;
+    use crate::name::fold_path;
+    use tempfile::TempDir;
+
+    /// `changes` as it was before the joint walk (a lookup of every known inode in both
+    /// trees); the tests compare the walk against it.
+    mod reference {
+        use super::super::*;
+        use crate::name::{Key, fold};
+
+        /// What a name resolves to: kind, layer source and real path inside it.
+        type Resolution = (Kind, PathBuf, PathBuf);
+
+        fn resolve(tree: &Tree, layers: &Layers, key: &Key) -> Option<(Resolution, OsString)> {
+            let id = tree.lookup_folded(key)?;
+            let node = tree.node(id);
+            let source = layers
+                .list
+                .get(node.origin.layer)
+                .map(|l| l.source.clone())
+                .unwrap_or_default();
+            Some((
+                (node.kind, source, node.origin.rel.clone()),
+                node.name.clone(),
+            ))
+        }
+
+        fn parent_key(key: &Key) -> Key {
+            match key.0.iter().rposition(|&b| b == b'/') {
+                Some(i) => Key(key.0[..i].to_vec()),
+                None => Key(Vec::new()),
+            }
+        }
+
+        fn child_key(parent: &Key, name: &std::ffi::OsStr) -> Key {
+            let mut bytes = parent.0.clone();
+            if !bytes.is_empty() {
+                bytes.push(b'/');
+            }
+            bytes.extend_from_slice(&fold(name).0);
+            Key(bytes)
+        }
+
+        /// Compares what the known inodes resolved to before and after the swap and returns the
+        /// kernel cache entries to drop. Takes the locks itself (tree, then inodes) and releases
+        /// them before returning.
+        pub(super) fn changes(
+            shared: &VfsShared,
+            old_tree: &Tree,
+            old_layers: &Layers,
+        ) -> Vec<Inval> {
+            let tree = shared.tree.read();
+            let layers = shared.layers();
+            let known: Vec<(u64, Key)> = shared
+                .inodes
+                .lock()
+                .known()
+                .map(|(i, k)| (i, k.clone()))
+                .collect();
+            let ino_of: HashMap<&Key, u64> = known.iter().map(|(i, k)| (k, *i)).collect();
+
+            let mut out: HashSet<Inval> = HashSet::new();
+            let mut any = false;
+            for (ino, key) in &known {
+                let before = resolve(old_tree, old_layers, key);
+                let after = resolve(&tree, &layers, key);
+                if before.as_ref().map(|b| &b.0) == after.as_ref().map(|a| &a.0) {
+                    continue;
+                }
+                any = true;
+                out.insert(Inval::Inode(*ino));
+                if key.0.is_empty() {
+                    continue;
+                }
+                let Some(&pino) = ino_of.get(&parent_key(key)) else {
+                    continue;
+                };
+                out.insert(Inval::Inode(pino));
+                let last =
+                    OsString::from_vec(key.0.rsplit(|&b| b == b'/').next().unwrap_or(&[]).to_vec());
+                for name in [before.map(|b| b.1), after.map(|a| a.1)]
+                    .into_iter()
+                    .flatten()
+                {
+                    out.insert(Inval::Entry(pino, name));
+                }
+                out.insert(Inval::Entry(pino, last));
+            }
+            // Names that did not exist before may be cached as negative entries in known
+            // directories.
+            for (ino, key) in &known {
+                let Some(id) = tree.lookup_folded(key) else {
+                    continue;
+                };
+                if tree.node(id).kind != Kind::Dir {
+                    continue;
+                }
+                for (_, child) in tree.children(id) {
+                    if old_tree
+                        .lookup_folded(&child_key(key, &child.name))
+                        .is_none()
+                    {
+                        any = true;
+                        out.insert(Inval::Entry(*ino, child.name.clone()));
+                        out.insert(Inval::Inode(*ino));
+                    }
+                }
+            }
+            if any {
+                out.insert(Inval::Inode(crate::inodes::ROOT_INO));
+            }
+            out.into_iter().collect()
+        }
+    }
+
+    struct Fx {
+        tmp: TempDir,
+        dirs: Vec<PathBuf>,
+    }
+
+    /// Pseudo-random layers over a small vocabulary (conflicts, case variants,
+    /// directory/file clashes).
+    fn layers_fixture(n: usize, seed: u64) -> Fx {
+        let tmp = TempDir::new().unwrap();
+        let mut seed = seed;
+        let mut next = move || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 33) as usize
+        };
+        let words = ["Tex", "tex", "MESH", "a", "B", "b.dds", "B.DDS", "c"];
+        let mut dirs = Vec::new();
+        for l in 0..n {
+            let base = tmp.path().join(format!("L{l:02}"));
+            std::fs::create_dir_all(&base).unwrap();
+            for _ in 0..12 {
+                let depth = 1 + next() % 3;
+                let parts: Vec<&str> = (0..depth).map(|_| words[next() % words.len()]).collect();
+                let p = base.join(parts.join("/"));
+                if std::fs::create_dir_all(p.parent().unwrap()).is_ok() && !p.is_dir() {
+                    let _ = std::fs::write(&p, b"x");
+                }
+            }
+            dirs.push(base);
+        }
+        std::fs::create_dir_all(tmp.path().join("orig/tex")).unwrap();
+        std::fs::write(tmp.path().join("orig/tex/o.dds"), b"o").unwrap();
+        Fx { tmp, dirs }
+    }
+
+    fn open(fx: &Fx, order: &[usize]) -> Layers {
+        let root = RootSpec {
+            mountpoint: fx.tmp.path().join("orig"),
+            layers: order
+                .iter()
+                .enumerate()
+                .map(|(i, &l)| LayerSpec {
+                    source: fx.dirs[l].clone(),
+                    target: PathBuf::new(),
+                    is_directory: true,
+                    create_target: false,
+                    priority: i,
+                })
+                .collect(),
+        };
+        open_layers(&root).unwrap()
+    }
+
+    fn all_paths(tree: &Tree) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        let mut todo = vec![tree.root()];
+        while let Some(id) = todo.pop() {
+            out.push(tree.path_of(id));
+            todo.extend(tree.children(id).map(|(c, _)| c));
+        }
+        out
+    }
+
+    /// Swaps `before` for `after` and returns (reference, walk) results.
+    fn compare(
+        fx: &Fx,
+        before: &[usize],
+        after: &[usize],
+        known: impl Fn(&Tree, &mut Inodes),
+    ) -> (HashSet<Inval>, HashSet<Inval>) {
+        let layers = open(fx, before);
+        let tree = Tree::build(&layers, &Skip::default());
+        let shared = Vfs::new(layers, tree, VfsOptions::default()).shared();
+        {
+            let tree = shared.tree.read();
+            known(&tree, &mut shared.inodes.lock());
+        }
+        let new_layers = Arc::new(open(fx, after));
+        let new_tree = Tree::build(&new_layers, &Skip::default());
+        let (old_tree, old_layers) = shared
+            .swap_if(new_tree, new_layers, shared.generation())
+            .ok()
+            .unwrap();
+        let r: HashSet<Inval> = reference::changes(&shared, &old_tree, &old_layers)
+            .into_iter()
+            .collect();
+        let w: HashSet<Inval> = changes(&shared, &old_tree, &old_layers)
+            .into_iter()
+            .collect();
+        // the same with every subtree on its own thread
+        let p: HashSet<Inval> = changes_on(&shared, &old_tree, &old_layers, 1)
+            .into_iter()
+            .collect();
+        assert_eq!(w, p);
+        (r, w)
+    }
+
+    #[test]
+    fn change_walk_equals_reference() {
+        let fx = layers_fixture(12, 3);
+        let every = |t: &Tree, i: &mut Inodes| {
+            for p in all_paths(t) {
+                i.ino_for(&fold_path(&p));
+            }
+            // known names that exist in neither tree
+            i.ino_for(&fold_path(Path::new("nope/x")));
+            i.ino_for(&fold_path(Path::new("tex/zz")));
+        };
+        let some = |t: &Tree, i: &mut Inodes| {
+            for p in all_paths(t).into_iter().step_by(3) {
+                i.ino_for(&fold_path(&p));
+            }
+        };
+        let cases: [(&[usize], &[usize]); 6] = [
+            (&[0, 1, 2, 3], &[0, 1, 2, 3]),
+            (&[0, 1, 2, 3], &[0, 1, 3]),
+            (&[0, 1, 2], &[0, 1, 2, 4, 5]),
+            (&[0, 1, 2, 3, 4], &[4, 3, 2, 1, 0]),
+            (&[5, 6, 7], &[8, 9, 10, 11]),
+            (&[], &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
+        ];
+        for (before, after) in cases {
+            for known in [&every as &dyn Fn(&Tree, &mut Inodes), &some] {
+                let (r, w) = compare(&fx, before, after, known);
+                assert_eq!(r, w, "{before:?} -> {after:?}");
+            }
+            // and the other way round
+            let (r, w) = compare(&fx, after, before, every);
+            assert_eq!(r, w, "{after:?} -> {before:?}");
+        }
+        // the cases do change things
+        let (r, _) = compare(&fx, &[0, 1, 2, 3], &[0, 1, 3], every);
+        assert!(r.len() > 3, "{r:?}");
+    }
+
+    #[test]
+    fn change_walk_with_aliases_covers_reference() {
+        // Aliases (several numbers for one path, left by a rename that replaced a name):
+        // the reference invalidates through one of a parent's numbers, picked by hash
+        // order; the walk through all of them.
+        let fx = layers_fixture(6, 11);
+        let known = |t: &Tree, i: &mut Inodes| {
+            for p in all_paths(t) {
+                i.ino_for(&fold_path(&p));
+            }
+            let a = fold_path(Path::new("moved"));
+            i.ino_for(&a);
+            for p in all_paths(t) {
+                if !p.as_os_str().is_empty() {
+                    i.rekey_prefix(&a, &fold_path(&p));
+                    break;
+                }
+            }
+        };
+        let (r, w) = compare(&fx, &[0, 1, 2], &[0, 2, 3, 4], known);
+        assert!(
+            w.is_superset(&r),
+            "{:?}",
+            r.difference(&w).collect::<Vec<_>>()
+        );
+    }
 }
