@@ -7,6 +7,7 @@
 #include "envfs.h"
 #include "envmodule.h"
 #include "filedialogmemory.h"
+#include "filemappingbuilder.h"
 #include "guessedvalue.h"
 #include "imodinterface.h"
 #include "imoinfo.h"
@@ -2240,12 +2241,9 @@ std::vector<Mapping> OrganizerCore::fileMapping(const QString& profileName,
   Profile profile(QDir(m_Settings.paths().profiles() + "/" + profileName), game,
                   gameFeatures());
 
-  MappingType result;
-
   auto dataMaps = game->getModMappings();
 
-  bool overwriteActive = false;
-
+  std::vector<ActiveModDir> activeMods;
   for (const auto& mod : profile.getActiveMods()) {
     if (std::get<0>(mod).compare("overwrite", Qt::CaseInsensitive) == 0) {
       continue;
@@ -2254,28 +2252,12 @@ std::vector<Mapping> OrganizerCore::fileMapping(const QString& profileName,
     unsigned int modIndex = ModInfo::getIndex(std::get<0>(mod));
     ModInfo::Ptr modPtr   = ModInfo::getByIndex(modIndex);
 
-    bool createTarget = customOverwrite == std::get<0>(mod);
-    QDir modDir       = QDir(std::get<1>(mod));
-
-    overwriteActive |= createTarget;
-
-    if (modPtr->isRegular()) {
-      for (auto dataMap : dataMaps.asKeyValueRange()) {
-        auto mapDir = QDir(modDir.absoluteFilePath(dataMap.first));
-        if (mapDir.exists()) {
-          for (auto dir : dataMap.second) {
-            result.insert(result.end(),
-                          {mapDir.absolutePath(), dir, true, createTarget});
-          }
-        }
-      }
-    }
+    activeMods.push_back({std::get<0>(mod), std::get<1>(mod), modPtr->isRegular()});
   }
 
-  if (!overwriteActive && !customOverwrite.isEmpty()) {
-    throw MyException(
-        tr("The designated write target \"%1\" is not enabled.").arg(customOverwrite));
-  }
+  // the mods and the overwrite directory
+  MappingType result = buildModMappings(
+      activeMods, dataMaps, m_Settings.paths().overwrite(), customOverwrite);
 
   if (m_CurrentProfile->localSavesEnabled()) {
     auto localSaves = gameFeatures().gameFeature<LocalSavegames>();
@@ -2286,17 +2268,6 @@ std::vector<Mapping> OrganizerCore::fileMapping(const QString& profileName,
       result.insert(result.end(), saveMap.begin(), saveMap.end());
     } else {
       log::warn("local save games not supported by this game plugin");
-    }
-  }
-
-  QDir overwriteDir(m_Settings.paths().overwrite());
-  for (auto dataMap : dataMaps.asKeyValueRange()) {
-    auto overwriteSubpath = overwriteDir.absoluteFilePath(dataMap.first);
-    if (QDir(overwriteSubpath).exists()) {
-      for (auto dir : dataMap.second) {
-        result.insert(result.end(),
-                      {overwriteSubpath, dir, true, customOverwrite.isEmpty()});
-      }
     }
   }
 

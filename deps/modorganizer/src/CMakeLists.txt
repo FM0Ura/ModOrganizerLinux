@@ -120,6 +120,7 @@ set(_organizer_env_sources
 	linux/envwindows_linux.cpp)
 
 set(_organizer_launch_sources
+	filemappingbuilder.cpp
 	shared/appconfig.cpp
 	linux/loot_linux.cpp
 	linux/spawn_linux.cpp
