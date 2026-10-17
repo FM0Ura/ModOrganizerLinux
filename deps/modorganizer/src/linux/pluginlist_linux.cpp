@@ -56,7 +56,8 @@ bool PluginList::saveLoadOrder(DirectoryEntry& directoryStructure)
       newWriteTime.dwLowDateTime  = static_cast<DWORD>(temp & 0xFFFFFFFF);
       newWriteTime.dwHighDateTime = static_cast<DWORD>(temp >> 32);
 
-      const timespec times[2] = {{0, UTIME_OMIT}, MOBase::linux::toTimespec(newWriteTime)};
+      const timespec times[2] = {{0, UTIME_OMIT},
+                                 MOBase::linux::toTimespec(newWriteTime)};
 
       if (::utimensat(AT_FDCWD, QFile::encodeName(fileName).constData(), times, 0) !=
           0) {
