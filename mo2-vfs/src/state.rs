@@ -9,6 +9,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 pub const FSTYPE: &str = "fuse.mo2-vfs";
+/// The filesystem name (mount source) set at mount time.
+pub const FSNAME: &str = "mo2-vfs";
 
 /// One state file per process (`state-<pid>.json`), hence one `Session` per process.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -131,7 +133,12 @@ pub fn parse_mountinfo(text: &str) -> Vec<PathBuf> {
     text.lines()
         .filter_map(|line| {
             let (pre, post) = line.split_once(" - ")?;
-            (post.split_whitespace().next()? == FSTYPE).then_some(())?;
+            let mut post = post.split_whitespace();
+            let (fstype, source) = (post.next()?, post.next());
+            // Unprivileged mounts go through fusermount3 and show the subtype
+            // ("fuse.mo2-vfs"); as root fuser calls mount(2) itself, which shows plain
+            // "fuse" with the filesystem name as the source.
+            (fstype == FSTYPE || (fstype == "fuse" && source == Some(FSNAME))).then_some(())?;
             pre.split_whitespace().nth(4).map(unescape)
         })
         .collect()
@@ -227,6 +234,17 @@ mod tests {
             parse_mountinfo(text),
             vec![PathBuf::from("/mnt/with space"), PathBuf::from("/y/Saves")]
         );
+    }
+
+    #[test]
+    fn mountinfo_parsing_root_form() {
+        // fuser mounts with mount(2) when running as root: fstype "fuse", source "mo2-vfs"
+        let text = "\
+4598 3292 0:395 / /tmp/a\\040b rw,nosuid,nodev,relatime shared:2470 - fuse mo2-vfs rw,user_id=0,group_id=0,default_permissions
+4599 3292 0:396 / /other rw - fuse sshfs rw
+4600 3292 0:397 / /x rw - fuse mo2-vfsx rw
+";
+        assert_eq!(parse_mountinfo(text), vec![PathBuf::from("/tmp/a b")]);
     }
 
     #[test]
