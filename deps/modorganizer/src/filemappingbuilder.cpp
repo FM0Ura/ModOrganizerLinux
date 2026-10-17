@@ -7,12 +7,12 @@
 
 using namespace MOBase;
 
-MappingType buildModMappings(const std::vector<ActiveModDir>& activeMods,
+ModMappings buildModMappings(const std::vector<ActiveModDir>& activeMods,
                              const QMap<QString, QStringList>& dataMaps,
                              const QString& overwritePath,
                              const QString& customOverwrite)
 {
-  MappingType result;
+  ModMappings result;
 
   bool overwriteActive = false;
 
@@ -31,8 +31,8 @@ MappingType buildModMappings(const std::vector<ActiveModDir>& activeMods,
         auto mapDir = QDir(modDir.absoluteFilePath(dataMap.first));
         if (mapDir.exists()) {
           for (auto dir : dataMap.second) {
-            result.insert(result.end(),
-                          {mapDir.absolutePath(), dir, true, createTarget});
+            result.mods.insert(result.mods.end(),
+                               {mapDir.absolutePath(), dir, true, createTarget});
           }
         }
       }
@@ -51,8 +51,8 @@ MappingType buildModMappings(const std::vector<ActiveModDir>& activeMods,
     auto overwriteSubpath = overwriteDir.absoluteFilePath(dataMap.first);
     if (QDir(overwriteSubpath).exists()) {
       for (auto dir : dataMap.second) {
-        result.insert(result.end(),
-                      {overwriteSubpath, dir, true, customOverwrite.isEmpty()});
+        result.overwrite.insert(result.overwrite.end(), {overwriteSubpath, dir, true,
+                                                         customOverwrite.isEmpty()});
       }
     }
   }

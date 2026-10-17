@@ -146,7 +146,7 @@ TEST_F(VfsConnectorTest, LinuxName)
 
 TEST_F(VfsConnectorTest, UpdateMappingDoesNotMount)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -162,7 +162,7 @@ TEST_F(VfsConnectorTest, UpdateMappingDoesNotMount)
 
 TEST_F(VfsConnectorTest, ActivateMountsAndMergesMods)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -194,7 +194,7 @@ TEST_F(VfsConnectorTest, ActivateMountsAndMergesMods)
 // separators on Windows only
 TEST_F(VfsConnectorTest, BackslashPathsWork)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -218,7 +218,7 @@ TEST_F(VfsConnectorTest, BackslashPathsWork)
 
 TEST_F(VfsConnectorTest, ReleaseIfIdleUnmounts)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -243,7 +243,7 @@ TEST_F(VfsConnectorTest, ReleaseIfIdleUnmounts)
 
 TEST_F(VfsConnectorTest, ActivateTwiceUpdates)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -264,7 +264,7 @@ TEST_F(VfsConnectorTest, ActivateTwiceUpdates)
 
 TEST_F(VfsConnectorTest, AutoDeactivatesWhenGroupEnds)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -317,7 +317,7 @@ TEST_F(VfsConnectorTest, AutoDeactivatesWhenGroupEnds)
 // the program sees the mods and the file system goes away when it ends
 TEST_F(VfsConnectorTest, StartedProgramSeesTheMods)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -361,7 +361,7 @@ TEST_F(VfsConnectorTest, StartedProgramSeesTheMods)
 
 TEST_F(VfsConnectorTest, UpdateMappingWhileActiveUpdates)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -382,7 +382,7 @@ TEST_F(VfsConnectorTest, UpdateMappingWhileActiveUpdates)
 
 TEST_F(VfsConnectorTest, NestedRequestThrows)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -413,7 +413,7 @@ TEST_F(VfsConnectorTest, NestedRequestThrows)
 
 TEST_F(VfsConnectorTest, CallbackOfOldDeactivationDoesNotFire)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -445,7 +445,7 @@ TEST_F(VfsConnectorTest, CallbackOfOldDeactivationDoesNotFire)
 
 TEST_F(VfsConnectorTest, UpdateTimeoutDeactivatesAndRemounts)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -560,7 +560,7 @@ TEST_F(VfsConnectorTest, HelperThatDiesWithoutHelloIsException)
 
 TEST_F(VfsConnectorTest, HelperCrashDeactivates)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;
@@ -653,7 +653,7 @@ TEST_F(VfsConnectorTest, NoStaleMountsWhenCleanupSucceeds)
 
 TEST_F(VfsConnectorTest, ParamsSkipListsAreSent)
 {
-  if (!requireFuse())
+  if (!requireVfs())
     GTEST_SKIP();
 
   Layout l;

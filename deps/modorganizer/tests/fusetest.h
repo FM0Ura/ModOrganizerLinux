@@ -1,6 +1,7 @@
 #ifndef MO2_TESTS_FUSETEST_H
 #define MO2_TESTS_FUSETEST_H
 
+#include <QFileInfo>
 #include <QProcess>
 #include <QString>
 #include <cstdlib>
@@ -38,6 +39,31 @@ inline bool requireFuse()
 inline QString vfsBinary()
 {
   return qEnvironmentVariable("MO2_VFS_BINARY");
+}
+
+// true when FUSE can be used and MO2_VFS_BINARY names an executable mo2-vfs; same rule
+// as requireFuse(): the caller skips the test, MO2_REQUIRE_FUSE=1 makes it fail
+//
+inline bool requireVfs()
+{
+  if (!requireFuse()) {
+    return false;
+  }
+
+  const QFileInfo info(vfsBinary());
+  const bool available = !vfsBinary().isEmpty() && info.isFile() && info.isExecutable();
+
+  if (!available) {
+    const char* require = std::getenv("MO2_REQUIRE_FUSE");
+    if (require && std::string(require) == "1") {
+      throw std::runtime_error(
+          "mo2-vfs is required (MO2_REQUIRE_FUSE=1) but MO2_VFS_BINARY is unset or "
+          "not executable");
+    }
+    std::cerr << "skipped: MO2_VFS_BINARY is unset or not an executable mo2-vfs\n";
+  }
+
+  return available;
 }
 
 #endif  // MO2_TESTS_FUSETEST_H

@@ -27,6 +27,14 @@ struct Fixture
   QString overwrite() { return q(tmp.path() / "overwrite"); }
 };
 
+// what OrganizerCore::fileMapping() builds around the local saves: mods, overwrite
+MappingType joined(const ModMappings& mm)
+{
+  auto r = mm.mods;
+  r.insert(r.end(), mm.overwrite.begin(), mm.overwrite.end());
+  return r;
+}
+
 QMap<QString, QStringList> dataOnly()
 {
   return {{"", {"Data"}}};
@@ -41,9 +49,12 @@ TEST(FileMapping, ModsInPriorityOrderThenOverwrite)
   f.tmp.createFile("mods/B/b.txt", 1);
   f.tmp.createFile("overwrite/o.txt", 1);
 
-  const auto m = buildModMappings({f.mod("A"), f.mod("B"), {"overwrite", "", true}},
-                                  dataOnly(), f.overwrite(), "");
+  const auto mm = buildModMappings({f.mod("A"), f.mod("B"), {"overwrite", "", true}},
+                                   dataOnly(), f.overwrite(), "");
 
+  ASSERT_EQ(mm.mods.size(), 2u);
+  ASSERT_EQ(mm.overwrite.size(), 1u);
+  const auto m = joined(mm);
   ASSERT_EQ(m.size(), 3u);
   EXPECT_EQ(m[0].source, f.mod("A").path);
   EXPECT_EQ(m[0].destination, "Data");
@@ -62,9 +73,12 @@ TEST(FileMapping, SkipsOverwriteEntryAndNonRegularMods)
   f.tmp.createFile("mods/Sep/x.txt", 1);
   f.tmp.createFile("mods/Overwrite/x.txt", 1);
 
-  const auto m = buildModMappings({f.mod("A"), f.mod("Sep", false), f.mod("Overwrite")},
-                                  dataOnly(), f.overwrite(), "");
+  const auto mm =
+      buildModMappings({f.mod("A"), f.mod("Sep", false), f.mod("Overwrite")},
+                       dataOnly(), f.overwrite(), "");
 
+  EXPECT_TRUE(mm.overwrite.empty());
+  const auto& m = mm.mods;
   ASSERT_EQ(m.size(), 1u);
   EXPECT_EQ(m[0].source, f.mod("A").path);
 }
@@ -76,8 +90,10 @@ TEST(FileMapping, DataMapSubdirectoriesAndSecondaryDirs)
   f.tmp.createFile("mods/A/Root/r.txt", 1);
 
   const QMap<QString, QStringList> maps{{"", {"Data", "Data2"}}, {"Root", {"Game"}}};
-  const auto m = buildModMappings({f.mod("A")}, maps, f.overwrite(), "");
+  const auto mm = buildModMappings({f.mod("A")}, maps, f.overwrite(), "");
 
+  EXPECT_TRUE(mm.overwrite.empty());
+  const auto& m = mm.mods;
   ASSERT_EQ(m.size(), 3u);
   int data = 0, data2 = 0, game = 0;
   for (const auto& e : m) {
@@ -104,9 +120,10 @@ TEST(FileMapping, CustomOverwriteIsCreateTarget)
   f.tmp.createFile("mods/B/b.txt", 1);
   f.tmp.createFile("overwrite/o.txt", 1);
 
-  const auto m =
+  const auto mm =
       buildModMappings({f.mod("A"), f.mod("B")}, dataOnly(), f.overwrite(), "B");
 
+  const auto m = joined(mm);
   ASSERT_EQ(m.size(), 3u);
   EXPECT_FALSE(m[0].createTarget);
   EXPECT_EQ(m[1].source, f.mod("B").path);
@@ -130,8 +147,24 @@ TEST(FileMapping, MissingModSubdirIsNotMapped)
   f.tmp.createFile("mods/A/a.txt", 1);
 
   const QMap<QString, QStringList> maps{{"", {"Data"}}, {"Root", {"Game"}}};
-  const auto m = buildModMappings({f.mod("A")}, maps, f.overwrite(), "");
+  const auto mm = buildModMappings({f.mod("A")}, maps, f.overwrite(), "");
 
+  const auto& m = mm.mods;
   ASSERT_EQ(m.size(), 1u);
   EXPECT_EQ(m[0].destination, "Data");
+}
+
+TEST(FileMapping, ModsAndOverwriteAreKeptApart)
+{
+  Fixture f;
+  f.tmp.createFile("mods/A/a.txt", 1);
+  f.tmp.createFile("overwrite/o.txt", 1);
+
+  const auto mm = buildModMappings({f.mod("A")}, dataOnly(), f.overwrite(), "");
+
+  // the caller puts the local saves between the two
+  ASSERT_EQ(mm.mods.size(), 1u);
+  EXPECT_EQ(mm.mods[0].source, f.mod("A").path);
+  ASSERT_EQ(mm.overwrite.size(), 1u);
+  EXPECT_EQ(mm.overwrite[0].source, f.overwrite());
 }

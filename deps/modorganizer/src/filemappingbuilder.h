@@ -16,16 +16,23 @@ struct ActiveModDir
   bool regular;  // false for separators, backups and the like: no mapping
 };
 
+// the mappings of the mods and of the overwrite directory, kept apart because the
+// caller puts other mappings (local saves) between them: the order is the priority
+struct ModMappings
+{
+  MappingType mods;
+  MappingType overwrite;
+};
+
 // the part of OrganizerCore::fileMapping() that doesn't need the application: which
-// mod directories are mapped where, in priority order; the overwrite directory comes
-// last
+// mod directories are mapped where, in priority order, and the overwrite directory
 //
 // an entry called "overwrite" in activeMods is skipped. customOverwrite is the mod that
 // receives the new files (empty: the overwrite directory does)
 //
 // throws MyException when customOverwrite is not empty and not an active mod
 //
-MappingType buildModMappings(const std::vector<ActiveModDir>& activeMods,
+ModMappings buildModMappings(const std::vector<ActiveModDir>& activeMods,
                              const QMap<QString, QStringList>& dataMaps,
                              const QString& overwritePath,
                              const QString& customOverwrite);

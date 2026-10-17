@@ -2255,9 +2255,10 @@ std::vector<Mapping> OrganizerCore::fileMapping(const QString& profileName,
     activeMods.push_back({std::get<0>(mod), std::get<1>(mod), modPtr->isRegular()});
   }
 
-  // the mods and the overwrite directory
-  MappingType result = buildModMappings(
-      activeMods, dataMaps, m_Settings.paths().overwrite(), customOverwrite);
+  // the order is the priority: mods, local saves, overwrite, plugins
+  auto modMappings = buildModMappings(activeMods, dataMaps,
+                                      m_Settings.paths().overwrite(), customOverwrite);
+  MappingType result = std::move(modMappings.mods);
 
   if (m_CurrentProfile->localSavesEnabled()) {
     auto localSaves = gameFeatures().gameFeature<LocalSavegames>();
@@ -2270,6 +2271,10 @@ std::vector<Mapping> OrganizerCore::fileMapping(const QString& profileName,
       log::warn("local save games not supported by this game plugin");
     }
   }
+
+  result.reserve(result.size() + modMappings.overwrite.size());
+  result.insert(result.end(), modMappings.overwrite.begin(),
+                modMappings.overwrite.end());
 
   for (MOBase::IPluginFileMapper* mapper :
        m_PluginContainer->plugins<MOBase::IPluginFileMapper>()) {
