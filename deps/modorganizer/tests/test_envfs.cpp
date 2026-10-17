@@ -2,8 +2,10 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 
+#include <csignal>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -229,4 +231,77 @@ TEST(EnvFs, SymlinkLoopTerminates)
   EXPECT_EQ(w.starts, w.ends);
   EXPECT_TRUE(w.files.contains(L"d/a.txt"));
   EXPECT_EQ(w.files.size(), 1u);
+}
+
+TEST(EnvFs, RootThatIsNotADirectoryIsReported)
+{
+  TempDir tmp;
+  const auto file = tmp.createFile("plain.txt", 3);
+
+  const auto w = Walk::run(file);
+
+  EXPECT_EQ(w.starts, 0);
+  EXPECT_EQ(w.ends, 0);
+  EXPECT_TRUE(w.files.empty());
+}
+
+TEST(EnvFs, SymlinkToDirectoryIsNotListedTwice)
+{
+  TempDir tmp;
+  tmp.createFile("mod/a/x.txt", 7);
+  std::filesystem::create_directory_symlink("a", tmp.path() / "mod" / "link");
+  // a link to the directory that contains it: a loop, not entered
+  std::filesystem::create_directory_symlink(".", tmp.path() / "mod" / "a" / "self");
+
+  const auto w = Walk::run(tmp.path() / "mod");
+
+  EXPECT_FALSE(w.mismatched);
+  EXPECT_EQ(w.starts, w.ends);
+  EXPECT_EQ(w.duplicates, 0);
+
+  // once per path: a/x.txt and, through the link, link/x.txt; link/ does not
+  // re-enter a/ through a/self
+  EXPECT_TRUE(w.files.contains(L"a/x.txt"));
+  EXPECT_TRUE(w.files.contains(L"link/x.txt"));
+  EXPECT_EQ(w.files.size(), 2u);
+}
+
+namespace
+{
+void onAlarm(int) {}
+}  // namespace
+
+TEST(EnvFs, InterruptedReadIsRetried)
+{
+  TempDir tmp;
+  constexpr int Count = 20000;
+  for (int i = 0; i < Count; ++i) {
+    tmp.createFile("d" + std::to_string(i % 20) + "/f" + std::to_string(i), 1);
+  }
+
+  // SIGALRM every millisecond with a handler installed without SA_RESTART: a system
+  // call that is interrupted fails with EINTR instead of being restarted
+  struct sigaction sa = {}, old = {};
+  sa.sa_handler = onAlarm;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  ASSERT_EQ(::sigaction(SIGALRM, &sa, &old), 0);
+
+  itimerval timer = {}, oldTimer = {};
+  timer.it_interval.tv_usec = 1000;
+  timer.it_value.tv_usec    = 1000;
+  ASSERT_EQ(::setitimer(ITIMER_REAL, &timer, &oldTimer), 0);
+
+  Walk w;
+  for (int round = 0; round < 3; ++round) {
+    w = Walk::run(tmp.path());
+    EXPECT_EQ(w.files.size(), static_cast<std::size_t>(Count)) << "round " << round;
+  }
+
+  ::setitimer(ITIMER_REAL, &oldTimer, nullptr);
+  ::sigaction(SIGALRM, &old, nullptr);
+
+  EXPECT_EQ(w.duplicates, 0);
+  EXPECT_EQ(w.starts, 20);
+  EXPECT_EQ(w.ends, 20);
 }

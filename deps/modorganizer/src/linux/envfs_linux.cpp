@@ -10,7 +10,9 @@
 // - times are FILETIME: 100 ns intervals since 1601-01-01 UTC, from st_mtim,
 // - symbolic links are followed (to files and directories); broken links, links to
 //   a directory being walked (loops) and directories that cannot be opened (EACCES,
-//   ...) are skipped with a warning.
+//   ...) are skipped with a warning; a directory is entered once per descent: a link to
+//   a directory that is not being walked is followed, a link back to one is not,
+// - system calls interrupted by a signal (EINTR) are retried.
 
 #include "../envfs.h"
 #include "../shared/util.h"
@@ -77,6 +79,19 @@ namespace
     return (name[0] == '.' && (name[1] == 0 || (name[1] == '.' && name[2] == 0)));
   }
 
+  // calls f() again for as long as it fails with EINTR (a signal handler installed
+  // without SA_RESTART interrupted it); f returns -1 and sets errno on failure
+  template <class F>
+  auto retryOnEintr(F&& f)
+  {
+    for (;;) {
+      const auto r = f();
+      if (!(r < 0 && errno == EINTR)) {
+        return r;
+      }
+    }
+  }
+
   // a directory being read
   struct Frame
   {
@@ -131,7 +146,9 @@ void DirectoryWalker::forEachEntry(const std::wstring& path, void* cx,
 
   const std::string rootPath = QString::fromStdWString(path).toStdString();
 
-  const int rootFd = ::open(rootPath.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  const int rootFd = retryOnEintr([&] {
+    return ::open(rootPath.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  });
   if (rootFd < 0) {
     log::error("failed to open directory '{}': {}", rootPath, std::strerror(errno));
     return;
@@ -141,7 +158,15 @@ void DirectoryWalker::forEachEntry(const std::wstring& path, void* cx,
 
   {
     struct stat st = {};
-    ::fstat(rootFd, &st);
+    if (retryOnEintr([&] {
+          return ::fstat(rootFd, &st);
+        }) != 0) {
+      log::error("failed to examine directory '{}': {}", rootPath,
+                 std::strerror(errno));
+      ::close(rootFd);
+      return;
+    }
+
     stack.frames.push_back({rootFd, {}, rootPath, st.st_dev, st.st_ino, bufferFor(0)});
   }
 
@@ -150,7 +175,9 @@ void DirectoryWalker::forEachEntry(const std::wstring& path, void* cx,
 
     if (top.pos >= top.size) {
       // buffer exhausted, read more entries
-      const long n = ::syscall(SYS_getdents64, top.fd, top.buffer, BufferSize);
+      const long n = retryOnEintr([&] {
+        return ::syscall(SYS_getdents64, top.fd, top.buffer, BufferSize);
+      });
 
       if (n > 0) {
         top.size = static_cast<std::size_t>(n);
@@ -191,11 +218,15 @@ void DirectoryWalker::forEachEntry(const std::wstring& path, void* cx,
       // unknown type (some file systems do not report it) are resolved
       const int flags = (type == DT_REG ? AT_SYMLINK_NOFOLLOW : 0);
 
-      if (::fstatat(top.fd, name, &st, flags) != 0) {
+      if (retryOnEintr([&] {
+            return ::fstatat(top.fd, name, &st, flags);
+          }) != 0) {
         const int e = errno;
         struct stat lst;
 
-        if (::fstatat(top.fd, name, &lst, AT_SYMLINK_NOFOLLOW) == 0 &&
+        if (retryOnEintr([&] {
+              return ::fstatat(top.fd, name, &lst, AT_SYMLINK_NOFOLLOW);
+            }) == 0 &&
             S_ISLNK(lst.st_mode)) {
           log::warn("skipping broken symbolic link '{}/{}'", top.path, name);
         } else {
@@ -228,14 +259,22 @@ void DirectoryWalker::forEachEntry(const std::wstring& path, void* cx,
 
     const std::string subPath = top.path + "/" + name;
 
-    const int fd = ::openat(top.fd, name, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    const int fd = retryOnEintr([&] {
+      return ::openat(top.fd, name, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    });
     if (fd < 0) {
       log::warn("skipping directory '{}': {}", subPath, std::strerror(errno));
       continue;
     }
 
     struct stat dst = {};
-    ::fstat(fd, &dst);
+    if (retryOnEintr([&] {
+          return ::fstat(fd, &dst);
+        }) != 0) {
+      log::warn("skipping directory '{}': {}", subPath, std::strerror(errno));
+      ::close(fd);
+      continue;
+    }
 
     const bool loop =
         std::any_of(stack.frames.begin(), stack.frames.end(), [&](const Frame& f) {
