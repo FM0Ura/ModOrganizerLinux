@@ -145,9 +145,10 @@ IniFile IniFile::parse(const QByteArray& data)
       const QString name =
           (close == -1 ? line.mid(1) : line.mid(1, close - 1)).trimmed();
 
-      auto itor = std::find_if(ini.m_sections.begin(), ini.m_sections.end(), [&](auto&& s) {
-        return s.name.compare(name, Qt::CaseInsensitive) == 0;
-      });
+      auto itor =
+          std::find_if(ini.m_sections.begin(), ini.m_sections.end(), [&](auto&& s) {
+            return s.name.compare(name, Qt::CaseInsensitive) == 0;
+          });
 
       if (itor == ini.m_sections.end()) {
         ini.m_sections.push_back({name, {}});
@@ -252,8 +253,7 @@ DWORD getPrivateProfileString(LPCWSTR appName, LPCWSTR keyName, LPCWSTR defaultV
   const QString section = QString::fromWCharArray(appName);
 
   if (!keyName) {
-    return copyList(ini ? ini->keyNames(section) : QStringList(), returnedString,
-                    size);
+    return copyList(ini ? ini->keyNames(section) : QStringList(), returnedString, size);
   }
 
   if (ini) {

@@ -25,8 +25,8 @@ std::string get(const QString& file, const wchar_t* section, const wchar_t* key,
                 const wchar_t* def = L"")
 {
   wchar_t buffer[256];
-  const DWORD n =
-      getPrivateProfileString(section, key, def, buffer, 256, file.toStdWString().c_str());
+  const DWORD n = getPrivateProfileString(section, key, def, buffer, 256,
+                                          file.toStdWString().c_str());
   return QString::fromWCharArray(buffer, static_cast<qsizetype>(n)).toStdString();
 }
 
@@ -130,8 +130,8 @@ TEST(LinuxIniFile, GetPrivateProfileString)
 
   // lists
   wchar_t buffer[64] = {};
-  DWORD n = getPrivateProfileString(nullptr, nullptr, nullptr, buffer, 64,
-                                    path.toStdWString().c_str());
+  DWORD n            = getPrivateProfileString(nullptr, nullptr, nullptr, buffer, 64,
+                                               path.toStdWString().c_str());
   EXPECT_EQ(n, 4u);
   EXPECT_EQ(std::wstring(buffer, 5), std::wstring(L"A\0B\0\0", 5));
 
