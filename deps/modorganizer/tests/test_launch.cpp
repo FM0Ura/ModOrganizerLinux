@@ -46,13 +46,13 @@ std::string readFile(const fs::path& p)
 }
 }  // namespace
 
-// starting Windows programs is disabled on Linux until Phase 3; the message is shown by
-// ProcessRunner::run() and spawn::startBinary()
+// Windows programs are started by Run (ProcessRunner::run()); this is what
+// spawn::startBinary() tells the other callers (LOOT, in Phase 4)
 TEST(Launch, UnavailableMessage)
 {
   EXPECT_EQ(spawn::launchUnavailableMessage(),
-            QString::fromUtf8("Executar programas ainda não está disponível no Linux. "
-                              "Esta funcionalidade chega na Fase 3 do port."));
+            QString("Windows programs are started with Run (or the executables list) "
+                    "on Linux, which uses Proton."));
 }
 
 TEST(Launch, FileExecutionTypes)
@@ -144,8 +144,8 @@ TEST(Launch, StartNativeInOwnProcessGroup)
   EXPECT_EQ(readFile(out), fs::canonical(tmp.path()).string() + "\n1\num arg\n");
 }
 
-// .exe and the rest are for Phase 3 (Wine/Proton)
-TEST(Launch, ExeStillShowsPhase3Message)
+// .exe and the rest are not native programs: Run starts them with Proton
+TEST(Launch, ExeIsNotNative)
 {
   TempDir tmp;
   const auto exe =
@@ -153,9 +153,14 @@ TEST(Launch, ExeStillShowsPhase3Message)
 
   EXPECT_FALSE(spawn::isNativeProgram(QFileInfo(q(exe))));
   EXPECT_FALSE(spawn::isNativeProgram(QFileInfo("/games/Skyrim/SkyrimSE.exe")));
-  EXPECT_EQ(spawn::launchUnavailableMessage(),
-            QString::fromUtf8("Executar programas ainda não está disponível no Linux. "
-                              "Esta funcionalidade chega na Fase 3 do port."));
+}
+
+TEST(Launch, UnavailableMessageNoLongerMentionsPhase3)
+{
+  const auto m = spawn::launchUnavailableMessage();
+  EXPECT_FALSE(m.contains("Fase 3"));
+  EXPECT_FALSE(m.contains("Phase 3"));
+  EXPECT_TRUE(m.contains("Run"));
 }
 
 TEST(Loot, LootcliIsInTheLootDirectory)

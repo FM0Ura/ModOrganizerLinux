@@ -3,8 +3,9 @@
 //
 // lootcli is not part of the Linux builds yet: the sort button is disabled, with an
 // explanation, when <bin>/loot/lootcli is missing. If it is there, LOOT still can't
-// run before Phase 3, because spawn::startBinary() doesn't start programs on Linux
-// (it tells the user, and Loot::start() fails before the loot thread is created).
+// run until Phase 4, because spawn::startBinary() doesn't start Windows programs on
+// Linux (it tells the user, and Loot::start() fails before the loot thread is
+// created).
 
 #include "loot_linux.h"
 #include "../loot.h"
@@ -96,7 +97,7 @@ std::string AsyncPipe::read()
 
 bool Loot::waitForCompletion()
 {
-  // never called before Phase 3: Loot::start() fails because spawn::startBinary()
+  // never called until Phase 4: Loot::start() fails because spawn::startBinary()
   // doesn't start lootcli on Linux
   log::error("waiting for lootcli is not available on Linux yet");
   return false;

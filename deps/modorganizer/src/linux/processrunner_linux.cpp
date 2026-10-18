@@ -1,37 +1,45 @@
 // Linux implementations of the Win32-only functions of processrunner.cpp (the rest of
 // processrunner.cpp is shared).
 //
-// - run() starts native programs (spawn::isNativeProgram(): ELF executables and #!
-//   scripts) like the Windows run() starts programs: hooked (the default), the profile
-//   is saved and OrganizerCore::beforeRun() prepares the virtual file system and
-//   mounts it (VfsConnector::activate()), spawn::startBinary() starts the program in
-//   a process group of its own, which mo2-vfs watches to keep the file system mounted
-//   while the group lives (VfsConnector::watchProcessGroup()), and postRun() waits
-//   for it; if the program doesn't start, the file system is unmounted unless another
-//   program uses it (VfsConnector::releaseIfIdle()). Unhooked, it is started without
-//   the virtual file system. There is no Steam check and no executable blacklist
+// - run() starts programs like the Windows run() does: hooked (the default), the
+//   profile is saved and OrganizerCore::beforeRun() prepares the virtual file system
+//   and mounts it (VfsConnector::activate()), then the program is started by mo2-vfs
+//   (VfsConnector::spawn()), which keeps the file system mounted while the process
+//   group of the program lives, and postRun() waits for it. The launch is decided by
+//   proton::makeLaunch() (protonlauncher_linux.cpp): native programs (ELF executables
+//   and #! scripts) run directly, Windows programs (.exe, .bat, ...) through umu-run
+//   in the Proton prefix of their Steam game, with the Proton version and the
+//   environment of the executable. A launch error (no Steam game, no prefix, ...) is
+//   reported before anything is mounted. If the program doesn't start, the file
+//   system is unmounted unless another program uses it (VfsConnector::releaseIfIdle()).
+//   Unhooked, it is started without the virtual file system. The errors are shown in
+//   a dialog only when there is a user interface (not in the run command line, where
+//   they are only logged). There is no Steam check and no executable blacklist
 //   (no-ops on Linux, see spawn_linux.cpp), and a program inside the mods directory is
 //   not redirected to its place in the data directory through the "launch" command of
 //   another instance (adjustForVirtualized(), which the Linux "launch" doesn't
-//   support): it runs from where it is.
-// - Windows programs (.exe, .bat, ...) are not started before Phase 3 of the port: it
-//   tells the user and returns Error, without saving the profile, preparing the virtual
-//   file system or notifying the plugins (spawn::startBinary() shows the same message
-//   to the other callers, such as LOOT); documents (setFromFile() with a file that is
-//   not a program) are still opened by their application, unhooked,
-// - waitForAllUSVFSProcessesWithLock() doesn't look for the programs that use the
-//   virtual file system (usvfs knows them, mo2-vfs only knows their process groups),
+//   support): it runs from where it is. Documents (setFromFile() with a file that is
+//   not a program) are opened by their application, unhooked.
+// - waitForAllUSVFSProcessesWithLock() waits for the programs mo2-vfs started
+//   (VfsConnector::runningPrograms(): the programs and the Wine servers that keep the
+//   mount) instead of the processes usvfs knows,
 // - a process is waited for with its pid (the HANDLE of a process on Linux, see
 //   envmodule.h); there are no job objects, the tree of the first process is followed
-//   instead (env::getProcessTree()), and the exit code is only known for children of
-//   this process.
+//   instead (env::getProcessTree(), through /proc, with the PID namespace shared with
+//   the container), and the exit code of a program started by mo2-vfs, which is not a
+//   child of this process, comes from the helper's "exited" event
+//   (exitcodes::take()).
 
 #include "../iuserinterface.h"
 #include "../organizercore.h"
 #include "../processrunner.h"
 #include "../profile.h"
+#include "../shared/appconfig.h"
 #include "../spawn.h"
+#include "exitcodes_linux.h"
+#include "protonlauncher_linux.h"
 
+#include <QCoreApplication>
 #include <QEventLoop>
 #include <QMessageBox>
 #include <QThread>
@@ -147,6 +155,10 @@ ProcessRunner::Results waitForProcess(HANDLE initialProcess, LPDWORD exitCode,
       } else if (WIFSIGNALED(status)) {
         *exitCode = static_cast<DWORD>(128 + WTERMSIG(status));
       }
+    } else if (const auto code =
+                   exitcodes::take(toPid(initialProcess), std::chrono::seconds(2))) {
+      // started by mo2-vfs: not a child of this process
+      *exitCode = static_cast<DWORD>(*code);
     } else {
       log::warn("failed to get exit code of process {}",
                 static_cast<int>(toPid(initialProcess)));
@@ -173,16 +185,35 @@ ProcessRunner::Results ProcessRunner::run()
 
   QWidget* parent = (m_ui ? m_ui->mainWindow() : nullptr);
 
-  if (shouldRunShell() || !spawn::isNativeProgram(m_sp.binary)) {
-    log::warn("not running '{}' {}: starting Windows programs is not available on "
-              "Linux yet",
-              (m_shellOpen.filePath().isEmpty() ? m_sp.binary : m_shellOpen)
-                  .absoluteFilePath(),
-              m_sp.arguments);
+  // without a user interface (the run command) a dialog would never be answered
+  auto showError = [&](const QString& text) {
+    log::error("{}", text);
+    if (m_ui) {
+      QMessageBox::critical(parent, QObject::tr("Mod Organizer"), text);
+    }
+  };
 
-    QMessageBox::information(parent, QObject::tr("Mod Organizer"),
-                             spawn::launchUnavailableMessage());
+  if (shouldRunShell()) {
+    // setFromFile() keeps only documents for the shell, handled above
+    showError(QObject::tr("Cannot start \"%1\".").arg(m_shellOpen.absoluteFilePath()));
+    return Error;
+  }
 
+  // the output of the program, next to the logs of Mod Organizer (none in the tests)
+  QString output;
+  if (const auto dp = qApp->property("dataPath"); !dp.isNull()) {
+    output = dp.toString() + "/" + QString::fromStdWString(AppConfig::logPath()) +
+             "/run-" + m_sp.binary.completeBaseName() + ".log";
+  }
+
+  VfsSpawnRequest request;
+  try {
+    const auto* game = m_core.managedGame();
+    request          = proton::makeLaunch(
+        {m_sp.binary, m_sp.arguments, m_sp.currentDirectory.path(), m_sp.steamAppID,
+         game ? game->steamAPPId() : QString(), m_sp.proton, m_sp.environment, output});
+  } catch (const proton::LaunchError& e) {
+    showError(QString::fromStdString(e.what()));
     return Error;
   }
 
@@ -206,20 +237,29 @@ ProcessRunner::Results ProcessRunner::run()
     }
   }
 
-  m_handle.reset(spawn::startBinary(parent, m_sp));
-
-  if (m_handle.get() == INVALID_HANDLE_VALUE) {
+  qint64 pid = 0;
+  try {
+    pid = m_core.vfs().spawn(request);
+  } catch (const std::exception& e) {
+    auto text =
+        QObject::tr("Cannot start \"%1\": %2")
+            .arg(m_sp.binary.absoluteFilePath(), QString::fromStdString(e.what()));
+    if (request.argv.value(0) == "umu-run" &&
+        QString::fromStdString(e.what()).contains("umu-run")) {
+      // spawn_failed for argv[0]: umu-run is not in the PATH of the host
+      text += "\n\n" + QObject::tr("Windows programs run with umu-run: install "
+                                   "umu-launcher on the host.");
+    }
+    showError(text);
     if (m_sp.hooked) {
       // nothing will end the group that keeps the file system mounted
       m_core.vfs().releaseIfIdle();
     }
-
     return Error;
   }
 
-  if (m_sp.hooked) {
-    m_core.vfs().watchProcessGroup(toPid(m_handle.get()));
-  }
+  log::debug("started '{}', pid {}", m_sp.binary.absoluteFilePath(), pid);
+  m_handle.reset(reinterpret_cast<HANDLE>(static_cast<std::intptr_t>(pid)));
 
   return postRun();
 }
@@ -234,7 +274,36 @@ ProcessRunner::waitForAllUSVFSProcessesWithLock(UILocker::Reasons reason)
     return ForceUnlocked;
   }
 
-  // the programs that use the virtual file system are not known here (mo2-vfs keeps
-  // it mounted while their process groups live)
-  return Completed;
+  auto r = Error;
+
+  for (;;) {
+    withLock([&](auto& ls) {
+      // the programs started through mo2-vfs and the Wine servers that keep its mount
+      std::vector<HANDLE> processes;
+      for (const auto pid : m_core.vfs().runningPrograms()) {
+        processes.push_back(reinterpret_cast<HANDLE>(static_cast<std::intptr_t>(pid)));
+      }
+
+      if (processes.empty()) {
+        r = Completed;
+        return;
+      }
+
+      r = waitForProcesses(processes, &ls);
+
+      if (r != Completed) {
+        // error, cancelled, or unlocked
+        return;
+      }
+
+      // this process is completed, check for others
+      r = Running;
+    });
+
+    if (r != Running) {
+      break;
+    }
+  }
+
+  return r;
 }

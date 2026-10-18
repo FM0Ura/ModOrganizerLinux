@@ -8,12 +8,13 @@
 // HANDLE returned is the pid (envmodule.h). The standard output and error handles of
 // the parameters are not used (they are for lootcli on Windows, see loot_linux.cpp).
 //
-// Windows programs (.exe, .bat, ...) are not started before Phase 3 of the port (they
-// will be run with Wine/Proton): startBinary() shows why and returns
-// INVALID_HANDLE_VALUE, which every caller already handles as a failure to start, and
-// ProcessRunner::run() shows the same message without preparing anything. There is no
-// Steam check, no executable blacklist (it is a usvfs list) and no helper program: Mod
-// Organizer doesn't need administrative rights on Linux.
+// Windows programs (.exe, .bat, ...) are started by ProcessRunner::run() through
+// mo2-vfs and Proton (processrunner_linux.cpp, protonlauncher_linux.cpp); startBinary()
+// only starts native programs, and shows launchUnavailableMessage() for a Windows
+// program (its only other caller is LOOT, in Phase 4) and returns INVALID_HANDLE_VALUE,
+// which every caller already handles as a failure to start. There is no Steam check,
+// no executable blacklist (it is a usvfs list) and no helper program: Mod Organizer
+// doesn't need administrative rights on Linux.
 //
 // The type of the files is the same as on Windows, so the "Run" entries of the menus
 // are the same, plus the native programs, which are executables too.
@@ -42,8 +43,8 @@ namespace spawn
 
 QString launchUnavailableMessage()
 {
-  return QObject::tr("Executar programas ainda não está disponível no Linux. "
-                     "Esta funcionalidade chega na Fase 3 do port.");
+  return QObject::tr("Windows programs are started with Run (or the executables list) "
+                     "on Linux, which uses Proton.");
 }
 
 bool isNativeProgram(const QFileInfo& target)
@@ -80,8 +81,7 @@ HANDLE startBinary(QWidget* parent, const SpawnParameters& sp)
   const auto program = sp.binary.absoluteFilePath();
 
   if (!isNativeProgram(sp.binary)) {
-    log::warn("not starting '{}' {}: starting Windows programs is not available on "
-              "Linux yet",
+    log::warn("not starting '{}' {}: Windows programs are started with Run on Linux",
               program, sp.arguments);
 
     QMessageBox::information(parent, QObject::tr("Mod Organizer"),
@@ -170,7 +170,7 @@ FileExecutionTypes getFileExecutionType(const QFileInfo& target)
 FileExecutionContext getFileExecutionContext(QWidget*, const QFileInfo& target)
 {
   if (isExeFile(target) || isBatchFile(target)) {
-    // how they are started (Wine) is decided by Phase 3
+    // Run starts them with Proton (processrunner_linux.cpp)
     return {target, "", FileExecutionTypes::Executable};
   }
 
@@ -198,7 +198,7 @@ namespace helper
 bool backdateBSAs(QWidget*, const std::wstring&, const std::wstring& dataPath)
 {
   // the helper is a Windows program; the file times of the archives only matter to
-  // the games, which run with Wine/Proton in Phase 3
+  // the games, which run with Proton
   log::warn("back-dating the archives in '{}' is not available on Linux yet",
             QString::fromStdWString(dataPath));
 

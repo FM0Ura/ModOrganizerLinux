@@ -18,10 +18,12 @@ Rules:
   other `env*.cpp`: `env.cpp`, `envmetrics.cpp`, `envmodule.cpp`, `envsecurity.cpp`,
   `envshell.cpp`, `envshortcut.cpp`, `envwindows.cpp`; `envdump_linux.cpp` implements
   the crash dumps of `envdump.h`, which are in `env.cpp` on Windows; `processrunner.cpp`
-  and `loot.cpp`, whose `processrunner_linux.cpp` runs native programs with the virtual file
-  system and refuses Windows programs until Phase 3, and `loot_linux.cpp` disables
-  LOOT until then; `loot_linux.h` declares the Linux
-  `AsyncPipe` class, defined in `loot.cpp` on Windows; `shared/util.cpp` →
+  and `loot.cpp`, whose `processrunner_linux.cpp` runs native and Windows programs
+  through `mo2-vfs` (`VfsConnector::spawn()`, with the launch decided by
+  `protonlauncher_linux.cpp`: Windows programs through `umu-run` in the Proton prefix of
+  their Steam game), gets the exit code from the helper (`exitcodes_linux.cpp`) and waits
+  for the programs it started, and `loot_linux.cpp` disables LOOT until Phase 4;
+  `loot_linux.h` declares the Linux `AsyncPipe` class, defined in `loot.cpp` on Windows; `shared/util.cpp` →
   `util_linux.cpp`; `main.cpp` → `main_linux.cpp` (crash handlers, see below);
   `commandline.cpp` → `commandline_linux.cpp`; `filetreeitem.cpp` →
   `filetreeitem_linux.cpp` (file type names from the shared MIME database);
@@ -58,8 +60,12 @@ Rules:
   `_WIN32` block of `shared/util.cpp`: the rest of that file needs the main window);
   the rest of env,
   except `env.cpp` and `env_linux.cpp` (which need the settings), into
-  `organizer_env`; `loot_linux.cpp`, `spawn_linux.cpp`, `vfsbridge_linux.cpp`,
-  `vfsclient_linux.cpp` and `vfsconnector_linux.cpp` into `organizer_launch`. The application and the unit tests (`tests/`,
-  `organizer_tests`) link them.
+  `organizer_env`; `exitcodes_linux.cpp`, `loot_linux.cpp`, `protonlauncher_linux.cpp`,
+  `spawn_linux.cpp`, `vfsbridge_linux.cpp`, `vfsclient_linux.cpp` and
+  `vfsconnector_linux.cpp` into `organizer_launch`. The application and the unit tests
+  (`tests/`, `organizer_tests`) link them.
+- `protonsettings_linux.{h,cpp}` is a Linux-only widget of the application (not a
+  replacement): the Proton version and the environment of an executable in the
+  executables dialog.
 - Code shared by both platforms stays in the shared file; `#ifdef _WIN32` is used there
   only for changes of one to three lines, or to wrap whole Win32 functions as above.
