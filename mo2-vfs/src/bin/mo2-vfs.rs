@@ -123,9 +123,10 @@ fn shutdown(server: &mut Server) {
 }
 
 /// SIGHUP (the terminal of the application closed) is ignored. SIGINT and SIGTERM
-/// unmount and exit at once when no watched process group is alive; otherwise the mounts
-/// stay until the last group ends, as after the end of stdin, and the process exits then:
-/// a program started by the application keeps its files.
+/// unmount and exit at once when nothing keeps the mount (no watched process group and no
+/// wineserver of a watched prefix is alive, `Server::has_watched()`); otherwise the mounts
+/// stay until the last of them ends, as after the end of stdin, and the process exits
+/// then: a program started by the application keeps its files.
 fn serve() -> ExitCode {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
     // a session of its own whoever started it (QProcess with setsid() in the child, or
@@ -192,8 +193,9 @@ fn serve() -> ExitCode {
                 }
                 tracing::warn!(
                     signal = sig,
-                    "termination signal while watched process groups are alive: the \
-                     virtual file system stays mounted until they end, then mo2-vfs exits"
+                    "termination signal while watched process groups or prefix \
+                     wineservers are alive: the virtual file system stays mounted until \
+                     they end, then mo2-vfs exits"
                 );
                 ending = true;
             }
