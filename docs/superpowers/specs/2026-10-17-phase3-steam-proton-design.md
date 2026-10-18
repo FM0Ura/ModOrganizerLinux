@@ -1,7 +1,7 @@
 # Fase 3 — Steam/Proton — Design
 
 - **Data:** 2026-10-17
-- **Status:** em revisão
+- **Status:** aprovada; implementada (teste manual aprovado em 2026-10-18)
 - **Spec geral:** [`2026-10-14-mo2-linux-port-design.md`](2026-10-14-mo2-linux-port-design.md) (§3.2 resume esta fase; este documento a substitui onde divergirem)
 - **Fase anterior:** [`2026-10-15-phase2-vfs-fuse-design.md`](2026-10-15-phase2-vfs-fuse-design.md) (protocolo, ciclo de vida do mount e `LinuxVfsConnector`, que esta fase estende)
 - **Branch:** `fase-3-steam-proton` (a partir de `main`)
