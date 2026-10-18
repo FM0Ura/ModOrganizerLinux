@@ -15,7 +15,7 @@ namespace
 {
   bool isAppId(const QString& s)
   {
-    static const QRegularExpression re("^[0-9]+$");
+    static const QRegularExpression re(QRegularExpression::anchoredPattern("[0-9]+"));
     return re.match(s).hasMatch();
   }
 
@@ -116,7 +116,8 @@ std::optional<App> findApp(const QString& appId)
                                   ? manifest->path({u"AppState"})->value(u"installdir")
                                   : QString();
       const auto gamePath   = library + "/steamapps/common/" + installDir;
-      if (installDir.isEmpty() || installDir.contains('/') ||
+      if (installDir.isEmpty() || installDir == "." || installDir == ".." ||
+          installDir.contains('/') || installDir.contains('\\') ||
           !QFileInfo(gamePath).isDir()) {
         continue;
       }
@@ -183,11 +184,20 @@ std::vector<Proton> installedProtons()
   return result;
 }
 
-QString compatToolName(const QString& appId)
+QString compatToolName(const App& app)
 {
+  // the installation owning the game first, then the others
+  QStringList order{app.root};
+  for (const auto& root : roots()) {
+    if (QFileInfo(root).canonicalFilePath() !=
+        QFileInfo(app.root).canonicalFilePath()) {
+      order.append(root);
+    }
+  }
+
   QString fallback;
 
-  for (const auto& root : roots()) {
+  for (const auto& root : order) {
     const auto config   = vdf::parseFile(root + "/config/config.vdf");
     const auto* mapping = config
                               ? config->path({u"InstallConfigStore", u"Software",
@@ -196,11 +206,16 @@ QString compatToolName(const QString& appId)
     if (!mapping) {
       continue;
     }
-    if (const auto* app = mapping->child(appId);
-        app && !app->value(u"name").isEmpty()) {
-      return app->value(u"name");
+    if (const auto* entry = mapping->child(app.appId);
+        entry && !entry->value(u"name").isEmpty()) {
+      return entry->value(u"name");
     }
-    if (const auto* def = mapping->child(u"0"); def && fallback.isEmpty()) {
+    if (const auto* def = mapping->child(u"0");
+        def && fallback.isEmpty() && !def->value(u"name").isEmpty()) {
+      if (root == app.root) {
+        // the default of the owner wins over the app entries of the others
+        return def->value(u"name");
+      }
       fallback = def->value(u"name");
     }
   }
@@ -224,7 +239,7 @@ std::optional<Proton> protonForApp(const App& app)
 {
   const auto protons = installedProtons();
 
-  if (const auto name = compatToolName(app.appId); !name.isEmpty()) {
+  if (const auto name = compatToolName(app); !name.isEmpty()) {
     return findProton(protons, name);
   }
 

@@ -117,6 +117,16 @@ TEST_F(LinuxSteam, NoPrefixAndBadIds)
   EXPECT_FALSE(steam::findApp("1"));
   EXPECT_FALSE(steam::findApp("../489830"));
   EXPECT_FALSE(steam::findApp(""));
+  EXPECT_FALSE(steam::findApp("489830\n"));
+}
+
+TEST_F(LinuxSteam, FindAppRejectsBadInstallDir)
+{
+  for (const char* dir : {"..", ".", "a/b", "a\\b"}) {
+    write(m_disk2 + "/steamapps/appmanifest_489830.acf",
+          QByteArray("\"AppState\" { \"installdir\" \"") + dir + "\" }");
+    EXPECT_FALSE(steam::findApp("489830")) << dir;
+  }
 }
 
 TEST_F(LinuxSteam, FlatpakSteam)
@@ -154,8 +164,9 @@ TEST_F(LinuxSteam, CompatToolOfTheAppThenTheDefault)
 {
   mapping("\"0\" { \"name\" \"proton_9\" }\n"
           "\"489830\" { \"name\" \"GE-Proton11-7-x86_64\" \"config\" \"\" }\n");
-  EXPECT_EQ(steam::compatToolName("489830"), "GE-Proton11-7-x86_64");
-  EXPECT_EQ(steam::compatToolName("22330"), "proton_9");
+  EXPECT_EQ(steam::compatToolName(*steam::findApp("489830")), "GE-Proton11-7-x86_64");
+  EXPECT_EQ(steam::compatToolName(steam::App{"22330", m_steam, m_steam, {}, {}}),
+            "proton_9");
   EXPECT_EQ(steam::protonForApp(*steam::findApp("489830"))->displayName,
             "GE-Proton11-7");
 }
@@ -168,10 +179,32 @@ TEST_F(LinuxSteam, MappedProtonNotInstalled)
 
 TEST_F(LinuxSteam, NoMappingUsesThePrefixVersion)
 {
-  EXPECT_EQ(steam::compatToolName("489830"), "");
+  EXPECT_EQ(steam::compatToolName(*steam::findApp("489830")), "");
   EXPECT_EQ(steam::protonForApp(*steam::findApp("489830"))->internalName,
             "proton_experimental");
 
   write(m_steam + "/steamapps/compatdata/489830/version", "1.0-1\n");
   EXPECT_FALSE(steam::protonForApp(*steam::findApp("489830")));
+}
+
+TEST_F(LinuxSteam, CompatToolOfTheInstallationOwningTheGame)
+{
+  // the game is in the Flatpak Steam; the native one (first in roots()) maps the same
+  // app to something else
+  const auto flatpak = home() + "/.var/app/com.valvesoftware.Steam/.local/share/Steam";
+  QDir(m_steam + "/steamapps/compatdata").removeRecursively();
+  QDir(m_disk2).removeRecursively();
+  write(flatpak + "/steamapps/appmanifest_489830.acf",
+        "\"AppState\" { \"installdir\" \"Skyrim Special Edition\" }");
+  QDir().mkpath(flatpak + "/steamapps/common/Skyrim Special Edition");
+  mapping("\"0\" { \"name\" \"proton_9\" }\n"
+          "\"489830\" { \"name\" \"proton_experimental\" }\n");
+  write(flatpak + "/config/config.vdf",
+        "\"InstallConfigStore\" { \"Software\" { \"Valve\" { \"Steam\" { "
+        "\"CompatToolMapping\" { \"489830\" { \"name\" \"proton_9\" } } } } } }");
+
+  const auto app = steam::findApp("489830");
+  ASSERT_TRUE(app);
+  ASSERT_EQ(app->root, flatpak);
+  EXPECT_EQ(steam::compatToolName(*app), "proton_9");
 }

@@ -49,9 +49,11 @@ QDLLEXPORT std::optional<App> findApp(const QString& appId);
 QDLLEXPORT std::vector<Proton> installedProtons();
 
 // the internal name of the compatibility tool Steam uses for the app:
-// CompatToolMapping of config/config.vdf for the app ID, otherwise the default one
-// (app ID "0"); empty when there is none
-QDLLEXPORT QString compatToolName(const QString& appId);
+// CompatToolMapping of config/config.vdf of the installation that owns the app
+// (app.root) for the app ID, otherwise its default one (app ID "0"); then the other
+// installations the same way (the app entry of any first, then the first default);
+// empty when there is none
+QDLLEXPORT QString compatToolName(const App& app);
 
 // the installed Proton Steam uses for the app: the one named by compatToolName() if it
 // is installed (nullopt if it is not); without a name, the one whose "proton" script
