@@ -75,11 +75,26 @@ QString GameGamebryo::getSpecialPath(const QString&)
 
 QString GameGamebryo::protonUserFolder() const
 {
-  const auto app = MOBase::steam::findApp(steamAPPId());
-  if (!app || app->compatData.isEmpty()) {
-    MOBase::log::warn("{}: no Proton prefix for Steam app {}, using the XDG folders",
-                      gameName(), steamAPPId());
+  // not a Steam game (GOG, Epic, ...)
+  const QString appId = steamAPPId();
+  if (appId.isEmpty()) {
     return {};
   }
+
+  // detectGame() runs for every game plugin, installed or not
+  const auto app = MOBase::steam::findApp(appId);
+  if (!app) {
+    MOBase::log::debug("{}: Steam app {} is not installed, using the XDG folders",
+                       gameName(), appId);
+    return {};
+  }
+
+  if (app->compatData.isEmpty()) {
+    MOBase::log::warn("{}: Steam app {} has no Proton prefix, run the game once from "
+                      "Steam to create it; using the XDG folders for now",
+                      gameName(), appId);
+    return {};
+  }
+
   return app->compatData + "/pfx/drive_c/users/steamuser";
 }
