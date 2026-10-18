@@ -48,7 +48,8 @@ public:
   // one)
   //
   // `unmounted` events are taken as the reply to an `unmount` request only; in any
-  // other case they are spontaneous and given to the unmounted handler
+  // other case they are spontaneous and given to the unmounted handler; `exited` events
+  // are always spontaneous
   //
   QJsonObject request(const QJsonObject& r, std::chrono::milliseconds timeout);
 
@@ -60,6 +61,10 @@ public:
   // unmount failed and is retried, the file system is still mounted), with the message
   // and the path of the event; they are never taken as a reply
   void setUnmountFailedHandler(std::function<void(QString, QString)> f);
+
+  // called for the spontaneous exited events (a program started by a spawn request
+  // ended), with its pid and exit code, from the event loop of the thread of the client
+  void setProgramExitedHandler(std::function<void(qint64, int)> f);
 
   // called when the process has ended, with how ("exit code 1", "crashed (...)") and
   // the end of what it wrote on its standard error

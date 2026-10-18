@@ -9,9 +9,22 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <uibase/executableinfo.h>
 #include <uibase/filemapping.h>
 #include <uibase/log.h>
+#include <vector>
+
+// a program started by the helper of the virtual file system, where the helper runs
+// (on the host when Mod Organizer runs in a container); Linux only
+struct VfsSpawnRequest
+{
+  QStringList argv;         // argv[0] is looked up in the PATH of the helper
+  QStringList environment;  // NAME=value, over the environment of the helper
+  QString workingDirectory;
+  QString winePrefix;  // the compatdata directory of a Proton program, or empty
+  QString output;      // file for the output and errors of the program, or empty
+};
 
 // the virtual file system that shows the mods in the game directory to the programs
 // started by Mod Organizer
@@ -80,6 +93,20 @@ public:
   // why the virtual file system stopped while it was mounted (the helper program ended
   // or stopped answering), once: empty when it didn't or when it was already taken
   virtual QString takeLostReason() { return {}; }
+
+  // starts a program through the helper (started if needed, without mounting) and
+  // returns its pid; while mounted, its process group keeps the file system mounted;
+  // throws std::runtime_error with the reason when it can't start
+  virtual qint64 spawn(const VfsSpawnRequest& request)
+  {
+    Q_UNUSED(request);
+    throw std::runtime_error("starting programs through the virtual file system is "
+                             "not supported on this platform");
+  }
+
+  // the pids the virtual file system waits for: programs started by spawn() that still
+  // run, and the Wine servers that keep it mounted (empty without a helper)
+  virtual std::vector<qint64> runningPrograms() { return {}; }
 };
 
 // creates the virtual file system of this platform

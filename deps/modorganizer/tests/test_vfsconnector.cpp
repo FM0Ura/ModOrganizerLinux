@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "fusetest.h"
+#include "linux/exitcodes_linux.h"
 #include "shared/util.h"
 #include "spawn.h"
 #include "tempdir.h"
@@ -311,6 +312,105 @@ TEST_F(VfsConnectorTest, ActivateTwiceUpdates)
   vfs->activate();
   EXPECT_TRUE(vfs->isActive());
   EXPECT_TRUE(fs::exists(l.data / "b.esp"));
+}
+
+TEST_F(VfsConnectorTest, SpawnWithoutMountRunsAndRecordsExitCode)
+{
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  TempDir t;
+  const auto out = t.path() / "out.txt";
+
+  VfsSpawnRequest r;
+  r.argv             = {"sh", "-c", "echo \"$MO2_T\" > '" + q(out) + "'; exit 7"};
+  r.environment      = {"MO2_T=hello"};
+  r.workingDirectory = q(t.path());
+  const auto pid     = vfs->spawn(r);
+  ASSERT_GT(pid, 0);
+
+  const auto code = exitcodes::take(pid, std::chrono::seconds(5));
+  ASSERT_TRUE(code);
+  EXPECT_EQ(*code, 7);
+  EXPECT_EQ(readFile(out), "hello\n");
+  EXPECT_FALSE(vfs->isActive());
+}
+
+TEST_F(VfsConnectorTest, SpawnFailureIsException)
+{
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  VfsSpawnRequest r;
+  r.argv             = {"/nonexistent/umu-run"};
+  r.workingDirectory = "/";
+  try {
+    vfs->spawn(r);
+    FAIL() << "no exception";
+  } catch (const std::runtime_error& e) {
+    EXPECT_NE(std::string(e.what()).find("/nonexistent/umu-run"), std::string::npos)
+        << e.what();
+  }
+}
+
+TEST_F(VfsConnectorTest, SpawnedProgramKeepsTheMountAndIsListed)
+{
+  if (!requireVfs())
+    GTEST_SKIP();
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+
+  VfsSpawnRequest r;
+  r.argv             = {"sh", "-c", "ls > ../seen.txt; sleep 0.5"};
+  r.workingDirectory = q(l.data);
+  const auto pid     = vfs->spawn(r);
+
+  EXPECT_EQ(vfs->runningPrograms(), std::vector<qint64>{pid});
+  vfs->releaseIfIdle();  // a spawned program counts as watched: nothing happens
+  EXPECT_TRUE(vfs->isActive());
+
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(5)));
+  EXPECT_EQ(readFile(l.tmp.path() / "seen.txt"),
+            "a.esp\nb.esp\noriginal.esm\ntextures\n");
+  EXPECT_EQ(exitcodes::take(pid, std::chrono::seconds(2)), 0);
+  EXPECT_TRUE(vfs->runningPrograms().empty());
+}
+
+TEST_F(VfsConnectorTest, ActivateAfterUpdateMappingUpdatesOnce)
+{
+  if (!requireVfs())
+    GTEST_SKIP();
+
+  Layout l;
+  // counts the update requests by wrapping the real helper
+  const auto log     = m_state.path() / "requests.log";
+  const auto wrapper = m_state.path() / "wrapper.sh";
+  {
+    std::ofstream(wrapper) << "#!/bin/sh\n"
+                           << "tee -a '" << log.string() << "' | '"
+                           << vfsBinary().toStdString() << "' \"$@\"\n";
+  }
+  fs::permissions(wrapper, fs::perms::owner_all);
+  qputenv("MO2_VFS_BINARY", QByteArray::fromStdString(wrapper.string()));
+
+  const auto vfs = createVfsConnector();
+  Release release{*vfs};
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+  // the second Run: beforeRun() calls updateMapping() and then activate()
+  vfs->updateMapping(l.mapping());
+  vfs->activate();
+
+  const auto requests = readFile(log);
+  std::size_t updates = 0;
+  for (auto p = requests.find("\"op\":\"update\""); p != std::string::npos;
+       p      = requests.find("\"op\":\"update\"", p + 1)) {
+    ++updates;
+  }
+  EXPECT_EQ(updates, 1u) << requests;
 }
 
 TEST_F(VfsConnectorTest, AutoDeactivatesWhenGroupEnds)

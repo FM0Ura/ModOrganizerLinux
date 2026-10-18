@@ -36,6 +36,7 @@ struct VfsClient::State
   std::function<void()> unmounted;
   std::function<void(QString, QString)> unmountFailed;
   std::function<void(QString, QString)> exitedHandler;
+  std::function<void(qint64, int)> programExited;
 
   void wake()
   {
@@ -164,6 +165,11 @@ void VfsClient::setUnmountedHandler(std::function<void()> f)
 void VfsClient::setUnmountFailedHandler(std::function<void(QString, QString)> f)
 {
   m_state->unmountFailed = std::move(f);
+}
+
+void VfsClient::setProgramExitedHandler(std::function<void(qint64, int)> f)
+{
+  m_state->programExited = std::move(f);
 }
 
 void VfsClient::kill()
@@ -327,6 +333,11 @@ void VfsClient::onLine(const QByteArray& line)
     log::error("mo2-vfs: {}", message);
     if (s.unmountFailed) {
       s.unmountFailed(message, path);
+    }
+  } else if (name == "exited") {
+    // spontaneous: a program started by spawn ended
+    if (s.programExited) {
+      s.programExited(event.value("pid").toInteger(), event.value("code").toInt());
     }
   } else {
     s.replies.push_back(event);

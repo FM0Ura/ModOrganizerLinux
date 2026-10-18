@@ -7,7 +7,11 @@
 //
 // updateMapping() and updateParams() only keep what they are given; activate() starts
 // mo2-vfs (once; it is kept for the next activations) and mounts the file system, or
-// updates it if it is mounted. The paths of the mappings are disk paths; the ones built
+// updates it if it is mounted (once per run: an update sent by updateMapping() while
+// mounted is not repeated by the activate() that follows it). spawn() starts a program
+// through the helper, which runs it where the helper runs (the host, when Mod
+// Organizer is in a container); the exit codes come from the exited events
+// (exitcodes_linux.h). The paths of the mappings are disk paths; the ones built
 // by OrganizerCore::fileMapping() from the data tree and the ones given by plugins
 // (local saves, file mappers) may use backslashes, which are converted to slashes here
 // (MOShared::normalizeSeparators()).
@@ -15,6 +19,7 @@
 #include "../shared/appconfig.h"
 #include "../shared/util.h"
 #include "../vfsconnector.h"
+#include "exitcodes_linux.h"
 #include "vfsbridge_linux.h"
 #include "vfsclient_linux.h"
 
@@ -30,6 +35,7 @@
 #include <QTimer>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 using namespace MOBase;
 
@@ -204,9 +210,12 @@ public:
       // and profile code, which don't expect an exception)
       try {
         send(mappingRequest("update"), mountTimeout());
+        m_mappingSent = true;
       } catch (const std::exception& e) {
         log::error("cannot update the virtual file system: {}", e.what());
       }
+    } else {
+      m_mappingSent = false;
     }
   }
 
@@ -328,6 +337,70 @@ public:
     m_deactivated = std::move(f);
   }
 
+  qint64 spawn(const VfsSpawnRequest& request) override
+  {
+    if (m_client && !m_client->running()) {
+      helperLost("mo2-vfs is not running");
+      m_client.reset();
+    }
+
+    if (!m_client) {
+      // a program that runs without the virtual file system still runs where the
+      // helper runs (the host)
+      start();
+    }
+
+    QJsonObject env;
+    for (const auto& e : request.environment) {
+      const auto eq   = e.indexOf('=');
+      env[e.left(eq)] = e.mid(eq + 1);  // validated by the caller (ProtonLauncher)
+    }
+
+    QJsonObject r;
+    r["op"]   = "spawn";
+    r["argv"] = toJson(request.argv);
+    r["env"]  = env;
+    r["cwd"]  = request.workingDirectory;
+    if (!request.winePrefix.isEmpty()) {
+      r["wineprefix"] = request.winePrefix;
+    }
+    if (!request.output.isEmpty()) {
+      r["output"] = request.output;
+    }
+
+    log::debug("spawn {} in '{}', env {}", request.argv.join(' '),
+               request.workingDirectory, request.environment.join(' '));
+
+    const auto reply = send(r, 10s);
+    const auto pid   = reply.value("pid").toInteger();
+
+    if (m_active) {
+      // its process group keeps the mount: releaseIfIdle() must not unmount
+      ++m_watched;
+    }
+
+    return pid;
+  }
+
+  std::vector<qint64> runningPrograms() override
+  {
+    if (!m_client || !m_client->running()) {
+      return {};
+    }
+
+    try {
+      std::vector<qint64> pids;
+      for (const auto& p :
+           send(QJsonObject{{"op", "status"}}, 10s).value("processes").toArray()) {
+        pids.push_back(p.toInteger());
+      }
+      return pids;
+    } catch (const std::exception& e) {
+      log::error("cannot ask mo2-vfs for its programs: {}", e.what());
+      return {};
+    }
+  }
+
 private:
   void doActivate()
   {
@@ -357,7 +430,10 @@ private:
     }
 
     if (m_active) {
-      send(mappingRequest("update"), mountTimeout());
+      // one update per run: updateMapping() already sent these mappings
+      if (!std::exchange(m_mappingSent, false)) {
+        send(mappingRequest("update"), mountTimeout());
+      }
       return;
     }
 
@@ -373,6 +449,7 @@ private:
     }
 
     m_active              = true;
+    m_mappingSent         = false;
     m_watched             = 0;
     m_pendingDeactivation = false;
     m_leftMounted.clear();
@@ -523,6 +600,11 @@ private:
     const auto cmd = vfsbridge::helperCommand(binary, args);
     auto client    = std::make_unique<VfsClient>(cmd.program, cmd.arguments);
 
+    client->setProgramExitedHandler([](qint64 pid, int code) {
+      log::debug("program {} ended with {}", pid, code);
+      exitcodes::record(pid, code);
+    });
+
     client->setUnmountedHandler([this] {
       deactivated();
     });
@@ -617,6 +699,7 @@ private:
   QStringList m_leftMounted;
 
   bool m_active              = false;
+  bool m_mappingSent         = false;
   bool m_activating          = false;
   bool m_cleanupNeeded       = false;
   bool m_lossHandled         = false;

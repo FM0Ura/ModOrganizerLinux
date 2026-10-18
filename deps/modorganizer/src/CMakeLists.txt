@@ -122,6 +122,7 @@ set(_organizer_env_sources
 set(_organizer_launch_sources
 	filemappingbuilder.cpp
 	shared/appconfig.cpp
+	linux/exitcodes_linux.cpp
 	linux/loot_linux.cpp
 	linux/spawn_linux.cpp
 	linux/vfsbridge_linux.cpp
