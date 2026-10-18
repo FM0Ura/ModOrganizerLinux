@@ -160,7 +160,7 @@ env HOME="$HOMEDIR" \
     XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
     XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
     MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs" \
-    PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
+    MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
     timeout -k 10 "$TIMEOUT" "$APP" --logs -i vfs-e2e run -e probe \
     > "$APP_OUT" 2>&1 < /dev/null || rc=$?
 
@@ -219,7 +219,7 @@ env HOME="$HOMEDIR" \
     XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
     XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
     MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$fake" \
-    PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
+    MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
     timeout -k 5 "$((FAIL_TIMEOUT + 10))" "$APP" --logs -i vfs-e2e run -e probe \
     > "$APP_OUT" 2>&1 < /dev/null &
 app=$!

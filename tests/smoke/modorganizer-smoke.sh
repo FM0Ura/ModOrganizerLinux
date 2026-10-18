@@ -52,7 +52,7 @@ start() {
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
         XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state" \
         XDG_RUNTIME_DIR="$home/runtime" MO2_VFS_STATE_DIR="$home/runtime/mo2-vfs" \
-        QT_QPA_PLATFORM=offscreen \
+        MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen \
         timeout -k 10 "$TIMEOUT" "$APP" --logs 2>&1)" || rc=$?
     rm -rf "$home"
     printf '%s\n' "$out"
