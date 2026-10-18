@@ -41,7 +41,7 @@ distrobox enter mo2-run -- ~/mo2-phase1/bin/ModOrganizer 2>&1 | tee ~/mo2-termin
 não aparecer no Wayland, rode com `env QT_QPA_PLATFORM=xcb`:
 `distrobox enter mo2-run -- env QT_QPA_PLATFORM=xcb ~/mo2-phase1/bin/ModOrganizer`.
 
-- [ ] A janela do MO2 abre (primeira execução: assistente de criação de instância).
+- [x] A janela do MO2 abre (primeira execução: assistente de criação de instância).
   Esperado: sem crash; o terminal pode mostrar avisos do Qt, sem `Segmentation fault`.
 
 Se algo der errado logo na abertura:
@@ -68,21 +68,21 @@ com instalador FOMOD. Dois dos mods devem conter uma pasta `Textures` (maiúscul
 
 ## 1. Criar a instância
 
-- [ ] No assistente, escolher **"Create a global instance"** e avançar com **"Next >"**.
-- [ ] Na página do jogo, escolher o botão **Skyrim Special Edition**.
+- [x] No assistente, escolher **"Create a global instance"** e avançar com **"Next >"**.
+- [x] Na página do jogo, escolher o botão **Skyrim Special Edition**.
   Esperado: se o jogo estiver numa biblioteca Steam reconhecida, o botão mostra o caminho
   dele; senão mostra "No installation found".
-- [ ] Se aparecer a página de edição do jogo (**Steam**, **GOG**, **Epic Games**), escolher
+- [x] Se aparecer a página de edição do jogo (**Steam**, **GOG**, **Epic Games**), escolher
   **Steam**. (Selecionar uma edição avança sozinho para a próxima página.)
 - [ ] (Se a detecção automática falhar) clicar em **"Browse..."** e escolher a pasta do jogo.
   Esperado: aceita a pasta que contém `SkyrimSE.exe` e segue em frente.
-- [ ] Avançar com **"Next >"** pelas demais páginas até o resumo e clicar em **"Finish"**.
+- [x] Avançar com **"Next >"** pelas demais páginas até o resumo e clicar em **"Finish"**.
   Esperado: a janela principal abre; a instância fica em
   `~/.local/share/ModOrganizer/<nome da instância>/`.
 
 ## 2. Criar perfil
 
-- [ ] Menu **Tools -> "Profiles..."** (Ctrl+P) -> **"Create"**, dar o nome (ex.: `Teste`),
+- [x] Menu **Tools -> "Profiles..."** (Ctrl+P) -> **"Create"**, dar o nome (ex.: `Teste`),
   depois selecionar o perfil na lista e clicar em **"Select"** (ou escolhê-lo na caixa
   **"Profile"** da janela principal).
   Esperado: o perfil aparece e fica ativo; a pasta `profiles/Teste` é criada na instância.
@@ -94,43 +94,43 @@ seletor de arquivos **"Choose Mod"**. Durante a instalação o MO2 pergunta o no
 (por exemplo na janela **"Quick Install"**, campo "Name", ou, se já existir um mod com esse
 nome, na janela **"Mod Name"**); aceite ou edite e confirme.
 
-- [ ] Mod `.7z`: instala e aparece na lista de mods. Esperado: nenhum erro de extração.
-- [ ] Mod `.zip`: idem.
-- [ ] Mod `.rar`: idem. (A extração de RAR só é verificada manualmente; não há teste
+- [x] Mod `.7z`: instala e aparece na lista de mods. Esperado: nenhum erro de extração.
+- [x] Mod `.zip`: idem.
+- [x] Mod `.rar`: idem. (A extração de RAR só é verificada manualmente; não há teste
   automatizado.)
-- [ ] Um dos três com FOMOD: abre a janela **"FOMOD Installer"**; as opções funcionam, o
+- [x] Um dos três com FOMOD: abre a janela **"FOMOD Installer"**; as opções funcionam, o
   botão **"Next"** avança e, na última página, vira **"Install"** e conclui. Esperado: os
   arquivos escolhidos aparecem no mod instalado.
-- [ ] Ativar os três mods (caixa de seleção ao lado do nome). Esperado: o contador
+- [x] Ativar os três mods (caixa de seleção ao lado do nome). Esperado: o contador
   **"Active:"** acima da lista de mods sobe.
 
 ## 4. Reordenar
 
-- [ ] Arrastar um mod para outra posição na lista (ou usar as setas de prioridade).
+- [x] Arrastar um mod para outra posição na lista (ou usar as setas de prioridade).
   Esperado: as prioridades se renumeram e a nova ordem fica visível.
 
 ## 5. Aba Data e conflitos
 
-- [ ] Abrir a aba **"Data"**. Esperado: a árvore mostra os arquivos dos mods ativos, com
+- [x] Abrir a aba **"Data"**. Esperado: a árvore mostra os arquivos dos mods ativos, com
   as colunas Name / Mod / Type / Size / Date modified; a coluna **"Mod"** aponta o mod
   vencedor de cada arquivo.
-- [ ] **Case-insensitive:** com um mod contendo `Textures/...` e outro `textures/...`,
+- [x] **Case-insensitive:** com um mod contendo `Textures/...` e outro `textures/...`,
   a aba Data mostra **uma única pasta** (`Textures` ou `textures`) com os arquivos dos
   dois mods mesclados, não duas pastas separadas.
-- [ ] Mods com arquivos em comum mostram o ícone de conflito na lista; dando duplo clique
+- [x] Mods com arquivos em comum mostram o ícone de conflito na lista; dando duplo clique
   no mod e abrindo a aba **"Conflicts"** da janela de informações, vê-se quem sobrescreve
   quem.
 
 ## 6. Persistência
 
-- [ ] Fechar o MO2 (**File -> "Exit"**) e abrir de novo
+- [x] Fechar o MO2 (**File -> "Exit"**) e abrir de novo
   (`distrobox enter mo2-run -- ~/mo2-phase1/bin/ModOrganizer`).
   Esperado: abre direto na instância; os 3 mods, a ordem, as caixas de ativação e o
   perfil selecionado estão iguais ao que você deixou.
 
 ## 7. Run (mensagem da Fase 3)
 
-- [ ] Selecionar um executável na caixa ao lado do botão e clicar em **"Run"**.
+- [x] Selecionar um executável na caixa ao lado do botão e clicar em **"Run"**.
   Esperado: aparece um diálogo de título "Mod Organizer" com o texto:
   "Executar programas ainda não está disponível no Linux. Esta funcionalidade chega na
   Fase 3 do port." O MO2 continua aberto e responsivo (sem crash). (O texto do diálogo
@@ -138,7 +138,7 @@ nome, na janela **"Mod Name"**); aceite ou edite e confirme.
 
 ## 8. Menu de contexto
 
-- [ ] Botão direito em um mod -> **"Open in Explorer"**.
+- [x] Botão direito em um mod -> **"Open in Explorer"**.
   Esperado: o gerenciador de arquivos abre na pasta do mod.
   **Limitação conhecida do ambiente:** o MO2 chama `xdg-open`, e dentro do distrobox isso
   só funciona se o shim `xdg-open` do distrobox (que repassa para o host) estiver ativo.
@@ -148,7 +148,7 @@ nome, na janela **"Mod Name"**); aceite ou edite e confirme.
 
 ## 9. Encerramento
 
-- [ ] Fechar o MO2 normalmente (**File -> "Exit"**). Esperado: o processo termina
+- [x] Fechar o MO2 normalmente (**File -> "Exit"**). Esperado: o processo termina
   (`pgrep ModOrganizer` vazio) e nenhum `crash.log` novo é criado.
 
 ## O que enviar se falhar

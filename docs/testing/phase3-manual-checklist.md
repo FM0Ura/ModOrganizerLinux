@@ -31,28 +31,28 @@ O que mudou em relação à Fase 2 (não é falha, é esperado):
 
 ## 0. Pré-requisitos e preparação
 
-- [ ] Bazzite com a **Steam aberta** (a Steam do host precisa estar rodando).
-- [ ] **Skyrim Special Edition instalado e rodado ao menos uma vez pela Steam** (isso cria o
+- [x] Bazzite com a **Steam aberta** (a Steam do host precisa estar rodando).
+- [x] **Skyrim Special Edition instalado e rodado ao menos uma vez pela Steam** (isso cria o
   prefixo `~/.local/share/Steam/steamapps/compatdata/489830/pfx`). Confira:
   `ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/`. Se o jogo está
   em outro disco, o `compatdata` fica na mesma biblioteca do jogo.
-- [ ] **SKSE64 instalado na pasta do jogo**: baixe de <https://skse.silverlock.org>, e copie
+- [x] **SKSE64 instalado na pasta do jogo**: baixe de <https://skse.silverlock.org>, e copie
   `skse64_loader.exe`, `skse64_*.dll` e a pasta `Data/Scripts` do SKSE para a pasta do
   Skyrim SE (os arquivos `.exe`/`.dll` ficam **ao lado do `SkyrimSE.exe`**, os scripts em
   `Data/Scripts`). Se a versão do SKSE não corresponde à versão do jogo, o loader mostra um
   erro; use a build certa.
-- [ ] **Dois mods de teste** (instalados depois, no item 1): um com um `.esp` simples (por
+- [x] **Dois mods de teste** (instalados depois, no item 1): um com um `.esp` simples (por
   exemplo `TesteVFS.esp`, que apareça na lista de mods ou "Creations" do menu principal, ou um
   plugin que registre algo no console) e um com um **arquivo marcador**
   (`Data/Textures/teste/marcador.txt`).
-- [ ] **SSEEdit** (`SSEEdit.exe`, de <https://github.com/TES5Edit/TES5Edit/releases>)
+- [x] **SSEEdit** (`SSEEdit.exe`, de <https://github.com/TES5Edit/TES5Edit/releases>)
   baixado e extraído numa pasta fora do jogo (ex.: `~/Ferramentas/SSEEdit`).
-- [ ] **MO2 compilado** na distrobox: `distrobox enter mo2-run -- bash -lc 'cd <repo> &&
+- [x] **MO2 compilado** na distrobox: `distrobox enter mo2-run -- bash -lc 'cd <repo> &&
   ./build.sh'`; o executável fica em `install/bin/ModOrganizer`, com o `mo2-vfs` ao lado.
   O branch `fase-3-steam-proton` ainda não foi enviado ao GitHub, então o pacote é esta
   compilação local; só depois de um run Linux verde existe o artefato `mo2-linux-install`.
-- [ ] `umu-run` existe no host: `command -v umu-run` (fora do box).
-- [ ] Rodar o MO2 e guardar a saída do terminal:
+- [x] `umu-run` existe no host: `command -v umu-run` (fora do box).
+- [x] Rodar o MO2 e guardar a saída do terminal:
 
 ```sh
 distrobox enter mo2-run -- <repo>/install/bin/ModOrganizer 2>&1 | tee ~/mo2-terminal.log
@@ -61,7 +61,7 @@ distrobox enter mo2-run -- <repo>/install/bin/ModOrganizer 2>&1 | tee ~/mo2-term
 Se a janela não abrir no Wayland, use `env QT_QPA_PLATFORM=xcb` (ver checklist da Fase 1).
 **Nunca rode o MO2 como root.** Dentro do box o MO2 acha o `distrobox-host-exec` sozinho.
 
-- [ ] Anote o estado inicial da pasta do jogo e do prefixo (para o item 6; `<jogo>` é
+- [x] Anote o estado inicial da pasta do jogo e do prefixo (para o item 6; `<jogo>` é
   `~/.local/share/Steam/steamapps/common/Skyrim Special Edition`):
 
 ```sh
@@ -69,21 +69,21 @@ find "<jogo>/Data" -type f | sort | sha256sum > ~/skyrim-data-antes.sha
 ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/ > ~/skyrim-users-antes.txt
 ```
 
-- [ ] A janela do MO2 abre sem crash; o terminal não mostra `Segmentation fault`.
+- [x] A janela do MO2 abre sem crash; o terminal não mostra `Segmentation fault`.
 
 ## 1. Nova instância Skyrim SE: detecção e pastas no prefixo
 
-- [ ] Criar a instância **Skyrim Special Edition** (global). Esperado: o jogo é **detectado
+- [x] Criar a instância **Skyrim Special Edition** (global). Esperado: o jogo é **detectado
   automaticamente** (caminho `.../steamapps/common/Skyrim Special Edition`), sem pedir a
   pasta.
-- [ ] Menu de pastas da barra de ferramentas (o ícone de pasta) -> **"Open MyGames folder"**.
+- [x] Menu de pastas da barra de ferramentas (o ícone de pasta) -> **"Open MyGames folder"**.
   Esperado: o gerenciador de arquivos abre
   `.../compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition`
   (dentro do prefixo, não uma pasta XDG como `~/.local/share/...`). Como o MO2 roda no box, o
   gerenciador de arquivos pode abrir no host ou falhar sem um; nesse caso, confira os saves: a
   aba **Saves** (e os saves do perfil) lista os saves de `.../My Games/Skyrim Special
   Edition/Saves` do prefixo, e o log do MO2 não traz o aviso de falta de prefixo.
-- [ ] Instalar os dois mods de teste (**File -> "Install Mod..."**) e ativar os dois.
+- [x] Instalar os dois mods de teste (**File -> "Install Mod..."**) e ativar os dois.
   Esperado: contador **"Active:"** sobe para 2; o plugin `.esp` aparece na aba **Plugins**.
 
 ## 2. SKSE: jogo no menu principal e mount some no fim
@@ -92,51 +92,51 @@ Rode este item com o MO2 iniciado **pelo box**, como no item 0: é o que exercit
 `distrobox-host-exec` com um jogo gráfico (o ponto de controle da Task 3 já validou o SKSE
 com o `mo2-vfs` rodando direto no host).
 
-- [ ] **Tools -> "Modify Executables..."** -> **"+" -> "Add from file..."** e escolher
+- [x] **Tools -> "Modify Executables..."** -> **"+" -> "Add from file..."** e escolher
   `skse64_loader.exe` (na pasta do jogo, ao lado do `SkyrimSE.exe`). Título **SKSE**.
   Confirme com **"OK"**. Esperado: aparece na caixa ao lado do botão **"Run"**.
-- [ ] Selecionar **SKSE** e clicar em **"Run"**. Esperado: o MO2 trava (UILocker) mostrando o
+- [x] Selecionar **SKSE** e clicar em **"Run"**. Esperado: o MO2 trava (UILocker) mostrando o
   programa em execução; a primeira execução pode demorar (o `umu` atualiza o runtime) e a
   janela do jogo abre.
-- [ ] Em outro terminal **no host** (fora do box): `findmnt | grep -i skyrim`. Esperado:
+- [x] Em outro terminal **no host** (fora do box): `findmnt | grep -i skyrim`. Esperado:
   uma linha com a `Data` do jogo, tipo `fuse.mo2-vfs`.
-- [ ] A janela do jogo abre e chega ao **menu principal**. Esperado: o `.esp` de teste
+- [x] A janela do jogo abre e chega ao **menu principal**. Esperado: o `.esp` de teste
   aparece em "Mods"/"Creations", **ou** o console (`~`) responde a `getskseversion` com a
   versão do SKSE.
-- [ ] Sair **pelo menu** do jogo. Esperado: o MO2 destrava em poucos segundos (o
+- [x] Sair **pelo menu** do jogo. Esperado: o MO2 destrava em poucos segundos (o
   `skse64_loader.exe` inicia o jogo e sai; o mount fica até o `wineserver` terminar) e
   `findmnt | grep -i skyrim` no host fica **vazio**.
 
 ## 3. SSEEdit: lê pelo VFS e grava em `overwrite/`
 
-- [ ] Adicionar `SSEEdit.exe` como executável (**"+" -> "Add from file..."**), título
+- [x] Adicionar `SSEEdit.exe` como executável (**"+" -> "Add from file..."**), título
   **SSEEdit**. No campo de argumentos: `-SSE` (e, se preferir, `-IKnowWhatImDoing`). Executar.
   Esperado: o xEdit abre e lista os plugins **dos mods ativos** (inclusive o `.esp` de teste).
-- [ ] No xEdit, alterar algo no plugin de teste (ou criar um plugin novo) e **salvar**.
+- [x] No xEdit, alterar algo no plugin de teste (ou criar um plugin novo) e **salvar**.
   Esperado: sem erro de gravação.
-- [ ] Fechar o xEdit e conferir:
+- [x] Fechar o xEdit e conferir:
   `ls ~/.local/share/ModOrganizer/<instância>/overwrite/` (ou o mod escolhido em "Create files
   in mod instead of overwrite"). Esperado: o arquivo salvo está lá, e **não** na pasta `Data`
   real: `ls "<jogo>/Data" | grep -i TesteVFS` vazio (a menos que o `.esp` seja do jogo).
 
 ## 4. Proton e variáveis por executável
 
-- [ ] **GE-Proton** instalado (`~/.local/share/Steam/compatibilitytools.d/GE-Proton*`).
+- [x] **GE-Proton** instalado (`~/.local/share/Steam/compatibilitytools.d/GE-Proton*`).
   Em **Modify Executables...**, selecionar **SKSE** (ou SSEEdit). No grupo **"Proton"**,
   escolher o GE-Proton na lista (por padrão, "Automatic (same as Steam)"); na linha
   **"Environment"** do mesmo grupo (dica "NAME=value, one per line"), escrever
   `DXVK_HUD=fps` (uma variável por linha). **"OK"**.
-- [ ] Antes de executar, **Tools -> "Settings..." -> aba "Diagnostics" -> "Log Level" ->
+- [x] Antes de executar, **Tools -> "Settings..." -> aba "Diagnostics" -> "Log Level" ->
   "Debug"**, para o log trazer o argv e as variáveis enviados ao `spawn`.
-- [ ] Executar. Esperado: o contador de FPS do **DXVK** aparece no canto da janela do jogo
+- [x] Executar. Esperado: o contador de FPS do **DXVK** aparece no canto da janela do jogo
   (ou da ferramenta).
-- [ ] `~/.local/share/ModOrganizer/<instância>/logs/run-<nome do .exe>.log` (ex.:
+- [x] `~/.local/share/ModOrganizer/<instância>/logs/run-<nome do .exe>.log` (ex.:
   `run-skse64_loader.log`, `run-SSEEdit.log`) mostra a saída do **GE-Proton** (caminho/versão do Proton nas linhas
   do `umu`). O log do MO2 (`logs/mo_interface.log`, com o nível Debug) tem as linhas
   `spawn umu-run ... in '<pasta>', env ...` (argv, variáveis acrescentadas, diretório de
   trabalho, com `DXVK_HUD=fps`) e `<exe> runs with <Proton> in <compatdata>`; ao fim, no nível
   Info, `process <pid> ended with exit code <código>`.
-- [ ] Voltar o grupo "Proton" para "Automatic (same as Steam)" e apagar a variável (e, se quiser,
+- [x] Voltar o grupo "Proton" para "Automatic (same as Steam)" e apagar a variável (e, se quiser,
   o nível de log para "Info (recommended)").
 
 ## 5. Erros
@@ -144,18 +144,18 @@ com o `mo2-vfs` rodando direto no host).
 Em cada caso, nada pode ficar montado no fim (`findmnt | grep -i skyrim` no host vazio; no
 caso a, também dentro do box).
 
-- [ ] **a) `umu-run` ausente.** O `/usr/bin` do host é imutável no Bazzite, então simule
+- [x] **a) `umu-run` ausente.** O `/usr/bin` do host é imutável no Bazzite, então simule
   rodando o MO2 com o helper dentro do box, que não tem `umu-run`:
   `distrobox enter mo2-run -- env MO2_VFS_BRIDGE=direct <repo>/install/bin/ModOrganizer`.
   Executar o `SkyrimSE.exe`. Esperado: erro com `Windows programs run with umu-run: install
   umu-launcher on the host.`; nada fica montado (`findmnt -n -o TARGET,FSTYPE,SOURCE |
   grep mo2-vfs` dentro do box vazio). Depois, feche e reabra o MO2 normalmente (sem a
   variável).
-- [ ] **b) Prefixo ausente.** Com o MO2 fechado ou parado, renomear
+- [x] **b) Prefixo ausente.** Com o MO2 fechado ou parado, renomear
   `~/.local/share/Steam/steamapps/compatdata/489830` para `489830.bak`. "Run" do
   `SkyrimSE.exe`/SKSE. Esperado: erro com `has no Proton prefix yet. Run the game once from
   Steam to create it.`; nada é montado. **Desfazer o nome** em seguida.
-- [ ] **c) Proton inexistente.** Fechar o MO2. Em
+- [x] **c) Proton inexistente.** Fechar o MO2. Em
   `~/.local/share/ModOrganizer/<instância>/ModOrganizer.ini`, na seção `[customExecutables]`,
   a linha `<n>\proton=` do SKSE (vazia ou ausente por padrão) passa a `<n>\proton=NaoExiste`. Abrir o MO2 e executar.
   Esperado: erro com `Proton "NaoExiste", set for this executable, is not installed.
@@ -163,26 +163,26 @@ caso a, também dentro do box).
 
 ## 6. Depois: pasta do jogo e prefixo intactos
 
-- [ ] `find "<jogo>/Data" -type f | sort | sha256sum | diff - ~/skyrim-data-antes.sha` não
+- [x] `find "<jogo>/Data" -type f | sort | sha256sum | diff - ~/skyrim-data-antes.sha` não
   imprime nada. Esperado: nenhum arquivo dos mods ou novo na pasta `Data` real.
-- [ ] `ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/`: contém
+- [x] `ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/`: contém
   `steamuser` e, novo, o link `<usuário> -> steamuser` do `umu` (esperado, spec §1.1; compare
   com `~/skyrim-users-antes.txt`). Mais nada estranho.
 
 ## 7. MO2 fechado durante o jogo
 
-- [ ] Executar **SKSE**. Com o jogo no menu, fechar o MO2 (**File -> "Exit"**, aceitando o
+- [x] Executar **SKSE**. Com o jogo no menu, fechar o MO2 (**File -> "Exit"**, aceitando o
   aviso de processo em execução). Feche **só** por File -> Exit: Ctrl+C ou fechar o terminal
   através do `distrobox ... | tee` derruba só o cliente do podman e o MO2 continua aberto. Esperado: o **jogo continua** rodando
   e `findmnt | grep -i skyrim` (host) ainda mostra o mount.
-- [ ] Sair do jogo. Esperado: poucos segundos depois o mount **some** sozinho (`findmnt`
+- [x] Sair do jogo. Esperado: poucos segundos depois o mount **some** sozinho (`findmnt`
   vazio) e `pgrep mo2-vfs` (host) fica vazio.
 
 ## 8. Encerramento
 
-- [ ] `pgrep ModOrganizer` e `pgrep mo2-vfs` vazios; nenhum `crash.log` novo e não vazio em
+- [x] `pgrep ModOrganizer` e `pgrep mo2-vfs` vazios; nenhum `crash.log` novo e não vazio em
   `~/.local/share/ModOrganizer/<instância>/logs/`.
-- [ ] `findmnt | grep -i skyrim` (host) vazio.
+- [x] `findmnt | grep -i skyrim` (host) vazio.
 
 ## O que enviar se falhar
 
