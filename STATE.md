@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** 🟢 teste manual aprovado em 2026-10-18 (checklist completo no Bazzite: login OAuth e API key lembrados no KWallet, handler `nxm://` com o Firefox Flatpak, download e instalação inclusive FOMOD); falta o checkpoint de CI e o merge no `main` · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
+**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** ✅ concluída em 2026-10-18 (teste manual aprovado no Bazzite; CI Linux e Windows verdes; merge no `main` pelo PR #2) · **Próxima:** 4b — LOOT · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
 **Branch principal:** `main` (Fases 1 a 3; `fase-2-vfs-fuse` e `fase-3-steam-proton` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4a:** `fase-4a-nexus` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
@@ -227,6 +227,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-18 | Fase 3 (teste manual): o MO2 passa `STEAM_COMPAT_INSTALL_PATH` (pasta do jogo) e `STEAM_COMPAT_LIBRARY_PATHS` (`steamapps` de cada biblioteca, a do jogo primeiro) ao `umu-run`, como a Steam, para o Proton criar o `S:` que o registro do prefixo usa. Caminhos canônicos **como o host os vê** (`vfsbridge::hostCanonicalPath`, por `/run/host` quando o MO2 roda no distrobox, onde `/home` é mount e não link): o `umu` mantém a lista só se achar um ponto de montagem acima do caminho do jogo, e no host do Bazzite `/home` é link para `/var/home`. A primeira versão (`canonicalFilePath` dentro do box) não bastou no teste manual |
 | 2026-10-18 | Fase 3: teste manual aprovado pelo usuário no Bazzite (MO2 no box `mo2-run` com a ponte `distrobox-host-exec`): Skyrim SE + SKSE e SSEEdit rodando com mods. Merge no `main` depois do checkpoint de CI (Linux + Windows) |
 | 2026-10-18 | Fase 4a: teste manual aprovado pelo usuário no Bazzite (MO2 no box `mo2-run`, Firefox Flatpak, KWallet): itens 1–7 do checklist sem correções. Merge no `main` depois do checkpoint de CI (Linux + Windows) |
+| 2026-10-18 | Fase 4a (checkpoint de CI): como root num container sem `CAP_IPC_LOCK` (o docker do CI), o `gnome-keyring-daemon` aborta ("error dropping process capabilities"); o `secret-service.sh` o inicia por `setpriv --inh-caps=-all --bounding-set=-all` quando roda como root. CI Linux (com `secret_service_integration` passando de fato) e Windows verdes; merge no `main` (PR #2) |
 
 ## Pendências por fase
 
