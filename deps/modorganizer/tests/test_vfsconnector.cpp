@@ -671,6 +671,53 @@ TEST_F(VfsConnectorTest, ActivateErrorIsException)
   EXPECT_FALSE(vfs->isActive());
 }
 
+// an update that failed in updateMapping() must not make activate() skip its own
+TEST_F(VfsConnectorTest, ActivateUpdatesAgainAfterFailedUpdateMapping)
+{
+  fakeHelper("[ \"$1\" = \"--cleanup\" ] && exit 0\n"
+             "[ \"$1\" = \"--list-mounts\" ] && exit 0\n"
+             "echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"ready\",\"roots\":[]}'\n"
+             "read line\n"
+             "echo '{\"event\":\"updated\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"error\",\"code\":\"bad_request\","
+             "\"message\":\"nope\",\"path\":null}'\n"
+             "read line\n"
+             "echo '{\"event\":\"error\",\"code\":\"bad_request\","
+             "\"message\":\"still nope\",\"path\":null}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  vfs->updateMapping({Mapping{"/a", "/b", true, false}});
+  vfs->activate();  // mount
+
+  vfs->updateMapping({Mapping{"/a", "/b", true, false}});  // updated
+  vfs->updateMapping({Mapping{"/a", "/b", true, false}});  // error, logged
+
+  try {
+    vfs->activate();
+    FAIL() << "activate() did not send its own update";
+  } catch (const std::runtime_error& e) {
+    EXPECT_EQ(std::string(e.what()), "still nope");
+  }
+}
+
+TEST_F(VfsConnectorTest, SpawnWithoutPidIsException)
+{
+  fakeHelper("echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"
+             "read line\n"
+             "echo '{\"event\":\"spawned\"}'\n"
+             "read line\n");
+
+  const auto vfs = createVfsConnector();
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = "/";
+  EXPECT_THROW(vfs->spawn(r), std::runtime_error);
+}
+
 TEST_F(VfsConnectorTest, ErrorWithoutPath)
 {
   fakeHelper("echo '{\"event\":\"hello\",\"version\":\"0\"}'\n"

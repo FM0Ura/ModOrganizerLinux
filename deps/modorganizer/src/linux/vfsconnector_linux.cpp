@@ -212,6 +212,7 @@ public:
         send(mappingRequest("update"), mountTimeout());
         m_mappingSent = true;
       } catch (const std::exception& e) {
+        m_mappingSent = false;
         log::error("cannot update the virtual file system: {}", e.what());
       }
     } else {
@@ -373,6 +374,10 @@ public:
 
     const auto reply = send(r, 10s);
     const auto pid   = reply.value("pid").toInteger();
+
+    if (pid <= 0) {
+      throw std::runtime_error("mo2-vfs did not give the pid of the program");
+    }
 
     if (m_active) {
       // its process group keeps the mount: releaseIfIdle() must not unmount
