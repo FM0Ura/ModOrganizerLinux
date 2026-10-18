@@ -860,6 +860,189 @@ TEST_F(VfsConnectorTest, HelperCrashWithWatchedGroupCleansUp)
   ::waitpid(pid, &status, 0);
 }
 
+// the helper ended with its mount left behind, then an unhooked Run started a new
+// helper (spawn()): the next activation still cleans up the left mount first and, as it
+// can't be unmounted, fails instead of mounting over it
+TEST_F(VfsConnectorTest, SpawnAfterLostHelperKeepsTheLeftMountGuard)
+{
+  const auto count    = m_state.path() / "count";
+  const auto requests = m_state.path() / "requests.log";
+  fakeHelper(R"([ "$1" = "--cleanup" ] && exit 0
+if [ "$1" = "--list-mounts" ]; then echo '{"roots":["/x/Data"]}'; exit 0; fi
+n=$(( $(cat ')" +
+             count.string() + R"(' 2>/dev/null || echo 0) + 1 ))
+echo $n > ')" +
+             count.string() + R"('
+echo '{"event":"hello","version":"0"}'
+if [ $n = 1 ]; then
+  read line
+  echo '{"event":"ready","roots":["/x/Data"]}'
+  read line
+  echo '{"event":"spawned","pid":1111}'
+  sleep 0.2
+  exit 1
+fi
+while read line; do
+  echo "$line" >> ')" +
+             requests.string() + R"('
+  case "$line" in
+    *'"op":"spawn"'*) echo '{"event":"spawned","pid":4242}' ;;
+    *) echo '{"event":"ready","roots":["/x/Data"]}' ;;
+  esac
+done
+)");
+
+  const auto vfs = createVfsConnector();
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = "/";
+
+  // a hooked Run
+  vfs->activate();
+  EXPECT_EQ(vfs->spawn(r), 1111);
+
+  // the helper ends and its mount can't be unmounted
+  processEvents(600);
+  ASSERT_TRUE(vfs->isActive());
+  ASSERT_TRUE(vfs->staleMounts().contains("/x/Data"));
+
+  // an unhooked Run starts a new helper
+  EXPECT_EQ(vfs->spawn(r), 4242);
+  EXPECT_TRUE(vfs->isActive());
+
+  // a hooked Run
+  try {
+    vfs->activate();
+    FAIL() << "activate() mounted over the left mount";
+  } catch (const std::runtime_error& e) {
+    EXPECT_NE(std::string(e.what()).find("still mounted"), std::string::npos)
+        << e.what();
+  }
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(readFile(requests).find("\"op\":\"mount\""), std::string::npos)
+      << readFile(requests);
+}
+
+// the mount table can't be read after the helper ended: its mount counts as still
+// mounted (the refresh must not walk a mount that may still be there)
+TEST_F(VfsConnectorTest, UnreadableMountTableKeepsTheMount)
+{
+  fakeHelper(R"([ "$1" = "--cleanup" ] && exit 0
+[ "$1" = "--list-mounts" ] && exit 1
+echo '{"event":"hello","version":"0"}'
+read line
+echo '{"event":"ready","roots":["/x/Data"]}'
+sleep 0.2
+exit 1
+)");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->activate();
+  ASSERT_TRUE(vfs->isActive());
+
+  EXPECT_FALSE(vfs->waitInactive(std::chrono::seconds(1)));
+  processEvents(100);
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(called, 0);
+  EXPECT_TRUE(vfs->staleMounts().contains("/x/Data"));
+  const auto reason = vfs->takeLostReason();
+  EXPECT_TRUE(reason.contains("mount table")) << reason.toStdString();
+
+  // still unknown: not mounted over
+  EXPECT_THROW(vfs->activate(), std::runtime_error);
+  EXPECT_TRUE(vfs->isActive());
+}
+
+// the helper ended between activate() and spawn(): the program is not started without
+// the virtual file system (it would see and write the real data directory)
+TEST_F(VfsConnectorTest, HelperLostBeforeSpawnIsException)
+{
+  const auto count = m_state.path() / "count";
+  fakeHelper(R"([ "$1" = "--cleanup" ] && exit 0
+if [ "$1" = "--list-mounts" ]; then echo '{"roots":[]}'; exit 0; fi
+n=$(( $(cat ')" +
+             count.string() + R"(' 2>/dev/null || echo 0) + 1 ))
+echo $n > ')" +
+             count.string() + R"('
+echo '{"event":"hello","version":"0"}'
+if [ $n = 1 ]; then
+  read line
+  echo '{"event":"ready","roots":["/x/Data"]}'
+  sleep 0.2
+  exit 1
+fi
+while read line; do
+  echo '{"event":"spawned","pid":4242}'
+done
+)");
+
+  const auto vfs = createVfsConnector();
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = "/";
+
+  vfs->activate();
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(2)));
+
+  try {
+    vfs->spawn(r);
+    FAIL() << "spawn() started the program without the virtual file system";
+  } catch (const std::runtime_error& e) {
+    const std::string what = e.what();
+    EXPECT_NE(what.find("lost before the program started"), std::string::npos) << what;
+    EXPECT_NE(what.find("mo2-vfs ended"), std::string::npos) << what;
+  }
+  EXPECT_EQ(readFile(count), "1\n");
+
+  // the next Run, unhooked, starts a new helper
+  EXPECT_EQ(vfs->spawn(r), 4242);
+}
+
+// the helper ended as it replied to the mount, and both were handled by the same pass
+// of the event loop: activate() fails instead of leaving an active file system without
+// a helper
+TEST_F(VfsConnectorTest, HelperEndingAsItMountsIsException)
+{
+  const auto marker = m_state.path() / "mount-read";
+  fakeHelper(R"([ "$1" = "--cleanup" ] && exit 0
+if [ "$1" = "--list-mounts" ]; then echo '{"roots":[]}'; exit 0; fi
+echo '{"event":"hello","version":"0"}'
+read line
+touch ')" + marker.string() +
+             R"('
+sleep 0.3
+echo '{"event":"ready","roots":["/x/Data"]}'
+exit 1
+)");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  // blocks the event loop of the mount request until the helper has replied and ended
+  QTimer poll;
+  poll.setInterval(5);
+  QObject::connect(&poll, &QTimer::timeout, [&] {
+    if (fs::exists(marker)) {
+      poll.stop();
+      ::usleep(800 * 1000);
+    }
+  });
+  poll.start();
+
+  EXPECT_THROW(vfs->activate(), std::runtime_error);
+  EXPECT_FALSE(vfs->isActive());
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+}
+
 // the helper runs in a session of its own: the signals of the terminal of Mod
 // Organizer don't reach it
 TEST_F(VfsConnectorTest, HelperHasItsOwnSession)

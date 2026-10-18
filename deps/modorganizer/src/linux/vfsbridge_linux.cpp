@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <stdexcept>
+#include <utility>
 
 #include <uibase/log.h>
 
@@ -26,7 +27,11 @@ Mode mode(const QString& rootDir)
     return Mode::Host;
   }
   if (!v.isEmpty() && v != "auto") {
-    log::warn("MO2_VFS_BRIDGE={} is not direct, host or auto; detecting", v);
+    // mode() is called for every start of the helper: once is enough
+    static bool warned = false;
+    if (!std::exchange(warned, true)) {
+      log::warn("MO2_VFS_BRIDGE={} is not direct, host or auto; detecting", v);
+    }
   }
 
   const QString root   = rootDir.endsWith('/') ? rootDir : rootDir + "/";
