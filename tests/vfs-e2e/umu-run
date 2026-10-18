@@ -7,7 +7,8 @@ OUT="${UMU_OUT:?UMU_OUT is not set}"
 {
     printf 'arg %s\n' "$@"
     for v in WINEPREFIX GAMEID STORE SteamAppId SteamGameId PROTONPATH \
-        STEAM_COMPAT_CLIENT_INSTALL_PATH MO2_E2E_VAR; do
+        STEAM_COMPAT_CLIENT_INSTALL_PATH STEAM_COMPAT_INSTALL_PATH \
+        STEAM_COMPAT_LIBRARY_PATHS MO2_E2E_VAR; do
         printf 'env %s=%s\n' "$v" "${!v-<unset>}"
     done
     printf 'cwd %s\n' "$PWD"

@@ -27,7 +27,8 @@
 # the custom Proton in compatibilitytools.d) and tests/vfs-e2e/umu-run, a fake umu-run
 # found through PATH, stands in for the Windows program: it records its argv, the
 # environment (WINEPREFIX, GAMEID, STORE, SteamAppId, SteamGameId, PROTONPATH,
-# STEAM_COMPAT_CLIENT_INSTALL_PATH, MO2_E2E_VAR) and the working directory, which must be
+# STEAM_COMPAT_CLIENT_INSTALL_PATH, STEAM_COMPAT_INSTALL_PATH,
+# STEAM_COMPAT_LIBRARY_PATHS, MO2_E2E_VAR) and the working directory, which must be
 # the ones of the Steam game and of the executable, and then runs probe.sh: the same
 # checks as above hold.
 # Then the same run with MO2_VFS_BINARY pointing to a fake helper whose mount fails:
@@ -253,6 +254,9 @@ expect_line "env SteamAppId=489830"
 expect_line "env SteamGameId=489830"
 expect_line "env PROTONPATH=$STEAM/compatibilitytools.d/GE-Proton11-7"
 expect_line "env STEAM_COMPAT_CLIENT_INSTALL_PATH=$STEAM"
+# the game drive (S:) of Proton: canonical paths, the library list only has this Steam
+expect_line "env STEAM_COMPAT_INSTALL_PATH=$(readlink -f "$GAME")"
+expect_line "env STEAM_COMPAT_LIBRARY_PATHS=$(readlink -f "$STEAM/steamapps")"
 expect_line "env MO2_E2E_VAR=hello"
 expect_line "cwd $GAME"
 echo "ok umu-run: argv, environment and working directory"
