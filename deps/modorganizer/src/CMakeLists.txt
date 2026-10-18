@@ -142,6 +142,7 @@ set(_organizer_launch_sources
 # (secretstore_linux.cpp, over secretservice_linux.cpp) and the nxm:// handler
 # (nxmhandler_linux.cpp), spec of Phase 4a
 set(_organizer_desktop_sources
+	linux/nxmhandler_linux.cpp
 	linux/secretstore_linux.cpp)
 
 get_target_property(_organizer_sources organizer SOURCES)
