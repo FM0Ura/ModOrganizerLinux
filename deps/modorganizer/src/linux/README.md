@@ -48,14 +48,18 @@ Rules:
   mounts only while a program runs and unmounts when the last watched process group
   ends (spec: `docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`).
   `posixspawn_linux.{h,cpp}` (its own small library) starts programs in a process group of their own.
+  `vfsbridge_linux.{h,cpp}` decides where `mo2-vfs` runs: directly, or on the host through
+  `distrobox-host-exec` when Mod Organizer is in a container (`MO2_VFS_BRIDGE=direct|host|auto`;
+  auto looks for `/run/.containerenv` or `/.dockerenv`), so that the mounts and the programs
+  are those of the host.
 - `envfs_linux.cpp`, `util_linux.cpp` and `win32compat_linux.cpp` are built, with the
   data tree (`shared/` file register), into the static library `organizer_datatree`
   (so `util_linux.cpp` also keeps `ToLowerCopy(std::wstring_view)`, which is in the
   `_WIN32` block of `shared/util.cpp`: the rest of that file needs the main window);
   the rest of env,
   except `env.cpp` and `env_linux.cpp` (which need the settings), into
-  `organizer_env`; `loot_linux.cpp`, `spawn_linux.cpp`, `vfsclient_linux.cpp`
-  and `vfsconnector_linux.cpp` into `organizer_launch`. The application and the unit tests (`tests/`,
+  `organizer_env`; `loot_linux.cpp`, `spawn_linux.cpp`, `vfsbridge_linux.cpp`,
+  `vfsclient_linux.cpp` and `vfsconnector_linux.cpp` into `organizer_launch`. The application and the unit tests (`tests/`,
   `organizer_tests`) link them.
 - Code shared by both platforms stays in the shared file; `#ifdef _WIN32` is used there
   only for changes of one to three lines, or to wrap whole Win32 functions as above.

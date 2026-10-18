@@ -1,6 +1,10 @@
 // Linux implementation of the virtual file system connector (vfsconnector.h): the FUSE
 // file system of the mo2-vfs program.
 //
+// mo2-vfs is started through vfsbridge::helperCommand() (on the host when Mod Organizer
+// is in a container); the mount table is the helper's (`--list-mounts`), not this
+// process'.
+//
 // updateMapping() and updateParams() only keep what they are given; activate() starts
 // mo2-vfs (once; it is kept for the next activations) and mounts the file system, or
 // updates it if it is mounted. The paths of the mappings are disk paths; the ones built
@@ -11,6 +15,7 @@
 #include "../shared/appconfig.h"
 #include "../shared/util.h"
 #include "../vfsconnector.h"
+#include "vfsbridge_linux.h"
 #include "vfsclient_linux.h"
 
 #include <QCoreApplication>
@@ -50,7 +55,14 @@ QStringList cleanupStaleMounts()
 
   QProcess process;
   process.setProcessChannelMode(QProcess::SeparateChannels);
-  process.start(binary, {"--cleanup"});
+
+  try {
+    const auto cmd = vfsbridge::helperCommand(binary, {"--cleanup"});
+    process.start(cmd.program, cmd.arguments);
+  } catch (const std::exception& e) {
+    log::warn("cannot clean up stale mounts: {}", e.what());
+    return {};
+  }
 
   if (!process.waitForStarted(5000)) {
     log::warn("cannot run {} --cleanup: {}", binary, process.errorString());
@@ -118,58 +130,54 @@ QJsonArray toJson(const QStringList& list)
   return a;
 }
 
-// a mount point field of /proc/self/mountinfo: spaces, tabs, newlines and backslashes
-// are octal escapes (\040)
-QString unescapeMountinfo(const QByteArray& field)
-{
-  QByteArray out;
-  out.reserve(field.size());
-
-  for (qsizetype i = 0; i < field.size(); ++i) {
-    if (field[i] == '\\' && i + 3 < field.size() && field[i + 1] >= '0' &&
-        field[i + 1] <= '7' && field[i + 2] >= '0' && field[i + 2] <= '7' &&
-        field[i + 3] >= '0' && field[i + 3] <= '7') {
-      out.push_back(static_cast<char>((field[i + 1] - '0') * 64 +
-                                      (field[i + 2] - '0') * 8 + (field[i + 3] - '0')));
-      i += 3;
-    } else {
-      out.push_back(field[i]);
-    }
-  }
-
-  return QString::fromUtf8(out);
-}
-
-// the mo2-vfs mount points of this mount namespace: file system type fuse.mo2-vfs, or
-// fuse with the source mo2-vfs (mounts made by root)
+// the mo2-vfs mount points of the mount namespace of the helper (`mo2-vfs
+// --list-mounts`: on the host, when Mod Organizer is in a container)
 QStringList mountedRoots()
 {
-  QFile file("/proc/self/mountinfo");
-  if (!file.open(QIODevice::ReadOnly)) {
-    log::warn("cannot read /proc/self/mountinfo: {}", file.errorString());
+  const auto binary = vfsBinary();
+
+  QProcess process;
+  process.setProcessChannelMode(QProcess::SeparateChannels);
+
+  try {
+    const auto cmd = vfsbridge::helperCommand(binary, {"--list-mounts"});
+    process.start(cmd.program, cmd.arguments);
+  } catch (const std::exception& e) {
+    log::warn("cannot list the mounts: {}", e.what());
     return {};
   }
 
-  QStringList roots;
-
-  for (const auto& line : file.readAll().split('\n')) {
-    const auto sep = line.indexOf(" - ");
-    if (sep < 0) {
-      continue;
-    }
-
-    const auto pre  = line.left(sep).split(' ');
-    const auto post = line.mid(sep + 3).split(' ');
-    if (pre.size() < 5 || post.size() < 2) {
-      continue;
-    }
-
-    if (post[0] == "fuse.mo2-vfs" || (post[0] == "fuse" && post[1] == "mo2-vfs")) {
-      roots.push_back(unescapeMountinfo(pre[4]));
-    }
+  if (!process.waitForStarted(5000)) {
+    log::warn("cannot run {} --list-mounts: {}", binary, process.errorString());
+    return {};
   }
 
-  return roots;
+  process.closeWriteChannel();
+
+  if (!process.waitForFinished(10000)) {
+    log::warn("{} --list-mounts did not finish in time", binary);
+    process.kill();
+    process.waitForFinished(2000);
+    return {};
+  }
+
+  for (const auto& line : process.readAllStandardOutput().split('\n')) {
+    const auto doc = QJsonDocument::fromJson(line.trimmed());
+    if (!doc.isObject() || !doc.object().contains("roots")) {
+      continue;
+    }
+
+    QStringList roots;
+    for (const auto& r : doc.object().value("roots").toArray()) {
+      roots.push_back(r.toString());
+    }
+
+    return roots;
+  }
+
+  log::warn("{} --list-mounts did not list the mounts: {}", binary,
+            QString::fromUtf8(process.readAllStandardError()).trimmed());
+  return {};
 }
 }  // namespace
 
@@ -512,7 +520,8 @@ private:
 
     args << "--log-level" << logLevelName(m_logLevel);
 
-    auto client = std::make_unique<VfsClient>(binary, args);
+    const auto cmd = vfsbridge::helperCommand(binary, args);
+    auto client    = std::make_unique<VfsClient>(cmd.program, cmd.arguments);
 
     client->setUnmountedHandler([this] {
       deactivated();

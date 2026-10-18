@@ -62,6 +62,8 @@ protected:
   {
     m_oldState  = qgetenv("MO2_VFS_STATE_DIR");
     m_oldBinary = qgetenv("MO2_VFS_BINARY");
+    m_oldBridge = qgetenv("MO2_VFS_BRIDGE");
+    qputenv("MO2_VFS_BRIDGE", "direct");
     qputenv("MO2_VFS_STATE_DIR", QByteArray::fromStdString(m_state.path().string()));
   }
 
@@ -69,6 +71,7 @@ protected:
   {
     restore("MO2_VFS_STATE_DIR", m_oldState);
     restore("MO2_VFS_BINARY", m_oldBinary);
+    restore("MO2_VFS_BRIDGE", m_oldBridge);
   }
 
   // a shell script that is the helper
@@ -121,7 +124,7 @@ private:
     }
   }
 
-  QByteArray m_oldState, m_oldBinary;
+  QByteArray m_oldState, m_oldBinary, m_oldBridge;
 };
 
 // the fields after the command of /proc/<pid>/stat: state ppid pgrp session
@@ -850,6 +853,37 @@ TEST_F(VfsConnectorTest, NoStaleMountsWhenCleanupSucceeds)
 
   const auto vfs = createVfsConnector();
   EXPECT_TRUE(vfs->staleMounts().isEmpty());
+}
+
+TEST_F(VfsConnectorTest, HostBridgeRunsTheHelperThroughDistroboxHostExec)
+{
+  if (!requireVfs())
+    GTEST_SKIP();
+
+  const auto bin      = m_state.path() / "bin";
+  const auto hostExec = bin / "distrobox-host-exec";
+  const auto marker   = m_state.path() / "bridge-used";
+  fs::create_directories(bin);
+  {
+    std::ofstream(hostExec) << "#!/bin/sh\ntouch '" << marker.string()
+                            << "'\nexec \"$@\"\n";
+  }
+  fs::permissions(hostExec, fs::perms::owner_all);
+  const auto oldPath = qgetenv("PATH");
+  qputenv("PATH", QFile::encodeName(q(bin)) + ":" + oldPath);
+  qputenv("MO2_VFS_BRIDGE", "host");
+
+  Layout l;
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  {
+    const auto vfs = createVfsConnector();
+    Release release{*vfs};
+    vfs->updateMapping(l.mapping());
+    vfs->activate();
+    EXPECT_TRUE(fs::exists(l.data / "a.esp"));
+  }
+  qputenv("PATH", oldPath);
+  EXPECT_TRUE(fs::exists(marker));
 }
 
 TEST_F(VfsConnectorTest, ParamsSkipListsAreSent)
