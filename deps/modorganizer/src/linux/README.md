@@ -28,8 +28,9 @@ Rules:
   `commandline.cpp` → `commandline_linux.cpp`; `filetreeitem.cpp` →
   `filetreeitem_linux.cpp` (file type names from the shared MIME database);
   `pluginlist.cpp` → `pluginlist_linux.cpp` (plugin file times);
-  `settingsutilities.cpp` → `settingsutilities_linux.cpp` (credentials, kept in
-  memory only until there is a secret store)).
+  `settingsutilities.cpp` → `settingsutilities_linux.cpp` (credentials in the Secret
+  Service through `secretstore_linux.cpp`, over libsecret in
+  `secretservice_linux.cpp`; in memory when there is no Secret Service)).
 - `win32compat_linux.h`, included by `pch.h` on Linux after `<uibase/win32compat.h>`,
   has the few Win32 functions and MSVC macros that shared code calls directly
   (`GetLastError()` is `errno`, `Sleep()`, `GetProcessId()` of a pid `HANDLE`,

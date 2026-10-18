@@ -95,12 +95,13 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 # Win32 replacements of util_linux.cpp and win32compat_linux.cpp are built as a static
 # library, organizer_datatree, and the rest of env, except env.cpp
 # (which needs the settings), as organizer_env, the file tree of archives used by
-# the installation as organizer_archivetree, and the Linux parts of running programs
+# the installation as organizer_archivetree, the Linux parts of running programs
 # (the virtual file system connector, spawn and the availability of LOOT) as
 # organizer_launch, with its posix_spawn() call in organizer_posixspawn (built without
-# src/ in the include path, where spawn.h hides the <spawn.h> of the system); the
-# application links them and so do the unit tests (tests/), without the rest of the
-# application.
+# src/ in the include path, where spawn.h hides the <spawn.h> of the system), and the
+# desktop integration (logins in the Secret Service and the nxm:// handler) as
+# organizer_desktop; the application links them and so do the unit tests (tests/),
+# without the rest of the application.
 set(_organizer_datatree_sources
 	shared/directoryentry.cpp
 	shared/fileentry.cpp
@@ -137,6 +138,12 @@ set(_organizer_launch_sources
 	linux/vfsclient_linux.cpp
 	linux/vfsconnector_linux.cpp)
 
+# the desktop integration of the Linux build: logins in the Secret Service
+# (secretstore_linux.cpp, over secretservice_linux.cpp) and the nxm:// handler
+# (nxmhandler_linux.cpp), spec of Phase 4a
+set(_organizer_desktop_sources
+	linux/secretstore_linux.cpp)
+
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)
 foreach(_source IN LISTS _organizer_sources)
@@ -152,6 +159,7 @@ foreach(_source IN LISTS _organizer_sources)
 				OR _relative IN_LIST _organizer_datatree_sources
 				OR _relative IN_LIST _organizer_env_sources
 				OR _relative IN_LIST _organizer_launch_sources
+				OR _relative IN_LIST _organizer_desktop_sources
 				OR _relative STREQUAL "linux/posixspawn_linux.cpp"
 				OR _relative STREQUAL "linux/secretservice_linux.cpp"
 				OR _relative STREQUAL "archivefiletree.cpp"
@@ -258,8 +266,19 @@ if (NOT WIN32)
 	target_link_libraries(organizer_launch PUBLIC
 		organizer_env mo2::lootcli-header organizer_posixspawn)
 
+	add_library(organizer_desktop STATIC ${_organizer_desktop_sources})
+	mo2_configure_target(organizer_desktop
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+	target_precompile_headers(organizer_desktop REUSE_FROM organizer_datatree)
+	target_link_libraries(organizer_desktop PUBLIC organizer_launch)
+	if (MO2_WITH_LIBSECRET)
+		target_link_libraries(organizer_desktop PUBLIC organizer_secretservice)
+		target_compile_definitions(organizer_desktop PUBLIC MO2_WITH_LIBSECRET)
+	endif()
+
 	target_link_libraries(organizer PRIVATE
-		organizer_launch organizer_archivetree organizer_env organizer_datatree)
+		organizer_desktop organizer_launch organizer_archivetree organizer_env
+		organizer_datatree)
 endif()
 
 # we add translations "manually" to handle MO2_INSTALL_IS_BIN
