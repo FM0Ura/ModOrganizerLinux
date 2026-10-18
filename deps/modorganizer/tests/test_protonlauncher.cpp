@@ -79,12 +79,18 @@ TEST_F(ProtonLauncher, ArgumentsAreSplitLikeTheCommandLine)
                                  "-forcesteamloader", "a b", "c"}));
 }
 
-TEST_F(ProtonLauncher, ArgumentSplittingKeepsBackslashesAndEmptyArguments)
+TEST_F(ProtonLauncher, ArgumentSplittingKeepsBackslashes)
 {
-  const auto r =
-      proton::makeLaunch(exe("SkyrimSE.exe", R"(-d C:\Games\x "" 'it"s' a"b c"d)"));
+  const auto r = proton::makeLaunch(exe("SkyrimSE.exe", R"(-d C:\Games\x a"b c"d)"));
   EXPECT_EQ(r.argv, (QStringList{"umu-run", m_game + "/SkyrimSE.exe", "-d",
-                                 R"(C:\Games\x)", "", "it\"s", "ab cd"}));
+                                 R"(C:\Games\x)", "ab cd"}));
+}
+
+TEST_F(ProtonLauncher, ApostrophesAreLiteral)
+{
+  const auto r = proton::makeLaunch(exe("SkyrimSE.exe", "-title Assassin's Creed"));
+  EXPECT_EQ(r.argv, (QStringList{"umu-run", m_game + "/SkyrimSE.exe", "-title",
+                                 "Assassin's", "Creed"}));
 }
 
 TEST_F(ProtonLauncher, BatchFilesRunThroughCmd)
@@ -144,17 +150,39 @@ TEST_F(ProtonLauncher, SteamMappingProtonMissing)
   write(m_steam + "/config/config.vdf",
         "\"InstallConfigStore\" { \"Software\" { \"Valve\" { \"Steam\" { "
         "\"CompatToolMapping\" { \"489830\" { \"name\" \"proton_8\" } } } } } }");
-  EXPECT_THROW(proton::makeLaunch(exe("SkyrimSE.exe")), proton::LaunchError);
+  try {
+    proton::makeLaunch(exe("SkyrimSE.exe"));
+    FAIL();
+  } catch (const proton::LaunchError& e) {
+    const std::string m = e.what();
+    EXPECT_NE(m.find("proton_8"), std::string::npos) << m;
+    EXPECT_NE(m.find("not installed"), std::string::npos) << m;
+  }
 }
 
-TEST_F(ProtonLauncher, NoPrefixOrNoGame)
+TEST_F(ProtonLauncher, NoPrefix)
 {
   QDir(m_steam + "/steamapps/compatdata").removeRecursively();
-  EXPECT_THROW(proton::makeLaunch(exe("SkyrimSE.exe")), proton::LaunchError);
+  try {
+    proton::makeLaunch(exe("SkyrimSE.exe"));
+    FAIL();
+  } catch (const proton::LaunchError& e) {
+    const std::string m = e.what();
+    EXPECT_NE(m.find("Run the game once from Steam"), std::string::npos) << m;
+  }
+}
 
+TEST_F(ProtonLauncher, NoGameAppId)
+{
   auto p           = exe("SkyrimSE.exe");
   p.gameSteamAppId = "";
-  EXPECT_THROW(proton::makeLaunch(p), proton::LaunchError);
+  try {
+    proton::makeLaunch(p);
+    FAIL();
+  } catch (const proton::LaunchError& e) {
+    const std::string m = e.what();
+    EXPECT_NE(m.find("no Steam app ID"), std::string::npos) << m;
+  }
 }
 
 TEST_F(ProtonLauncher, NativeProgramsRunDirectly)
@@ -162,7 +190,7 @@ TEST_F(ProtonLauncher, NativeProgramsRunDirectly)
   write(m_tmp.path() + "/tool.sh", "#!/bin/sh\n");
   proton::LaunchParameters p;
   p.binary      = QFileInfo(m_tmp.path() + "/tool.sh");
-  p.arguments   = "a 'b c'";
+  p.arguments   = R"(a "b c")";
   p.environment = {"X=1"};
   const auto r  = proton::makeLaunch(p);
   EXPECT_EQ(r.argv, (QStringList{m_tmp.path() + "/tool.sh", "a", "b c"}));

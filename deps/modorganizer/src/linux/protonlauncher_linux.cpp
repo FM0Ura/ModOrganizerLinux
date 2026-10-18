@@ -6,6 +6,7 @@
 #include "protonlauncher_linux.h"
 
 #include <QObject>
+#include <QProcess>
 #include <QRegularExpression>
 
 #include <uibase/linux/steam.h>
@@ -17,45 +18,6 @@ namespace proton
 {
 namespace
 {
-  // splits like a command line: spaces separate, single or double quotes group (and
-  // are dropped); no escapes, so the backslashes of Windows paths stay as they are.
-  // QProcess::splitCommand() would not know the single quotes
-  QStringList splitArguments(const QString& line)
-  {
-    QStringList list;
-    QString current;
-    QChar quote;
-    bool started = false;
-
-    for (const QChar c : line) {
-      if (!quote.isNull()) {
-        if (c == quote) {
-          quote = QChar();
-        } else {
-          current += c;
-        }
-      } else if (c == '"' || c == '\'') {
-        quote   = c;
-        started = true;
-      } else if (c.isSpace()) {
-        if (started) {
-          list.append(current);
-          current.clear();
-          started = false;
-        }
-      } else {
-        current += c;
-        started = true;
-      }
-    }
-
-    if (started) {
-      list.append(current);
-    }
-
-    return list;
-  }
-
   QString names(const std::vector<steam::Proton>& protons)
   {
     QStringList list;
@@ -95,7 +57,7 @@ VfsSpawnRequest makeLaunch(const LaunchParameters& p)
 {
   VfsSpawnRequest r;
   const auto program = p.binary.absoluteFilePath();
-  const auto args    = splitArguments(p.arguments);
+  const auto args    = QProcess::splitCommand(p.arguments);
 
   r.workingDirectory = (p.workingDirectory.isEmpty() || p.workingDirectory == ".")
                            ? p.binary.absolutePath()
