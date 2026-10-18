@@ -42,6 +42,7 @@ if (NOT WIN32)
 	set(linux_headers
 		../include/uibase/linux/filetime.h
 		../include/uibase/linux/inifile.h
+		../include/uibase/linux/steam.h
 		../include/uibase/linux/vdf.h
 	)
 endif()
@@ -195,6 +196,7 @@ else()
 		linux/registry_linux.cpp
 		linux/report_linux.cpp
 		linux/shell_linux.cpp
+		linux/steam_linux.cpp
 		linux/steamutility_linux.cpp
 		linux/taskprogressmanager_linux.cpp
 		linux/trash_linux.cpp
