@@ -29,6 +29,8 @@ pub enum ErrorCode {
     Io,
     /// Malformed or out-of-sequence request (used by the line protocol).
     BadRequest,
+    /// A program of a `spawn` request could not be started.
+    SpawnFailed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

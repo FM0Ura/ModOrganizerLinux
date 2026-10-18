@@ -5,6 +5,7 @@
 //! - `tree`: virtual tree built from the layers; case-insensitive lookup, exclusion masks.
 //! - `fs`: the `fuser::Filesystem` implementation (inode, node, real file).
 //! - `session`: one mount per root; opens the original layer fd before mounting; state file.
+//! - `spawn`: starts the programs of `spawn` requests in a process group of their own.
 //! - `ipc`: line-delimited JSON protocol over stdin/stdout.
 //! - `bin/mo2-vfs.rs`: arguments, logging, signals and the `ipc` loop.
 
@@ -16,6 +17,7 @@ pub mod mapping;
 pub mod name;
 pub mod ops;
 pub mod session;
+pub mod spawn;
 pub mod state;
 pub mod tree;
 pub mod watch;

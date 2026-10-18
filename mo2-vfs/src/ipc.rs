@@ -31,6 +31,16 @@ pub enum Request {
     },
     Unmount,
     Status,
+    Spawn {
+        argv: Vec<String>,
+        #[serde(default)]
+        env: std::collections::BTreeMap<String, String>,
+        cwd: PathBuf,
+        #[serde(default)]
+        wineprefix: Option<PathBuf>,
+        #[serde(default)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,6 +68,13 @@ pub enum Event {
         nodes: usize,
         masks: usize,
         groups: Vec<i32>,
+    },
+    Spawned {
+        pid: i32,
+    },
+    Exited {
+        pid: i32,
+        code: i32,
     },
 }
 
@@ -88,11 +105,13 @@ pub fn parse_request(line: &str) -> Result<Request, Event> {
     serde_json::from_str(line).map_err(|e| Event::bad_request(format!("invalid request: {e}")))
 }
 
-/// The mount (at most one per process) and the process groups watched on its behalf.
+/// The mount (at most one per process), the process groups watched on its behalf and the
+/// programs started by `spawn` requests.
 #[derive(Default)]
 pub struct Server {
     session: Option<Session>,
     groups: Vec<i32>,
+    children: Vec<std::process::Child>,
     /// Roots whose automatic unmount failed, retried lazily, with the directory of the
     /// state file that still lists them.
     stale: Vec<PathBuf>,
@@ -108,7 +127,8 @@ impl Server {
         self.session.is_some()
     }
 
-    pub fn has_groups(&self) -> bool {
+    /// True while something keeps the mount alive (watched process groups).
+    pub fn has_watched(&self) -> bool {
         !self.groups.is_empty()
     }
 
@@ -161,6 +181,30 @@ impl Server {
                 }
                 Event::Ok
             }
+            Request::Spawn {
+                argv,
+                env,
+                cwd,
+                wineprefix: _,
+                output,
+            } => {
+                if argv.is_empty() {
+                    return Event::bad_request("argv is empty");
+                }
+                match crate::spawn::start(&argv, &env, &cwd, output.as_deref()) {
+                    Ok(child) => {
+                        let pid = child.id() as i32;
+                        tracing::info!(pid, ?argv, cwd = %cwd.display(), "started");
+                        if self.session.is_some() && !self.groups.contains(&pid) {
+                            // its process group (pgid == pid) keeps the mount alive
+                            self.groups.push(pid);
+                        }
+                        self.children.push(child);
+                        Event::Spawned { pid }
+                    }
+                    Err(e) => e.into(),
+                }
+            }
             Request::Unmount => match self.unmount() {
                 Ok(()) => Event::Unmounted,
                 Err(e) => e.into(),
@@ -178,6 +222,28 @@ impl Server {
                 }
             }
         }
+    }
+
+    /// Reaps the started programs that ended: one `exited` event for each.
+    pub fn poll_children(&mut self) -> Vec<Event> {
+        let mut events = Vec::new();
+        self.children.retain_mut(|child| match child.try_wait() {
+            Ok(Some(status)) => {
+                let code = crate::spawn::exit_code(status);
+                tracing::info!(pid = child.id(), code, "program ended");
+                events.push(Event::Exited {
+                    pid: child.id() as i32,
+                    code,
+                });
+                false
+            }
+            Ok(None) => true,
+            Err(e) => {
+                tracing::warn!(pid = child.id(), error = %e, "cannot wait for a started program");
+                false
+            }
+        });
+        events
     }
 
     /// Unmounts (if mounted) and forgets the watched groups; the roots of a failed
@@ -291,6 +357,11 @@ mod tests {
         assert!(matches!(
             parse_request(r#"{"op":"watch","pgid":7}"#),
             Ok(Request::Watch { pgid: 7 })
+        ));
+        assert!(matches!(
+            parse_request(r#"{"op":"spawn","argv":["x"],"cwd":"/"}"#),
+            Ok(Request::Spawn { ref argv, ref env, ref wineprefix, ref output, .. })
+                if argv == &["x"] && env.is_empty() && wineprefix.is_none() && output.is_none()
         ));
         assert!(matches!(
             parse_request(r#"{"op":"unmount"}"#),

@@ -657,3 +657,179 @@ fn kill_signal(pid: u32, sig: rustix::process::Signal) {
 fn kill_term(pid: u32) {
     kill_signal(pid, rustix::process::Signal::TERM);
 }
+
+/// Events until one matches `pred` (returned), with the ones before it.
+fn until(c: &mut Client, what: &str, pred: impl Fn(&Value) -> bool) -> (Value, Vec<Value>) {
+    let mut before = Vec::new();
+    loop {
+        let ev = c
+            .try_event(EVENT_TIMEOUT)
+            .unwrap_or_else(|| panic!("no {what} within {EVENT_TIMEOUT:?}; got {before:?}"));
+        if pred(&ev) {
+            return (ev, before);
+        }
+        before.push(ev);
+    }
+}
+
+fn spawn_request(argv: &[&str], cwd: &Path) -> Value {
+    json!({"op": "spawn", "argv": argv, "env": {}, "cwd": cwd})
+}
+
+#[test]
+fn spawn_without_mount_runs_and_reports_exit() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let out = env.p("out.txt");
+    let script = format!(
+        "echo \"$FOO\" > '{0}'; pwd >> '{0}'; cut -d' ' -f5 /proc/$$/stat >> '{0}'; echo $$ >> '{0}'; exit 3",
+        out.display()
+    );
+    let mut req = spawn_request(&["sh", "-c", &script], &env.p("Data"));
+    req["env"] = json!({"FOO": "bar"});
+    let ev = c.request(req);
+    assert_eq!(ev["event"], "spawned", "{ev}");
+    let pid = ev["pid"].as_i64().unwrap();
+    let (ev, _) = until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(ev, json!({"event": "exited", "pid": pid, "code": 3}));
+    let lines: Vec<String> = fs::read_to_string(&out)
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect();
+    assert_eq!(lines[0], "bar");
+    assert_eq!(Path::new(&lines[1]), env.p("Data"));
+    // its own process group: pgrp == pid
+    assert_eq!(lines[2], lines[3]);
+    assert_eq!(lines[3], pid.to_string());
+}
+
+#[test]
+fn spawn_exit_by_signal_is_128_plus_signal() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let ev = c.request(spawn_request(&["sh", "-c", "kill -TERM $$"], &env.root));
+    let pid = ev["pid"].as_i64().unwrap();
+    let (ev, _) = until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(ev, json!({"event": "exited", "pid": pid, "code": 143}));
+}
+
+#[test]
+fn spawn_failures() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let ev = c.request(spawn_request(&["/nonexistent/program"], &env.root));
+    assert_eq!(ev["event"], "error", "{ev}");
+    assert_eq!(ev["code"], "spawn_failed");
+    assert_eq!(ev["path"], "/nonexistent/program");
+    let missing = env.p("missing-dir");
+    let ev = c.request(spawn_request(&["true"], &missing));
+    assert_eq!(ev["code"], "spawn_failed", "{ev}");
+    assert_eq!(ev["path"], json!(missing));
+    let ev = c.request(json!({"op": "spawn", "argv": [], "env": {}, "cwd": env.root}));
+    assert_eq!(ev["code"], "bad_request", "{ev}");
+    // still serving
+    assert_eq!(c.request(json!({"op": "status"}))["event"], "status");
+}
+
+#[test]
+fn spawn_argv_with_spaces_and_unicode() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let out = env.p("args.txt");
+    let script = format!("printf '%s\\n' \"$@\" > '{}'", out.display());
+    let ev = c.request(spawn_request(
+        &[
+            "sh",
+            "-c",
+            &script,
+            "sh",
+            "Skyrim Special Edition",
+            "Ünïcödé/x.exe",
+            "a \"b\" c",
+        ],
+        &env.root,
+    ));
+    assert_eq!(ev["event"], "spawned", "{ev}");
+    until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(
+        fs::read_to_string(&out).unwrap(),
+        "Skyrim Special Edition\nÜnïcödé/x.exe\na \"b\" c\n"
+    );
+}
+
+#[test]
+fn spawn_output_goes_to_the_file_not_to_the_protocol() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let log = env.p("run.log");
+    let mut req = spawn_request(
+        &["sh", "-c", "echo not-json; echo on-stderr >&2"],
+        &env.root,
+    );
+    req["output"] = json!(log);
+    c.request(req);
+    // a non-JSON line on stdout would make the client panic
+    until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(fs::read_to_string(&log).unwrap(), "not-json\non-stderr\n");
+    // without output, nothing reaches the protocol either
+    c.request(spawn_request(&["sh", "-c", "echo not-json"], &env.root));
+    until(&mut c, "exited", |e| e["event"] == "exited");
+}
+
+#[test]
+fn spawn_while_mounted_is_watched_and_exited_comes_before_unmounted() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let mut c = Client::start(&env);
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    let ev = c.request(spawn_request(
+        &["sh", "-c", "cat a.txt > ../seen.txt; sleep 0.5"],
+        &env.p("Data"),
+    ));
+    let pid = ev["pid"].as_i64().unwrap();
+    let st = c.request(json!({"op": "status"}));
+    assert_eq!(st["groups"], json!([pid]));
+    let (ev, before) = until(&mut c, "unmounted", |e| e["event"] == "unmounted");
+    assert_eq!(ev, json!({"event": "unmounted"}));
+    assert_eq!(
+        before,
+        vec![json!({"event": "exited", "pid": pid, "code": 0})]
+    );
+    assert_eq!(fs::read_to_string(env.p("seen.txt")).unwrap(), "a");
+    assert!(!is_mounted(&env.p("Data")));
+}
+
+#[test]
+fn mo2_vfs_is_session_leader() {
+    let env = Env::new();
+    let c = Client::start(&env);
+    let pid = c.child.id();
+    let stat = fs::read_to_string(format!("/proc/{pid}/stat")).unwrap();
+    let rest: Vec<&str> = stat[stat.rfind(')').unwrap() + 2..].split(' ').collect();
+    // state ppid pgrp session
+    assert_eq!(rest[3], pid.to_string());
+}
+
+#[test]
+fn closed_stdout_is_not_a_warning() {
+    let env = Env::new();
+    let mut child = env
+        .command()
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    drop(child.stdout.take()); // the application is gone
+    writeln!(stdin, "{}", json!({"op": "status"})).unwrap();
+    drop(stdin);
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("cannot write to stdout"), "{stderr}");
+}

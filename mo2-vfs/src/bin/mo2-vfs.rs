@@ -76,8 +76,13 @@ fn init_logging(args: &Args) {
 fn emit(event: &Event) {
     let mut out = std::io::stdout().lock();
     let line = serde_json::to_string(event).expect("events serialize");
-    if let Err(e) = writeln!(out, "{line}").and_then(|()| out.flush()) {
-        tracing::warn!(error = %e, "cannot write to stdout");
+    match writeln!(out, "{line}").and_then(|()| out.flush()) {
+        Ok(()) => {}
+        // the application closed its end (it exited or crashed): nothing to report
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {
+            tracing::debug!("stdout is closed, event dropped: {line}")
+        }
+        Err(e) => tracing::warn!(error = %e, "cannot write to stdout"),
     }
 }
 
@@ -112,6 +117,12 @@ fn shutdown(server: &mut Server) {
 /// a program started by the application keeps its files.
 fn serve() -> ExitCode {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGTERM};
+    // a session of its own whoever started it (QProcess with setsid() in the child, or
+    // host-spawn through distrobox-host-exec): the signals of a terminal don't reach it;
+    // fails harmlessly when it already leads a session or a process group
+    if let Err(e) = rustix::process::setsid() {
+        tracing::debug!(error = %e, "setsid");
+    }
     let (tx, rx) = mpsc::channel();
     match signal_hook::iterator::Signals::new([SIGTERM, SIGINT, SIGHUP]) {
         Ok(mut signals) => {
@@ -163,7 +174,7 @@ fn serve() -> ExitCode {
             }
             Ok(Msg::Signal(SIGHUP)) => tracing::info!("SIGHUP ignored"),
             Ok(Msg::Signal(sig)) => {
-                if !server.has_groups() {
+                if !server.has_watched() {
                     tracing::info!(signal = sig, "termination signal");
                     shutdown(&mut server);
                     return ExitCode::SUCCESS;
@@ -177,10 +188,13 @@ fn serve() -> ExitCode {
             }
             Err(RecvTimeoutError::Timeout) => {}
         }
+        for event in server.poll_children() {
+            emit(&event);
+        }
         if let Some(event) = server.poll_groups() {
             emit(&event);
         }
-        if ending && !server.has_groups() {
+        if ending && !server.has_watched() {
             shutdown(&mut server);
             return ExitCode::SUCCESS;
         }
