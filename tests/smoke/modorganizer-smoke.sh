@@ -107,7 +107,7 @@ main_window() {
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
         XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state" \
         XDG_RUNTIME_DIR="$work/runtime" TMPDIR="$work/tmp" \
-        QT_QPA_PLATFORM=offscreen \
+        MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen \
         QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu" \
         "$APP" --logs -i smoke > "$out" 2>&1 < /dev/null &
     pid=$!

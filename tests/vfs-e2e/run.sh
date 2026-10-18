@@ -166,18 +166,28 @@ mo2_make_instance "$FIXTURE" "$WORK" "$GAME" "$INSTANCE" "$WORK/bin/probe.sh" "$
 # the real data directory, to compare with afterwards
 original="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)"
 
+# run_app <executable> [VAR=value...]: `ModOrganizer -i vfs-e2e run -e <executable>` as
+# the first two scenarios run it, with the environment of the test (everything inside
+# $WORK, the real mo2-vfs, the helper run directly) plus the given variables, output in
+# $APP_OUT; returns the exit status of the application (124: timeout)
+run_app() {
+    local executable="$1"
+    shift
+    env HOME="$HOMEDIR" \
+        XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
+        XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
+        XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
+        MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs" \
+        MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen "$@" \
+        timeout -k 10 "$TIMEOUT" "$APP" --logs -i vfs-e2e run -e "$executable" \
+        > "$APP_OUT" 2>&1 < /dev/null
+}
+
 # --- run ---------------------------------------------------------------------------
 
 echo "--- ModOrganizer -i vfs-e2e run -e probe (${TIMEOUT}s)"
 rc=0
-env HOME="$HOMEDIR" \
-    XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
-    XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
-    XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
-    MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs" \
-    MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
-    timeout -k 10 "$TIMEOUT" "$APP" --logs -i vfs-e2e run -e probe \
-    > "$APP_OUT" 2>&1 < /dev/null || rc=$?
+run_app probe || rc=$?
 
 ((rc == 0)) || die "the application exited with $rc (124: timeout)"
 
@@ -225,15 +235,8 @@ rm -f "$PROBE_OUT" "$INSTANCE/overwrite/probe-created.txt"
 
 echo "--- ModOrganizer -i vfs-e2e run -e probe-exe, fake umu-run (${TIMEOUT}s)"
 rc=0
-env HOME="$HOMEDIR" \
-    XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
-    XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
-    XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
-    MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs" \
-    MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
-    PATH="$WORK/umu-bin:$PATH" UMU_OUT="$WORK/umu.out" PROBE="$WORK/bin/probe.sh" \
-    timeout -k 10 "$TIMEOUT" "$APP" --logs -i vfs-e2e run -e probe-exe \
-    > "$APP_OUT" 2>&1 < /dev/null || rc=$?
+run_app probe-exe PATH="$WORK/umu-bin:$PATH" UMU_OUT="$WORK/umu.out" \
+    PROBE="$WORK/bin/probe.sh" || rc=$?
 
 ((rc == 0)) || die "the application exited with $rc (124: timeout)"
 
