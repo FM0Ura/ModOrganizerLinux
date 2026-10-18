@@ -50,10 +50,13 @@ start() {
     # a private runtime directory too: neither it nor the state directory of mo2-vfs
     # (read by its --cleanup at startup) may be the user's
     mkdir -m 700 "$home/runtime"
+    # logins are in the Secret Service: a bus that does not exist keeps the test away
+    # from the keyring of the user (the box reaches the session bus of the host)
     out="$(env HOME="$home" \
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
         XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state" \
         XDG_RUNTIME_DIR="$home/runtime" MO2_VFS_STATE_DIR="$home/runtime/mo2-vfs" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$home/no-bus" \
         MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen \
         timeout -k 10 "$TIMEOUT" "$APP" --logs 2>&1)" || rc=$?
     rm -rf "$home"
@@ -105,10 +108,13 @@ main_window() {
     # QtWebEngine (the main window's Nexus/browser parts) refuses to run as root (CI
     # container) without --no-sandbox; the application has no --disable-gpu option, the
     # Chromium flag is the equivalent
+    # no session bus: logins are in the Secret Service, the test must not touch the
+    # keyring of the user
     app_env=(HOME="$home"
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share"
         XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state"
         XDG_RUNTIME_DIR="$work/runtime" TMPDIR="$work/tmp"
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$work/no-bus"
         MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen
         QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu")
     env "${app_env[@]}" "$APP" --logs -i smoke > "$out" 2>&1 < /dev/null &

@@ -172,12 +172,15 @@ original="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)
 # $WORK, the real mo2-vfs, the helper run directly) plus the given variables, output in
 # $APP_OUT; returns the exit status of the application (124: timeout)
 run_app() {
+    # DBUS_SESSION_BUS_ADDRESS points to a bus that does not exist: logins are in the
+    # Secret Service and the test must not touch the keyring of the user
     local executable="$1"
     shift
     env HOME="$HOMEDIR" \
         XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
         XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
         XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$WORK/no-bus" \
         MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs" \
         MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen "$@" \
         timeout -k 10 "$TIMEOUT" "$APP" --logs -i vfs-e2e run -e "$executable" \
@@ -284,6 +287,7 @@ env HOME="$HOMEDIR" \
     XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
     XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
     XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$WORK/no-bus" \
     MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$fake" \
     MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
     timeout -k 5 "$((FAIL_TIMEOUT + 10))" "$APP" --logs -i vfs-e2e run -e probe \
