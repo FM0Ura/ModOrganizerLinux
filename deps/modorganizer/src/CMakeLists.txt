@@ -124,6 +124,7 @@ set(_organizer_launch_sources
 	shared/appconfig.cpp
 	linux/exitcodes_linux.cpp
 	linux/loot_linux.cpp
+	linux/protonlauncher_linux.cpp
 	linux/spawn_linux.cpp
 	linux/vfsbridge_linux.cpp
 	linux/vfsclient_linux.cpp

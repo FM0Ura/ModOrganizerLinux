@@ -1,0 +1,181 @@
+// Launch of the programs started by Run on Linux (protonlauncher_linux.h): Windows
+// programs through umu-run in the Proton prefix of their Steam game (spec of Phase 3,
+// §6.2), native programs directly; both are then started by mo2-vfs
+// (VfsConnector::spawn()).
+
+#include "protonlauncher_linux.h"
+
+#include <QObject>
+#include <QRegularExpression>
+
+#include <uibase/linux/steam.h>
+#include <uibase/log.h>
+
+using namespace MOBase;
+
+namespace proton
+{
+namespace
+{
+  // splits like a command line: spaces separate, single or double quotes group (and
+  // are dropped); no escapes, so the backslashes of Windows paths stay as they are.
+  // QProcess::splitCommand() would not know the single quotes
+  QStringList splitArguments(const QString& line)
+  {
+    QStringList list;
+    QString current;
+    QChar quote;
+    bool started = false;
+
+    for (const QChar c : line) {
+      if (!quote.isNull()) {
+        if (c == quote) {
+          quote = QChar();
+        } else {
+          current += c;
+        }
+      } else if (c == '"' || c == '\'') {
+        quote   = c;
+        started = true;
+      } else if (c.isSpace()) {
+        if (started) {
+          list.append(current);
+          current.clear();
+          started = false;
+        }
+      } else {
+        current += c;
+        started = true;
+      }
+    }
+
+    if (started) {
+      list.append(current);
+    }
+
+    return list;
+  }
+
+  QString names(const std::vector<steam::Proton>& protons)
+  {
+    QStringList list;
+    for (const auto& p : protons) {
+      list.append(p.displayName);
+    }
+    return list.isEmpty() ? QObject::tr("none") : list.join(", ");
+  }
+}  // namespace
+
+bool isWindowsProgram(const QFileInfo& file)
+{
+  static const QStringList suffixes = {"exe", "bat", "cmd", "com"};
+  return suffixes.contains(file.suffix(), Qt::CaseInsensitive);
+}
+
+QStringList validEnvironment(const QStringList& environment)
+{
+  static const QRegularExpression name("^[A-Za-z_][A-Za-z0-9_]*$");
+  QStringList valid;
+
+  for (const auto& e : environment) {
+    const auto eq = e.indexOf('=');
+    if (eq > 0 && name.match(e.left(eq)).hasMatch()) {
+      valid.append(e);
+    } else if (!e.trimmed().isEmpty()) {
+      log::warn("ignoring the environment variable '{}' of the executable: it is not "
+                "NAME=value",
+                e);
+    }
+  }
+
+  return valid;
+}
+
+VfsSpawnRequest makeLaunch(const LaunchParameters& p)
+{
+  VfsSpawnRequest r;
+  const auto program = p.binary.absoluteFilePath();
+  const auto args    = splitArguments(p.arguments);
+
+  r.workingDirectory = (p.workingDirectory.isEmpty() || p.workingDirectory == ".")
+                           ? p.binary.absolutePath()
+                           : p.workingDirectory;
+  r.output           = p.output;
+  const auto extra   = validEnvironment(p.environment);
+
+  if (!isWindowsProgram(p.binary)) {
+    r.argv        = QStringList{program} + args;
+    r.environment = extra;
+    return r;
+  }
+
+  const auto appId = p.steamAppId.isEmpty() ? p.gameSteamAppId : p.steamAppId;
+  if (appId.isEmpty()) {
+    throw LaunchError(QObject::tr("Cannot start \"%1\" with Proton: the game has no "
+                                  "Steam app ID; set one in the executable settings.")
+                          .arg(program)
+                          .toStdString());
+  }
+
+  const auto app = steam::findApp(appId);
+  if (!app) {
+    throw LaunchError(QObject::tr("Cannot start \"%1\" with Proton: the Steam game %2 "
+                                  "is not installed in a Steam library.")
+                          .arg(program, appId)
+                          .toStdString());
+  }
+  if (app->compatData.isEmpty()) {
+    throw LaunchError(
+        QObject::tr("Cannot start \"%1\": the Steam game %2 has no Proton "
+                    "prefix yet. Run the game once from Steam to create "
+                    "it.")
+            .arg(program, appId)
+            .toStdString());
+  }
+
+  const auto protons = steam::installedProtons();
+  std::optional<steam::Proton> chosen;
+
+  if (!p.proton.isEmpty()) {
+    chosen = steam::findProton(protons, p.proton);
+    if (!chosen) {
+      throw LaunchError(QObject::tr("Proton \"%1\", set for this executable, is not "
+                                    "installed. Installed: %2.")
+                            .arg(p.proton, names(protons))
+                            .toStdString());
+    }
+  } else {
+    chosen = steam::protonForApp(*app);
+    if (!chosen) {
+      const auto mapped = steam::compatToolName(*app);
+      throw LaunchError(
+          (mapped.isEmpty()
+               ? QObject::tr("Cannot tell which Proton Steam uses for the game %1; "
+                             "choose one in the executable settings. Installed: %2.")
+                     .arg(appId, names(protons))
+               : QObject::tr("Steam uses Proton \"%1\" for the game %2, but it is not "
+                             "installed. Installed: %3.")
+                     .arg(mapped, appId, names(protons)))
+              .toStdString());
+    }
+  }
+
+  const bool batch = p.binary.suffix().compare("bat", Qt::CaseInsensitive) == 0 ||
+                     p.binary.suffix().compare("cmd", Qt::CaseInsensitive) == 0;
+  r.argv           = batch ? QStringList{"umu-run", "cmd", "/c", program} + args
+                           : QStringList{"umu-run", program} + args;
+
+  r.environment = QStringList{"WINEPREFIX=" + app->compatData,
+                              "GAMEID=umu-" + appId,
+                              "STORE=steam",
+                              "SteamAppId=" + appId,
+                              "SteamGameId=" + appId,
+                              "PROTONPATH=" + chosen->path,
+                              "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + app->root} +
+                  extra;
+  r.winePrefix  = app->compatData;
+
+  log::debug("{} runs with {} in {}", program, chosen->displayName, app->compatData);
+  return r;
+}
+}  // namespace proton
