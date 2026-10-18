@@ -61,7 +61,7 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
    - Com a mesma imagem do CI (recomendado):
      ```sh
      git clone https://github.com/FM0Ura/ModOrganizerLinux.git && cd ModOrganizerLinux
-     git checkout claude/serene-maxwell-1dyrbg
+     git checkout main
      podman build -t mo2-linux-build -f build/Containerfile build/
      distrobox create --name mo2-run --image localhost/mo2-linux-build
      ```
@@ -75,7 +75,7 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
      ```
 2. Obtenha o artefato `mo2-linux-install`. Duas rotas:
    - **Pelo navegador:** GitHub -> repositório `FM0Ura/ModOrganizerLinux` -> aba Actions ->
-     workflow **Linux** -> último run verde da branch `claude/serene-maxwell-1dyrbg` ->
+     workflow **Linux** -> último run verde do branch `main` ->
      seção Artifacts -> `mo2-linux-install` (é preciso estar logado no GitHub). O download é
      um zip; extraia (só nesta rota):
      ```sh

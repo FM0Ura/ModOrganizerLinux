@@ -26,11 +26,11 @@ Fedora 44). Detalhes e variantes em [README.md](../../README.md#rodando-no-bazzi
 ```sh
 # 1. imagem e container (uma vez só), a partir do repositório clonado
 git clone https://github.com/FM0Ura/ModOrganizerLinux.git && cd ModOrganizerLinux
-git checkout claude/serene-maxwell-1dyrbg && git pull
+git checkout main && git pull
 podman build -t mo2-linux-build -f build/Containerfile build/
 distrobox create --name mo2-run --image localhost/mo2-linux-build
 # 2. baixe o artefato "mo2-linux-install" (GitHub -> Actions -> workflow "Linux" ->
-#    último run verde da branch claude/serene-maxwell-1dyrbg -> Artifacts), então:
+#    último run verde do branch main -> Artifacts), então:
 mkdir -p ~/mo2-phase1 && unzip ~/Downloads/mo2-linux-install.zip -d ~/mo2-phase1
 chmod +x ~/mo2-phase1/bin/ModOrganizer
 # 3. rodar (guarde a saída do terminal)

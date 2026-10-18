@@ -3,8 +3,8 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-17
-**Fase atual:** 2 — VFS FUSE · **Status:** ✅ implementada e aprovada no teste manual (2026-10-17) — aguardando merge no `main` · **Anterior:** Fase 1 — Build nativo ✅
-**Branch de trabalho:** `fase-2-vfs-fuse` (Fase 1 em `claude/serene-maxwell-1dyrbg`)
+**Fase atual:** 2 — VFS FUSE · **Status:** ✅ concluída (teste manual aprovado e merge no `main` em 2026-10-17) · **Anterior:** Fase 1 — Build nativo ✅
+**Branch principal:** `main` (Fases 1 e 2; `fase-2-vfs-fuse` foi integrado por fast-forward; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1)
 
 ## Repositório
 
@@ -80,16 +80,15 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
-(Fase 2: use o artefato `mo2-linux-install` do último run Linux verde do branch `fase-2-vfs-fuse`; ele traz o `mo2-vfs` ao lado do executável. Checklist em `docs/testing/phase2-manual-checklist.md`.)
+(Fase 2: use o artefato `mo2-linux-install` do último run Linux verde do branch `main`; ele traz o `mo2-vfs` ao lado do executável. Checklist em `docs/testing/phase2-manual-checklist.md`.)
 
 Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345) (passo a passo no README, seção Bazzite; checklist em `docs/testing/phase1-manual-checklist.md`).
 
 ## Próximos passos
 
 1. As 7 pendências da Fase 2 (6 do teste manual + 1 da revisão final) ficam para depois, em "Pendências por fase".
-2. Merge de `fase-2-vfs-fuse` no `main` (só com o seu ok); depois atualizar as referências ao branch antigo `claude/serene-maxwell-1dyrbg` no README, `deps/README.md` e checklist da Fase 1.
-3. Começar a Fase 3 (Steam/Proton), tratando primeiro o item do distrobox (ver "Pendências por fase").
-4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+2. Começar a Fase 3 (Steam/Proton), tratando primeiro o item do distrobox (ver "Pendências por fase").
+3. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
 
 ## Limitações conhecidas da Fase 2
 
