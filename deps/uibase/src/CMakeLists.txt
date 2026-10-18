@@ -38,10 +38,11 @@ if (NOT WIN32)
 	list(APPEND root_headers ../include/uibase/win32compat.h)
 endif()
 if (NOT WIN32)
-	# Linux-only helpers (FILETIME, INI files)
+	# Linux-only helpers (FILETIME, INI and VDF files)
 	set(linux_headers
 		../include/uibase/linux/filetime.h
 		../include/uibase/linux/inifile.h
+		../include/uibase/linux/vdf.h
 	)
 endif()
 set(interface_headers
@@ -199,6 +200,7 @@ else()
 		linux/trash_linux.cpp
 		linux/trash_linux.h
 		linux/utility_linux.cpp
+		linux/vdf_linux.cpp
 		linux/win32_private.h
 	)
 endif()

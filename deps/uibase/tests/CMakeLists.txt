@@ -12,7 +12,8 @@ target_sources(uibase-tests
 if (NOT WIN32)
 	# Linux implementations of the Win32-backed functions (src/linux)
 	target_sources(uibase-tests PRIVATE test_linux_utility.cpp test_linux_filetime.cpp
-		test_linux_inifile.cpp)
+		test_linux_inifile.cpp
+		test_linux_vdf.cpp)
 	target_compile_definitions(uibase-tests
 		PRIVATE UIBASE_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 	# tests only exist with BUILD_TESTING=ON (build.sh --tests): build them with the
