@@ -108,6 +108,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 3: o branch `fase-3-steam-proton` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` ao lado); depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase3-manual-checklist.md`.
+
 (Fase 2: use o artefato `mo2-linux-install` do último run Linux verde do branch `main`; ele traz o `mo2-vfs` ao lado do executável. Checklist em `docs/testing/phase2-manual-checklist.md`.)
 
 Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38807459345) (passo a passo no README, seção Bazzite; checklist em `docs/testing/phase1-manual-checklist.md`).
@@ -138,9 +140,8 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 (Fase 2; "Executar" de `.exe` e o mount invisível para a Steam do host foram resolvidos na Fase 3.)
 
-
-- "Executar" só funciona para programas Linux nativos; `.exe`/Proton continuam com o aviso da Fase 3.
-- O MO2 roda no distrobox `mo2-run`: o mount FUSE existe só no namespace de montagem do container e **não** é visto pela Steam do host. O `findmnt` do host não o mostra; confira dentro do box.
+- ~~"Executar" só funciona para programas Linux nativos; `.exe`/Proton continuam com o aviso da Fase 3.~~ (resolvido na Fase 3, pendente do teste manual)
+- ~~O MO2 roda no distrobox `mo2-run`: o mount FUSE existe só no namespace de montagem do container e **não** é visto pela Steam do host. O `findmnt` do host não o mostra; confira dentro do box.~~ (resolvido na Fase 3: o mount é feito no host)
 - Só há mount enquanto um programa roda (monta ao executar, desmonta quando o último grupo observado termina); a aba Data e o refresh continuam usando a árvore nativa.
 - Enquanto há mount ativo, o refresh de mods fica adiado e roda quando o VFS desmonta; trocar de perfil nesse período mostra a lista nova com a árvore antiga até desmontar.
 - `open`+`read` fica em cerca de 3,4x o nativo (passthrough exige `CAP_SYS_ADMIN`); primeira montagem a frio, com os metadados fora do cache do kernel, leva cerca de 3 s.

@@ -49,7 +49,8 @@ O que mudou em relação à Fase 2 (não é falha, é esperado):
   baixado e extraído numa pasta fora do jogo (ex.: `~/Ferramentas/SSEEdit`).
 - [ ] **MO2 compilado** na distrobox: `distrobox enter mo2-run -- bash -lc 'cd <repo> &&
   ./build.sh'`; o executável fica em `install/bin/ModOrganizer`, com o `mo2-vfs` ao lado.
-  (Ou o artefato `mo2-linux-install` do último run Linux verde do branch.)
+  O branch `fase-3-steam-proton` ainda não foi enviado ao GitHub, então o pacote é esta
+  compilação local; só depois de um run Linux verde existe o artefato `mo2-linux-install`.
 - [ ] `umu-run` existe no host: `command -v umu-run` (fora do box).
 - [ ] Rodar o MO2 e guardar a saída do terminal:
 
@@ -75,10 +76,13 @@ ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/ > ~/skyri
 - [ ] Criar a instância **Skyrim Special Edition** (global). Esperado: o jogo é **detectado
   automaticamente** (caminho `.../steamapps/common/Skyrim Special Edition`), sem pedir a
   pasta.
-- [ ] **Settings -> Paths** (e a aba de saves do perfil): "My Games" aponta para
-  `.../compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition`.
-  Esperado: o caminho é esse, não uma pasta XDG, e a aba de saves lista os saves do jogo
-  (se existirem).
+- [ ] Menu de pastas da barra de ferramentas (o ícone de pasta) -> **"Open MyGames folder"**.
+  Esperado: o gerenciador de arquivos abre
+  `.../compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition`
+  (dentro do prefixo, não uma pasta XDG como `~/.local/share/...`). Como o MO2 roda no box, o
+  gerenciador de arquivos pode abrir no host ou falhar sem um; nesse caso, confira os saves: a
+  aba **Saves** (e os saves do perfil) lista os saves de `.../My Games/Skyrim Special
+  Edition/Saves` do prefixo, e o log do MO2 não traz o aviso de falta de prefixo.
 - [ ] Instalar os dois mods de teste (**File -> "Install Mod..."**) e ativar os dois.
   Esperado: contador **"Active:"** sobe para 2; o plugin `.esp` aparece na aba **Plugins**.
 
@@ -115,15 +119,21 @@ ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/ > ~/skyri
 
 - [ ] **GE-Proton** instalado (`~/.local/share/Steam/compatibilitytools.d/GE-Proton*`).
   Em **Modify Executables...**, selecionar **SKSE** (ou SSEEdit). No grupo **"Proton"**,
-  escolher o GE-Proton na lista (por padrão, "Automatic"); em **"Environment"**, escrever
+  escolher o GE-Proton na lista (por padrão, "Automatic (same as Steam)"); na linha
+  **"Environment"** do mesmo grupo (dica "NAME=value, one per line"), escrever
   `DXVK_HUD=fps` (uma variável por linha). **"OK"**.
+- [ ] Antes de executar, **Tools -> "Settings..." -> aba "Diagnostics" -> "Log Level" ->
+  "Debug"**, para o log trazer o argv e as variáveis enviados ao `spawn`.
 - [ ] Executar. Esperado: o contador de FPS do **DXVK** aparece no canto da janela do jogo
   (ou da ferramenta).
 - [ ] `~/.local/share/ModOrganizer/<instância>/logs/run-<nome do .exe>.log` (ex.:
   `run-skse64_loader.log`, `run-SSEEdit.log`) mostra a saída do **GE-Proton** (caminho/versão do Proton nas linhas
-  do `umu`). O log do MO2 (`logs/mo_interface.log`) registra o argv, as variáveis
-  acrescentadas e o diretório de trabalho enviados ao `spawn`.
-- [ ] Voltar o grupo "Proton" para "Automatic" e apagar a variável.
+  do `umu`). O log do MO2 (`logs/mo_interface.log`, com o nível Debug) tem as linhas
+  `spawn umu-run ... in '<pasta>', env ...` (argv, variáveis acrescentadas, diretório de
+  trabalho, com `DXVK_HUD=fps`) e `<exe> runs with <Proton> in <compatdata>`; ao fim, no nível
+  Info, `process <pid> ended with exit code <código>`.
+- [ ] Voltar o grupo "Proton" para "Automatic (same as Steam)" e apagar a variável (e, se quiser,
+  o nível de log para "Info (recommended)").
 
 ## 5. Erros
 
@@ -143,7 +153,7 @@ caso a, também dentro do box).
   Steam to create it.`; nada é montado. **Desfazer o nome** em seguida.
 - [ ] **c) Proton inexistente.** Fechar o MO2. Em
   `~/.local/share/ModOrganizer/<instância>/ModOrganizer.ini`, na seção `[customExecutables]`,
-  mudar a chave `<n>\proton=` do SKSE para `proton=NaoExiste`. Abrir o MO2 e executar.
+  a linha `<n>\proton=` do SKSE (vazia ou ausente por padrão) passa a `<n>\proton=NaoExiste`. Abrir o MO2 e executar.
   Esperado: erro com `Proton "NaoExiste", set for this executable, is not installed.
   Installed: ...` listando os Protons instalados; nada é montado. Desfazer a edição.
 
@@ -158,7 +168,8 @@ caso a, também dentro do box).
 ## 7. MO2 fechado durante o jogo
 
 - [ ] Executar **SKSE**. Com o jogo no menu, fechar o MO2 (**File -> "Exit"**, aceitando o
-  aviso de processo em execução, ou fechar o terminal). Esperado: o **jogo continua** rodando
+  aviso de processo em execução). Feche **só** por File -> Exit: Ctrl+C ou fechar o terminal
+  através do `distrobox ... | tee` derruba só o cliente do podman e o MO2 continua aberto. Esperado: o **jogo continua** rodando
   e `findmnt | grep -i skyrim` (host) ainda mostra o mount.
 - [ ] Sair do jogo. Esperado: poucos segundos depois o mount **some** sozinho (`findmnt`
   vazio) e `pgrep mo2-vfs` (host) fica vazio.
