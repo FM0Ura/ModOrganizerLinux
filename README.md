@@ -37,11 +37,11 @@ Done:
 
 Limitations of Phase 1:
 
-- Virtual file system (Phase 2): the `mo2-vfs` helper mounts the merged view when you run a native Linux program; running Windows programs (`.exe`, via Proton) still shows a dialog saying it arrives in Phase 3. The mount exists only inside the distrobox, not for the host Steam.
+- Virtual file system (Phases 2 and 3): the `mo2-vfs` helper mounts the merged view while a program runs and unmounts when it ends. Windows programs (`.exe`, `.bat`) run through `umu-run` in the Proton prefix of their Steam game (Phase 3, pending the manual test); `umu-launcher` must be installed on the host, and a game never run from Steam has no prefix yet. When Mod Organizer runs in a distrobox, the helper and the programs run on the host (through `distrobox-host-exec`), so programs that exist only inside the container cannot be run from Mod Organizer. A game and a tool cannot run at the same time in the same prefix.
 - LOOT is unavailable, creating BSA archives is unavailable, there is no auto-update.
 - Nexus and Steam logins are not persisted on Linux yet (kept in memory only; a secret-store
   integration comes later).
-- "My Games" and AppData point to XDG folders (Phase 3 maps them into the Proton prefix).
+- "My Games" and AppData point into the Proton prefix of the Steam game (`compatdata/<appid>/pfx`); a game without a prefix falls back to XDG folders.
 - Steam auto-detection covers `~/.local/share/Steam`, `~/.steam/steam`, Flatpak Steam and the
   extra libraries listed in `libraryfolders.vdf`; otherwise give the game path by hand.
 - No Python plugins and no `nxm://` link handler until Phase 4.

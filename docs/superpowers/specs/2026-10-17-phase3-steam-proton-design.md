@@ -37,7 +37,8 @@ Feitos no Bazzite com o binário `mo2-vfs` atual, um mod com um arquivo marcador
 | A Steam reinicia o jogo por conta própria (`SteamAPI_RestartAppIfNecessary`)? | Não: com `SteamAppId`/`SteamGameId` e a Steam do host aberta, o `SkyrimSE.exe` ficou na árvore do `umu-run` e chegou ao menu. |
 | `distrobox-host-exec` serve de ponte para o protocolo JSON? | Sim: stdin e stdout chegam ao processo do host como pipes; o processo roda no namespace de montagem do host, com pgid próprio. Quando o cliente no container morre (`SIGKILL`), o processo do host recebe EOF no stdin e nenhum sinal. O ambiente do processo é o do host: variáveis do container não passam. |
 | O `cwd` do `wineserver` identifica o prefixo? | Sim: com o Proton Experimental real, o `wineserver` (dentro do namespace do pressure-vessel) tinha `cwd` `/tmp/.wine-1000/server-3a-35652`, igual ao calculado de `stat` do `compatdata/489830/pfx` (`dev` 0x3a, `ino` 0x35652), e o link é legível do host. |
-| Não testado | SKSE (`skse64_loader.exe` inicia o jogo e sai); cache de diretórios do Wine após `update`. Ver §11. |
+| SKSE (`skse64_loader.exe`) com a espera do `wineserver` | pendente — ponto de controle da Task 3 do plano (precisa do SKSE64 instalado na pasta do jogo) |
+| Não testado | Cache de diretórios do Wine após `update`. Ver §11. |
 
 ### 1.3 Fora de escopo
 

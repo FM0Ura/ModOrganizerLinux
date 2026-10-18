@@ -13,7 +13,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 |---|---|---|---|---|
 | 1 | Build nativo | MO2 compila e abre no Linux; plugins Bethesda + instaladores; sem VFS | Gerencia instâncias, perfis e mods no Bazzite; build Windows continua passando | ✅ Concluída (2026-10-15) |
 | 2 | VFS FUSE | Processo auxiliar Rust `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; "Executar" de um programa Linux nativo mostra a visão virtual montada | ✅ Concluída (2026-10-17) |
-| 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | ⚪ Não iniciada |
+| 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | 🟡 Em implementação (falta o ponto de controle do SKSE e o teste manual) |
 | 4 | Ecossistema | Plugins Python, LOOT, handler `nxm://`, demais plugins e ferramentas | Critério de sucesso do projeto atendido (exceto AppImage) | ⚪ Não iniciada |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
 
@@ -46,14 +46,20 @@ Substitui o USVFS. O MO2 monta, via FUSE, a visão mesclada dos mods sobre as pa
 
 ## Fase 3 — Steam/Proton
 
-Inicia jogos e ferramentas com os mods ativos.
+Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md) · Plano: [`docs/superpowers/plans/2026-10-17-phase3-steam-proton.md`](docs/superpowers/plans/2026-10-17-phase3-steam-proton.md) · Checklist manual: [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md)
 
-- Módulo `steam/`: `libraryfolders.vdf`, `appmanifest_*.acf`, `config.vdf` (Proton por jogo), `compatdata/<appid>`; Steam nativa, Flatpak e bibliotecas em outros discos.
-- Pastas "Meus Documentos"/"AppData" dos plugins de jogo passam a apontar para dentro do prefixo do Proton.
-- Execução: monta VFS (no host, não no distrobox) → `umu-run` (fallback `proton run`) com as variáveis da Steam → acompanha os processos (`pidfd`, `wineserver -w`) → desmonta.
-- Proton, variáveis de ambiente e argumentos configuráveis por executável; ferramentas (xEdit, BodySlide, Nemesis/Pandora) no prefixo do jogo.
-- Risco do `pressure-vessel` resolvido no spike de 2026-10-15 (o mount do host é visível lá dentro). Riscos da fase: processos do Wine que saem do grupo observado (`setsid`/`wineserver`), cache de diretórios do Wine após `update`, mounts feitos dentro do distrobox `mo2-run` invisíveis para a Steam do host (rodar o `mo2-vfs` no host ou antecipar o AppImage) e passthrough que exige `CAP_SYS_ADMIN`.
-- Meta: Skyrim SE + SKSE rodando com mods no Bazzite.
+Inicia jogos e ferramentas Windows com os mods ativos, via Proton.
+
+- Módulo de descoberta da Steam no `uibase` (`steam::`): parser de VDF, `libraryfolders.vdf`, `appmanifest_*.acf`, `config.vdf` (Proton por jogo, pela instalação da Steam dona do jogo), `compatdata/<appid>`, Protons instalados (`steamapps/common` e `compatibilitytools.d`); Steam nativa, Flatpak e bibliotecas em outros discos.
+- "My Games", saves e AppData dos plugins de jogo (`game_bethesda`) apontam para dentro do prefixo do Proton; sem prefixo, voltam às pastas XDG.
+- **O VFS e os programas rodam no host**, mesmo com a interface do MO2 no distrobox `mo2-run`: o `LinuxVfsConnector` inicia o `mo2-vfs` por `distrobox-host-exec` (`MO2_VFS_BRIDGE=auto|direct|host`). Programas que só existem dentro do container deixam de poder ser executados pelo MO2.
+- O `mo2-vfs` inicia o programa (pedido `spawn`, evento `exited`) e o observa; para programas Windows, o `ProtonLauncher` monta `umu-run <exe>` com `WINEPREFIX`, `GAMEID`, `SteamAppId`, `PROTONPATH` etc. `umu-run` é obrigatório (sem fallback para `proton run`).
+- Desmontagem: quando todos os grupos de processos terminam **e** o `wineserver` do prefixo (achado pelo `cwd` em `/tmp/.wine-<uid>/server-<dev>-<ino>`) saiu; cobre programas que se relançam, como o `skse64_loader.exe`.
+- Proton e variáveis de ambiente configuráveis por executável (grupo "Proton" do diálogo de executáveis); argumentos divididos como a linha de comando do Windows.
+- Escopo testado: Steam nativa e Skyrim SE no Bazzite; Flatpak e outros discos com fixtures; ferramenta validada: SSEEdit. xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4. Jogo e ferramenta ao mesmo tempo no mesmo prefixo não são suportados.
+- Resultado dos spikes (2026-10-17, spec §1.2): `umu-run` no host vê o VFS do host; dentro do container o Wine só vê o VFS pelo mesmo caminho do mount (`/home` × `/var/home` são mounts separados lá), por isso VFS e jogo no host; os processos do Proton saem do grupo observado, mas o `umu-run` só sai depois do `wineserver` (`waitforexitandrun`); o `cwd` do `wineserver` identifica o prefixo; `distrobox-host-exec` serve de ponte para o protocolo JSON. O SKSE real (`skse64_loader.exe` com a espera do `wineserver`) ainda não foi verificado: ponto de controle da Task 3 do plano.
+- Meta: Skyrim SE + SKSE rodando com mods no Bazzite (passa a ✅ depois do ponto de controle do SKSE e do teste manual do usuário).
+- Pendências herdadas resolvidas e o que sobrou: ver [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase).
 
 ## Fase 4 — Ecossistema
 

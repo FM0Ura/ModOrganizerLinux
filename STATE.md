@@ -2,13 +2,41 @@
 
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
-**Última atualização:** 2026-10-17
-**Fase atual:** 2 — VFS FUSE · **Status:** ✅ concluída (teste manual aprovado e merge no `main` em 2026-10-17) · **Anterior:** Fase 1 — Build nativo ✅
-**Branch principal:** `main` (Fases 1 e 2; `fase-2-vfs-fuse` foi integrado por fast-forward; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1)
+**Última atualização:** 2026-10-18
+**Fase atual:** 3 — Steam/Proton · **Status:** 🟡 em implementação (falta o ponto de controle do SKSE na Task 3, a revisão final do branch e o teste manual) · **Anterior:** Fase 2 — VFS FUSE ✅ (merge no `main` em 2026-10-17)
+**Branch principal:** `main` (Fases 1 e 2; `fase-2-vfs-fuse` foi integrado por fast-forward; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 3:** `fase-3-steam-proton` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 3 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md) · Plano: [`docs/superpowers/plans/2026-10-17-phase3-steam-proton.md`](docs/superpowers/plans/2026-10-17-phase3-steam-proton.md) · Checklist manual: [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | `mo2-vfs`: pedido `spawn`, evento `exited`, sessão própria, stdout fechado | ✅ | `b1bdb44`, `330636d` |
+| 2 | `mo2-vfs`: espera do `wineserver`, `status.processes`, `--list-mounts` | ✅ | `0897e00` |
+| 3 | Ponto de controle: SKSE real no Bazzite (manual, com o usuário) | ⏳ pendente: precisa do SKSE64 instalado na pasta do jogo; deve passar antes da revisão final | — |
+| 4 | `uibase`: parser de VDF público, `libraryfolders.vdf` refeito sobre ele | ✅ | `fa72f90` |
+| 5 | `uibase`: descoberta da Steam (raízes, jogos, prefixos, Protons) | ✅ | `0251d4e`, `4fd8ec4` |
+| 6 | `game_bethesda`: "My Games" e AppData dentro do prefixo | ✅ | `f00e082`, `6f08cd3` |
+| 7 | MO2: ponte para o host (`vfsbridge_linux`, `MO2_VFS_BRIDGE`) | ✅ | `fbfc624`, `13e61cb` |
+| 8 | MO2: `VfsConnector::spawn()`, `runningPrograms()`, códigos de saída, um `update` por execução | ✅ | `b710b90`, `898d9af` |
+| 9 | MO2: `ProtonLauncher` (argv/env/cwd do lançamento) | ✅ | `674d40e`, `8ff9efa` |
+| 10 | MO2: Proton e variáveis por executável (`ExecutablesList`, diálogo) | ✅ | `cee5347` |
+| 11 | MO2: "Executar" pelo helper (`processrunner_linux.cpp`) | ✅ | `af36b65`, `c204628` |
+| 12 | e2e: "Executar" de um `.exe` com um `umu-run` falso | ✅ | `8bcb72c`, `a7ce0c4` |
+| 13 | Documentação, checklist manual e fechamento | ✅ docs (`docs: Phase 3 manual checklist, state and roadmap [windows-ci]`); falta a revisão final do branch, o ponto de controle de CI (push só com autorização do usuário) e o teste manual | este commit |
+
+### Critérios de pronto (spec da Fase 3, §10)
+
+| Critério | Status |
+|---|---|
+| 1. Testes do §8 passam no CI Linux; CI Windows compilando | ⏳ nenhum run de CI ainda neste branch (nada foi enviado); local: `./build.sh --tests` na distrobox com `MO2_REQUIRE_FUSE=1`, `cargo fmt --check` e `cargo clippy` verdes; Windows: este commit leva `[windows-ci]` |
+| 2. Checklist manual no Bazzite | ⏳ [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md); o ponto de controle do SKSE (Task 3) vem antes |
+| 3. `ROADMAP.md`, `STATE.md` e spec geral (§3.2) atualizados | ✅ (Task 13); a linha do SKSE no §1.2 da spec fica "pendente" até a Task 3 |
 
 ## Fase 2 — progresso
 
@@ -86,11 +114,30 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. As 7 pendências da Fase 2 (6 do teste manual + 1 da revisão final) ficam para depois, em "Pendências por fase".
-2. Começar a Fase 3 (Steam/Proton), tratando primeiro o item do distrobox (ver "Pendências por fase").
-3. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. **Task 3 (SKSE real):** instalar o SKSE64 na pasta do Skyrim SE e rodar o ponto de controle (`skse64_loader.exe` com a espera do `wineserver`); registrar o resultado na linha do SKSE do §1.2 da spec. Se falhar, a alternativa é `wineserver -w` (só muda internos do `mo2-vfs`).
+2. Revisão final do branch (algumas "sobras" da Fase 3 abaixo podem ser corrigidas nela).
+3. Com a autorização do usuário: push do branch e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`).
+4. Teste manual do usuário com `docs/testing/phase3-manual-checklist.md`; só então o merge em `main` e a spec passa a "aprovada; implementada".
+5. As 6 pendências restantes da Fase 2 (do teste manual e da revisão final) continuam para depois, em "Pendências por fase".
+6. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 3
+
+- Jogo e ferramenta ao mesmo tempo no mesmo prefixo não são suportados (verbo `waitforexitandrun` do `umu`; a interface do MO2 fica travada durante a execução).
+- O VFS e os programas rodam no host: programas que só existem dentro do container `mo2-run` não executam pelo MO2. Sem `distrobox-host-exec` no `PATH` (em container), "Executar" falha com a causa e não monta nada; `MO2_VFS_BRIDGE=direct` escolhe o helper dentro do container (testes e quem tem a Steam por dentro).
+- `umu-launcher` precisa estar no host (sem fallback para `proton run`); sem ele, "Executar" mostra "install umu-launcher on the host".
+- Jogos que nunca rodaram pela Steam não têm prefixo: rode o jogo uma vez pela Steam ("has no Proton prefix yet").
+- O `umu` cria o link `pfx/drive_c/users/<usuário> → steamuser` no prefixo da Steam (comportamento normal do `umu`, inofensivo).
+- O mount só desmonta depois que o `wineserver` do prefixo sai (cerca de 3 s após o jogo fechar); um prefixo travado mantém o mount até o `wineserver` sair ou o usuário usar "Unlock".
+- Cache de diretórios do Wine após um `update` a quente do VFS: não testado.
+- SKSE real (`skse64_loader.exe` com a espera do `wineserver`): ainda não verificado (Task 3). Só o Skyrim SE e o SSEEdit são o escopo testado; Flatpak e outros discos só com fixtures; demais jogos Bethesda só compilam; xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4.
+- `.bat`/`.cmd` com caminho Unix contendo espaços em `umu-run cmd /c`: não verificado sob o Wine (checklist).
+- Valem as limitações das Fases 1 e 2, menos "Executar" só para programas nativos e "My Games"/AppData em pastas XDG (agora no prefixo, com volta às pastas XDG quando não há prefixo).
 
 ## Limitações conhecidas da Fase 2
+
+(Fase 2; "Executar" de `.exe` e o mount invisível para a Steam do host foram resolvidos na Fase 3.)
+
 
 - "Executar" só funciona para programas Linux nativos; `.exe`/Proton continuam com o aviso da Fase 3.
 - O MO2 roda no distrobox `mo2-run`: o mount FUSE existe só no namespace de montagem do container e **não** é visto pela Steam do host. O `findmnt` do host não o mostra; confira dentro do box.
@@ -103,11 +150,11 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Limitações conhecidas da Fase 1
 
-- (Fase 1) Sem VFS: resolvido na Fase 2 para programas nativos; jogos Proton na Fase 3.
-- "Executar" mostra aviso; jogos e ferramentas não iniciam (Fase 3).
+- (Fase 1) Sem VFS: resolvido na Fase 2 para programas nativos e na Fase 3 para jogos Proton.
+- ~~"Executar" mostra aviso; jogos e ferramentas não iniciam~~ (resolvido na Fase 3, pendente do teste manual).
 - Sem LOOT, sem criação de BSA, sem atualização automática, sem plugins Python, sem `nxm://` (Fase 4/5).
 - Logins do Nexus/Steam ficam só em memória (perdidos ao fechar) até haver integração com keyring.
-- "My Games"/"AppData" apontam para pastas XDG (Fase 3 leva para o prefixo do Proton).
+- ~~"My Games"/"AppData" apontam para pastas XDG~~ (Fase 3 leva para o prefixo do Proton; sem prefixo, volta às XDG).
 - Lixeira só funciona no mesmo sistema de arquivos da home; em outro disco a remoção falha sem apagar nada.
 - Roda dentro de uma distrobox Fedora 44 (AppImage na Fase 5).
 
@@ -131,6 +178,15 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-16 | Monta só ao executar e desmonta sozinho quando o último grupo de processos observado termina; limpeza de órfãos ao abrir o MO2 |
 | 2026-10-17 | Metas de mount/update contam com cache de metadados quente; o valor a frio (~3 s) é registrado ao lado. Meta de `open`+`read` (2x) aceita como não atingida, com causa medida |
 | 2026-10-17 | MO2 segue no distrobox `mo2-run` até a Fase 5; mounts de lá não chegam à Steam do host, então a Fase 3 deve rodar o `mo2-vfs` no host (`distrobox-host-exec`) ou antecipar o AppImage |
+| 2026-10-17 | Fase 3: VFS e programas rodam **no host**; dentro do container `/home` e `/var/home` são mounts separados e o Wine só vê o VFS pelo mesmo caminho do mount (spike, spec §1.2). Programas que só existem no container deixam de poder ser executados pelo MO2 |
+| 2026-10-17 | Fase 3: o `mo2-vfs` inicia o programa (pedido `spawn`, evento `exited`), em vez de só observar um pid: quem cria o processo o observa, e o grupo certo é acompanhado antes de qualquer corrida |
+| 2026-10-17 | Fase 3: `umu-run` obrigatório, sem fallback para `proton run`; verbo padrão `waitforexitandrun`, então jogo e ferramenta no mesmo prefixo ao mesmo tempo não são suportados |
+| 2026-10-17 | Fase 3: o mount só desmonta quando os grupos acompanhados terminaram **e** o `wineserver` do prefixo saiu (achado pelo `cwd` em `/tmp/.wine-<uid>/server-<dev>-<ino>`), por causa de programas que se relançam como o `skse64_loader.exe` |
+| 2026-10-17 | Fase 3: o `umu` cria o link `<usuário> → steamuser` no prefixo da Steam; aceito (inofensivo), documentado no checklist |
+| 2026-10-18 | Fase 3: `MO2_VFS_BRIDGE=auto\|direct\|host` escolhe onde roda o helper; em container sem `distrobox-host-exec` o MO2 não cai de volta para o mount no container (falha com a causa); `direct` é o que os testes automáticos e o e2e usam |
+| 2026-10-18 | Fase 3: os argumentos do executável são divididos como a linha de comando do Windows (`QProcess::splitCommand`): aspas duplas agrupam e aspas simples são literais (um apóstrofo como em `Assassin's` não abre aspas) |
+| 2026-10-18 | Fase 3: `compatToolName(app)` usa primeiro o `config.vdf` da instalação da Steam dona do jogo (entrada do appid, depois a `0`) e só depois as outras raízes; quem tem Steam nativa e Flatpak recebe o Proton da instalação certa |
+| 2026-10-18 | Fase 3: o aviso de "sem prefixo" no `game_bethesda` só vale para jogo instalado numa biblioteca da Steam e sem prefixo (appid vazio: sem busca nem log; app não instalado: `debug`); o custo de reler os arquivos da Steam a cada chamada foi aceito, sem cache |
 
 ## Pendências por fase
 
@@ -140,7 +196,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 3. Checklist: rodar o MO2 por SSH exige `WAYLAND_DISPLAY`, `XDG_SESSION_TYPE`, `XDG_RUNTIME_DIR`, `DISPLAY` e `XAUTHORITY` (sem `XAUTHORITY` programas X11 como o xterm não abrem: "Authorization required"); ou rodar do Konsole da área de trabalho.
 4. Checklist item 6b: pela distrobox com `| tee`, Ctrl+C/fechar o terminal derruba só o cliente do podman — o MO2 continua aberto (o mount também continua, como esperado). Ajustar o texto.
 5. Checklist item 8: o MO2 cria `logs/crash.log` vazio ao iniciar; checar "não vazio".
-6. `mo2-vfs`: aviso `cannot write to stdout (Broken pipe)` quando o MO2 já fechou — silenciar nesse caso.
+6. ~~`mo2-vfs`: aviso `cannot write to stdout (Broken pipe)` quando o MO2 já fechou — silenciar nesse caso.~~ Resolvido na Fase 3 (Task 1, `EPIPE` sem aviso).
 7. Da revisão final (adiado junto, decisão de 2026-10-17): helper travado com grupo observado → `helperLost()` chama `deactivated()` com a raiz ainda montada, e o refresh adiado pode varrer um mount vivo ou travado (só quando `update`/`watch` expira durante uma execução; correção sugerida: `keepLeftMounted()` + `m_cleanupNeeded`).
 
 Itens menores encontrados nas revisões e adiados (listas completas nos ledgers de cada fase). As pendências da Fase 1 marcadas para a Fase 2 (teste de `fileMapping()`, varredura de pastas, FILETIME/INI, guard de saves, smoke test) foram resolvidas.
@@ -148,25 +204,35 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 **Próximo checkpoint**
 - Compilar no Windows as dependências com os nossos patches (`deps/`); hoje o CI Windows usa as dependências do upstream e nossos patches só foram conferidos por análise (`unifdef`).
 
-**Fase 3 (Steam/Proton)**
-- **Distrobox:** rodar o `mo2-vfs` no host ou antecipar o AppImage (ver decisões); sem isso a Steam do host não vê o mount.
-- Processos do Wine/Proton que saem do grupo observado (`setsid`/`wineserver`) e cache de diretórios do Wine após `update`.
-- Identificar processos do Wine/Proton por `/proc/<pid>/cmdline` (aparecem como `wine64-preloader`).
-- `waitForAllUSVFSProcessesWithLock` devolve `Completed` com mount ativo (trocar de perfil mostra a lista nova com a árvore antiga até desmontar); segundo "Executar" faz `update` duplo; diretório de trabalho vazio usa o cwd do MO2.
-- Zumbis não reapados; `waitInactive` espera até 5 s após o Unlock; o destrutor do conector pode bloquear a GUI até 5 s com grupo vivo.
+**Fase 3 (Steam/Proton) — resolvidas na Fase 3 (spec §9)**
+- ~~**Distrobox:** rodar o `mo2-vfs` no host ou antecipar o AppImage~~ (ponte `distrobox-host-exec`, Task 7).
+- ~~Processos do Wine/Proton que saem do grupo observado (`setsid`/`wineserver`)~~ (espera do `wineserver` pelo `cwd`, Task 2; SKSE real ainda a confirmar na Task 3). ~~Identificar processos do Wine/Proton por `/proc/<pid>/cmdline`~~ (substituído pelo `cwd` do `wineserver`).
+- ~~`waitForAllUSVFSProcessesWithLock` devolve `Completed` com mount ativo; segundo "Executar" faz `update` duplo; diretório de trabalho vazio usa o cwd do MO2~~ (Tasks 8, 9 e 11).
+- ~~Zumbis não reapados~~ (o `mo2-vfs` reapa os filhos que inicia).
+- ~~Espera de processos: `UntouchedCommandLineArguments` ainda usa aspas no estilo Windows~~ (argumentos do executável divididos como a linha de comando do Windows, Task 9).
+- Novo e resolvido por construção: `/home` × `/var/home` dentro do container são mounts separados; como VFS e programas rodam no host, não há dois caminhos para o mesmo mount.
+
+**Fase 3 (sobras — ficaram para depois)**
+- Cache de diretórios do Wine após `update` a quente (não testado; a interface fica travada durante a execução).
+- `waitInactive` espera até 5 s após o Unlock; o destrutor do conector pode bloquear a GUI até 5 s com grupo vivo.
 - Aviso de VFS perdido só aparece no `afterRun` (execuções que o pulam avisam no próximo Run).
 - Estado "não foi possível desmontar" nunca reconfere o mountinfo (refresh fica adiado até o próximo Run); `reportError()` do `uibase` Linux abre modal mesmo offscreen (`run` pela linha de comando não termina após erro); no Windows, `run` sem UI perde o motivo no diálogo (mudança do `beforeRun` sem `#ifndef _WIN32`).
 - Passthrough (desligado por padrão): `O_RDWR` reaberto sem necessidade, janela create-vs-open, `ETXTBSY` espúrio após release tardio, contagem de `io_modes` vaza em open interrompido.
 - Whiteouts: o caminho antigo de um rename continua mascarado até desmontar (esconde mod instalado depois); whiteouts por origem superdisfarçam quando uma fonte tem dois destinos; nunca são coletados.
-- Espera de processos: `AsyncPipe` (fds); `UntouchedCommandLineArguments` ainda usa aspas no estilo Windows.
+- `AsyncPipe` (fds) na espera de processos.
 - Extração temporária de FOMOD/readme em `/tmp` compartilhado: usar `QTemporaryDir` por processo e rejeitar `..` nos caminhos do arquivo compactado.
 - Curingas (`*`, `?`) em `shellDelete` só quando o caminho literal não existir.
 - Remover os encaminhadores de include obsoletos do `uibase` (mais de 20 arquivos usam).
 - Flake conhecido do CI: uma queda do app (core dump) no passo de seleção de instância do smoke test, vista 1 vez e não reproduzida em 60 execuções; acompanhar. Também: `--no-sandbox` do smoke deveria valer só como root.
+- Novas, da revisão por tarefa da Fase 3 (a revisão final do branch pode corrigir algumas):
+  - `uibase`: o formatador de log de `QVariant` segfaulta com um `QVariant` inválido (`typeName()` nulo); contornado gravando `QString()` em vez de inválido em `environment`.
+  - `mountedRoots()` falhando é tratado como "nada montado": `cleanupLeftMounts()` pode desativar com um mount velho vivo (mais provável pela ponte); um estado "desconhecido = ainda montado" seria mais seguro.
+  - `spawn()` depois de um helper perdido não passa pelo tratamento de `m_cleanupNeeded`/`m_leftMounted` do `doActivate` e pula a limpeza do mount deixado.
+  - `waitForAllUSVFSProcessesWithLock` pode girar sem pausa se um pid listado não aparecer em `/proc` (zumbi antes de ser reapado).
 
 **Fase 4 (Ecossistema)**
 - Desenho `read64`/`readWinLong` + `static_assert` para substituir o guard de CI dos saves (o guard não vê `read(v)` deduzido nem grafias raras).
-- `MO2_VFS_TIMEOUT_MS` também pode alongar o timeout: limitar a 30 s; `mo2-vfs`: stdin não-UTF-8 tratado como EOF, `println!` do modo de limpeza entra em pânico com EPIPE, validar destino "/" em mapeamento de arquivo (hoje `expect()`), mapeamento de arquivo ignora sufixos de skip.
+- `MO2_VFS_TIMEOUT_MS` também pode alongar o timeout: limitar a 30 s; `mo2-vfs`: stdin não-UTF-8 tratado como EOF, ~~`println!` do modo de limpeza entra em pânico com EPIPE~~ (resolvido na Fase 3), validar destino "/" em mapeamento de arquivo (hoje `expect()`), mapeamento de arquivo ignora sufixos de skip.
 - `plugin_python`: `cmake_common` exige Python 3.13 exato; ramo `pylupdate6.exe`.
 - Credenciais via keyring; mensagem amigável quando o MO2 foi aberto como root antes (`/tmp/qipc_*`).
 - Lixeira por ponto de montagem (`.Trash-$uid`).

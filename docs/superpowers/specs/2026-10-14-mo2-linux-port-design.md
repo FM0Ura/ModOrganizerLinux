@@ -93,6 +93,8 @@ Estas seções registram as decisões; cada fase terá spec própria.
 
 ### 3.2 Fase 3 — Steam/Proton
 
+> O desenho detalhado da fase está na [spec da Fase 3](2026-10-17-phase3-steam-proton-design.md), que substitui esta seção onde divergirem. Decisões que mudaram: o `mo2-vfs` e os programas rodam **no host** (por `distrobox-host-exec` quando o MO2 está em container); o `mo2-vfs` inicia o programa (pedido `spawn`) e acompanha o `wineserver` do prefixo; `umu-run` é obrigatório, sem fallback para `proton run`.
+
 - Módulo `steam/`: lê `libraryfolders.vdf`, `appmanifest_<id>.acf`, `config.vdf` (ferramenta de compatibilidade por jogo) e `compatdata/<appid>`. Suporta Steam nativa, Flatpak (`~/.var/app/com.valvesoftware.Steam`) e bibliotecas em outros discos.
 - Caminhos “Meus Documentos”/“AppData” dos plugins de jogo passam a apontar para dentro do prefixo do jogo.
 - Execução: monta VFS → `umu-run` (fallback `<proton>/proton run`) com `STEAM_COMPAT_DATA_PATH`, `STEAM_COMPAT_CLIENT_INSTALL_PATH`, `SteamAppId`, `SteamGameId`, `WINEPREFIX` → acompanha processos (`pidfd`, `wineserver -w`) → desmonta.
