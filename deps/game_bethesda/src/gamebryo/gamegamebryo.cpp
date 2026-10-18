@@ -283,8 +283,12 @@ QString GameGamebryo::myGamesPath() const
   return result + "/Loot.exe";
 }
 
-QString GameGamebryo::localAppFolder()
+QString GameGamebryo::localAppFolder() const
 {
+#ifndef _WIN32
+  if (const auto user = protonUserFolder(); !user.isEmpty())
+    return user + "/AppData/Local";
+#endif
   QString result = getKnownFolderPath(FOLDERID_LocalAppData, false);
   if (result.isEmpty()) {
     // fallback: try the registry
@@ -399,8 +403,12 @@ QString GameGamebryo::getSpecialPath(const QString& name)
 }
 #endif
 
-QString GameGamebryo::determineMyGamesPath(const QString& gameName)
+QString GameGamebryo::determineMyGamesPath(const QString& gameName) const
 {
+#ifndef _WIN32
+  if (const auto user = protonUserFolder(); !user.isEmpty())
+    return user + "/Documents/My Games/" + gameName;
+#endif
   const QString pattern = "%1/My Games/" + gameName;
 
   auto tryDir = [&](const QString& dir) -> std::optional<QString> {

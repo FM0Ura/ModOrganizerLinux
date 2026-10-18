@@ -1,11 +1,14 @@
 // Linux implementations of the GameGamebryo functions that are in the _WIN32 blocks of
 // gamegamebryo.cpp: there is no registry (every lookup is empty, the game detection
 // relies on the Steam libraries, see identifyGamePath()), the known folders are the
-// XDG folders of MOBase::getOptionalKnownFolder(), and the PE header of executables is
-// read directly.
+// XDG folders of MOBase::getOptionalKnownFolder(), except the documents and local
+// application data of the game, which are in its Proton prefix (protonUserFolder()),
+// and the PE header of executables is read directly.
 
 #include "gamegamebryo.h"
 
+#include <uibase/linux/steam.h>
+#include <uibase/log.h>
 #include <uibase/utility.h>
 
 #include <QDir>
@@ -68,4 +71,15 @@ QString GameGamebryo::getSpecialPath(const QString&)
 {
   // the "User Shell Folders" of the registry
   return {};
+}
+
+QString GameGamebryo::protonUserFolder() const
+{
+  const auto app = MOBase::steam::findApp(steamAPPId());
+  if (!app || app->compatData.isEmpty()) {
+    MOBase::log::warn("{}: no Proton prefix for Steam app {}, using the XDG folders",
+                      gameName(), steamAPPId());
+    return {};
+  }
+  return app->compatData + "/pfx/drive_c/users/steamuser";
 }

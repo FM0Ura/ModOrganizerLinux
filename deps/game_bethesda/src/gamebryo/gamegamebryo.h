@@ -104,7 +104,7 @@ protected:
   QString selectedVariant() const;
   WORD getArch(QString const& program) const;
 
-  static QString localAppFolder();
+  QString localAppFolder() const;
   // Arguably this shouldn't really be here but every gamebryo program seems to
   // use it
   static QString getLootPath();
@@ -131,7 +131,7 @@ protected:
 
   static QString getSpecialPath(const QString& name);
 
-  static QString determineMyGamesPath(const QString& gameName);
+  QString determineMyGamesPath(const QString& gameName) const;
 
   static QString parseEpicGamesLocation(const QStringList& manifests);
 
@@ -139,6 +139,12 @@ protected:
 
 protected:
   void registerFeature(std::shared_ptr<MOBase::GameFeature> feature);
+
+#ifndef _WIN32
+  // <compatdata>/pfx/drive_c/users/steamuser of the Proton prefix of this game, or
+  // empty when the game has no prefix (never run with Proton)
+  QString protonUserFolder() const;
+#endif
 
 protected:
   // to access organizer for game features, avoid having to pass it to all saves since
