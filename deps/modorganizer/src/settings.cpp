@@ -425,6 +425,9 @@ void Settings::registerDownloadHandlers(bool force)
   registerAsMODLHandler(force, true);
 }
 
+#ifdef _WIN32
+// nxmhandler.exe registers the modl:// links, then the nxm:// ones; on Linux, see
+// linux/settings_linux.cpp
 void Settings::registerAsMODLHandler(bool force, bool includeNxm)
 {
   const auto nxmPath = QCoreApplication::applicationDirPath() + "/" +
@@ -457,6 +460,7 @@ void Settings::registerAsMODLHandler(bool force, bool includeNxm)
 
   modlNxmProcess->start(nxmPath, parameters);
 }
+#endif
 
 GameSettings& Settings::game()
 {
@@ -2025,6 +2029,8 @@ void NexusSettings::setCategoryMappings(bool b) const
   set(m_Settings, "Settings", "category_mappings", b);
 }
 
+#ifdef _WIN32
+// on Linux, see linux/settings_linux.cpp
 void NexusSettings::registerAsNXMHandler(bool force)
 {
   const auto nxmPath = QCoreApplication::applicationDirPath() + "/" +
@@ -2046,6 +2052,7 @@ void NexusSettings::registerAsNXMHandler(bool force)
         QObject::tr("Failed to start the helper application: %1").arg(r.toString()));
   }
 }
+#endif
 
 std::vector<std::chrono::seconds> NexusSettings::validationTimeouts() const
 {
@@ -2078,6 +2085,8 @@ std::vector<std::chrono::seconds> NexusSettings::validationTimeouts() const
   return v;
 }
 
+#ifdef _WIN32
+// on Linux, see linux/settings_linux.cpp
 void NexusSettings::dump() const
 {
   const auto iniPath = InstanceManager::singleton().globalInstancesRootPath() + "/" +
@@ -2121,6 +2130,7 @@ void NexusSettings::dump() const
     log::debug("    . arguments:  {}", arguments.toString());
   });
 }
+#endif
 
 SteamSettings::SteamSettings(Settings& parent, QSettings& settings)
     : m_Parent(parent), m_Settings(settings)

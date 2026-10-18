@@ -30,7 +30,10 @@ Rules:
   `pluginlist.cpp` → `pluginlist_linux.cpp` (plugin file times);
   `settingsutilities.cpp` → `settingsutilities_linux.cpp` (credentials in the Secret
   Service through `secretstore_linux.cpp`, over libsecret in
-  `secretservice_linux.cpp`; in memory when there is no Secret Service)).
+  `secretservice_linux.cpp`; in memory when there is no Secret Service);
+  `settings.cpp` → `settings_linux.cpp` (`registerAsNXMHandler`, `registerAsMODLHandler` and
+  `NexusSettings::dump`: the nxm:// handler of `nxmhandler_linux.cpp` instead of
+  `nxmhandler.exe`)).
 - `win32compat_linux.h`, included by `pch.h` on Linux after `<uibase/win32compat.h>`,
   has the few Win32 functions and MSVC macros that shared code calls directly
   (`GetLastError()` is `errno`, `Sleep()`, `GetProcessId()` of a pid `HANDLE`,
