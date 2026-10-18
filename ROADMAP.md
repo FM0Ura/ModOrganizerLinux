@@ -13,7 +13,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 |---|---|---|---|---|
 | 1 | Build nativo | MO2 compila e abre no Linux; plugins Bethesda + instaladores; sem VFS | Gerencia instâncias, perfis e mods no Bazzite; build Windows continua passando | ✅ Concluída (2026-10-15) |
 | 2 | VFS FUSE | Processo auxiliar Rust `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; "Executar" de um programa Linux nativo mostra a visão virtual montada | ✅ Concluída (2026-10-17) |
-| 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | 🟡 Em implementação (falta o ponto de controle do SKSE e o teste manual) |
+| 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | 🟡 Em teste manual |
 | 4 | Ecossistema | Plugins Python, LOOT, handler `nxm://`, demais plugins e ferramentas | Critério de sucesso do projeto atendido (exceto AppImage) | ⚪ Não iniciada |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
 
@@ -57,8 +57,8 @@ Inicia jogos e ferramentas Windows com os mods ativos, via Proton.
 - Desmontagem: quando todos os grupos de processos terminam **e** o `wineserver` do prefixo (achado pelo `cwd` em `/tmp/.wine-<uid>/server-<dev>-<ino>`) saiu; cobre programas que se relançam, como o `skse64_loader.exe`.
 - Proton e variáveis de ambiente configuráveis por executável (grupo "Proton" do diálogo de executáveis); argumentos divididos como a linha de comando do Windows.
 - Escopo testado: Steam nativa e Skyrim SE no Bazzite; Flatpak e outros discos com fixtures; ferramenta validada: SSEEdit. xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4. Jogo e ferramenta ao mesmo tempo no mesmo prefixo não são suportados.
-- Resultado dos spikes (2026-10-17, spec §1.2): `umu-run` no host vê o VFS do host; dentro do container o Wine só vê o VFS pelo mesmo caminho do mount (`/home` × `/var/home` são mounts separados lá), por isso VFS e jogo no host; os processos do Proton saem do grupo observado, mas o `umu-run` só sai depois do `wineserver` (`waitforexitandrun`); o `cwd` do `wineserver` identifica o prefixo; `distrobox-host-exec` serve de ponte para o protocolo JSON. O SKSE real (`skse64_loader.exe` com a espera do `wineserver`) ainda não foi verificado: ponto de controle da Task 3 do plano.
-- Meta: Skyrim SE + SKSE rodando com mods no Bazzite (passa a ✅ depois do ponto de controle do SKSE e do teste manual do usuário).
+- Resultado dos spikes (2026-10-17, spec §1.2): `umu-run` no host vê o VFS do host; dentro do container o Wine só vê o VFS pelo mesmo caminho do mount (`/home` × `/var/home` são mounts separados lá), por isso VFS e jogo no host; os processos do Proton saem do grupo observado, mas o `umu-run` só sai depois do `wineserver` (`waitforexitandrun`); o `cwd` do `wineserver` identifica o prefixo; `distrobox-host-exec` serve de ponte para o protocolo JSON. O SKSE real foi verificado no ponto de controle da Task 3 (2026-10-18, `mo2-vfs` rodando direto no host): o `skse64_loader.exe` iniciou o `SkyrimSE.exe`, o SKSE carregou pelo `Data` montado e respondeu a `getskseversion`, e o mount caiu 0,09 s depois do `umu-run` sair, com o jogo já fechado; o grupo do `umu-run` cobriu o relançamento do loader, e a espera do `wineserver` ficou como rede de segurança.
+- Meta: Skyrim SE + SKSE rodando com mods no Bazzite (passa a ✅ depois do teste manual do usuário, com o MO2 no box e a ponte `distrobox-host-exec`; o ponto de controle do SKSE já passou).
 - Pendências herdadas resolvidas e o que sobrou: ver [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase).
 
 ## Fase 4 — Ecossistema

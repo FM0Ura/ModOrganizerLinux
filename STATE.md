@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 3 — Steam/Proton · **Status:** 🟡 em implementação (falta o ponto de controle do SKSE na Task 3, a revisão final do branch e o teste manual) · **Anterior:** Fase 2 — VFS FUSE ✅ (merge no `main` em 2026-10-17)
+**Fase atual:** 3 — Steam/Proton · **Status:** 🟡 em teste manual (ponto de controle do SKSE aprovado em 2026-10-18; revisão final do branch e rodada de correções feitas; faltam o checkpoint de CI e o teste manual do usuário) · **Anterior:** Fase 2 — VFS FUSE ✅ (merge no `main` em 2026-10-17)
 **Branch principal:** `main` (Fases 1 e 2; `fase-2-vfs-fuse` foi integrado por fast-forward; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 3:** `fase-3-steam-proton` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
@@ -18,7 +18,7 @@ Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/s
 |---|---|---|---|
 | 1 | `mo2-vfs`: pedido `spawn`, evento `exited`, sessão própria, stdout fechado | ✅ | `b1bdb44`, `330636d` |
 | 2 | `mo2-vfs`: espera do `wineserver`, `status.processes`, `--list-mounts` | ✅ | `0897e00` |
-| 3 | Ponto de controle: SKSE real no Bazzite (manual, com o usuário) | ⏳ pendente: precisa do SKSE64 instalado na pasta do jogo; deve passar antes da revisão final | — |
+| 3 | Ponto de controle: SKSE real no Bazzite (manual, com o usuário) | ✅ 2026-10-18: Proton Experimental via `umu-run`, `mo2-vfs` do branch rodando direto no host; `skse64_loader.exe` iniciou o `SkyrimSE.exe` (1.7.104, SKSE 2.3.1) e saiu; SKSE carregou pelo `Data` montado e respondeu a `getskseversion`; `exited` do `umu-run` (0) e `unmounted` 0,09 s depois, jogo já fechado; o grupo do `umu-run` cobriu o relançamento (a espera do `wineserver` foi só rede de segurança); a 1ª execução baixou o runtime `steamrt4` (~18 s). Spec §1.2 | — |
 | 4 | `uibase`: parser de VDF público, `libraryfolders.vdf` refeito sobre ele | ✅ | `fa72f90` |
 | 5 | `uibase`: descoberta da Steam (raízes, jogos, prefixos, Protons) | ✅ | `0251d4e`, `4fd8ec4` |
 | 6 | `game_bethesda`: "My Games" e AppData dentro do prefixo | ✅ | `f00e082`, `6f08cd3` |
@@ -28,15 +28,16 @@ Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/s
 | 10 | MO2: Proton e variáveis por executável (`ExecutablesList`, diálogo) | ✅ | `cee5347` |
 | 11 | MO2: "Executar" pelo helper (`processrunner_linux.cpp`) | ✅ | `af36b65`, `c204628` |
 | 12 | e2e: "Executar" de um `.exe` com um `umu-run` falso | ✅ | `8bcb72c`, `a7ce0c4` |
-| 13 | Documentação, checklist manual e fechamento | ✅ docs (`docs: Phase 3 manual checklist, state and roadmap [windows-ci]`); falta a revisão final do branch, o ponto de controle de CI (push só com autorização do usuário) e o teste manual | este commit |
+| 13 | Documentação, checklist manual e fechamento | ✅ docs (`docs: Phase 3 manual checklist, state and roadmap [windows-ci]`) | `6d9d166`, `10869e8` |
+| — | Revisão final do branch + rodada de correções (mount deixado nunca é montado por cima, mesmo com helper novo do `spawn()`; tabela de mounts ilegível conta como montado; programa de uma ativação não roda sem o VFS se o helper se perdeu; docs do resultado da Task 3) | ✅; falta o checkpoint de CI (push só com autorização do usuário) e o teste manual | `79f9233`, `99d405b`, este commit |
 
 ### Critérios de pronto (spec da Fase 3, §10)
 
 | Critério | Status |
 |---|---|
-| 1. Testes do §8 passam no CI Linux; CI Windows compilando | ⏳ nenhum run de CI ainda neste branch (nada foi enviado); local: `./build.sh --tests` na distrobox com `MO2_REQUIRE_FUSE=1`, `cargo fmt --check` e `cargo clippy` verdes; Windows: este commit leva `[windows-ci]` |
-| 2. Checklist manual no Bazzite | ⏳ [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md); o ponto de controle do SKSE (Task 3) vem antes |
-| 3. `ROADMAP.md`, `STATE.md` e spec geral (§3.2) atualizados | ✅ (Task 13); a linha do SKSE no §1.2 da spec fica "pendente" até a Task 3 |
+| 1. Testes do §8 passam no CI Linux; CI Windows compilando | ⏳ nenhum run de CI ainda neste branch (nada foi enviado); local: `./build.sh --tests` na distrobox com `MO2_REQUIRE_FUSE=1`, `cargo fmt --check` e `cargo clippy` verdes; Windows: o último commit do branch leva `[windows-ci]`. Desvio do §8: o teste unitário de `proton`/`environment` no `ExecutablesList` não existe (código do app fora do `organizer_tests`); coberto pelo `probe-exe` do e2e e por uma conferência da ida e volta pelo `QSettings` de valores com vírgula (registrado na spec) |
+| 2. Checklist manual no Bazzite | ⏳ [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md); o ponto de controle do SKSE (Task 3) já passou |
+| 3. `ROADMAP.md`, `STATE.md` e spec geral (§3.2) atualizados | ✅ (Task 13 e rodada de correções; §1.2 da spec com o resultado da Task 3) |
 
 ## Fase 2 — progresso
 
@@ -116,12 +117,10 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. **Task 3 (SKSE real):** instalar o SKSE64 na pasta do Skyrim SE e rodar o ponto de controle (`skse64_loader.exe` com a espera do `wineserver`); registrar o resultado na linha do SKSE do §1.2 da spec. Se falhar, a alternativa é `wineserver -w` (só muda internos do `mo2-vfs`).
-2. Revisão final do branch (algumas "sobras" da Fase 3 abaixo podem ser corrigidas nela).
-3. Com a autorização do usuário: push do branch e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`).
-4. Teste manual do usuário com `docs/testing/phase3-manual-checklist.md`; só então o merge em `main` e a spec passa a "aprovada; implementada".
-5. As 6 pendências restantes da Fase 2 (do teste manual e da revisão final) continuam para depois, em "Pendências por fase".
-6. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. Com a autorização do usuário: push do branch e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`).
+2. Teste manual do usuário com `docs/testing/phase3-manual-checklist.md`, **com o MO2 iniciado pelo box** (`distrobox enter mo2-run -- .../ModOrganizer`): o ponto de controle da Task 3 rodou o `mo2-vfs` direto no host, então é o teste manual que exercita a ponte `distrobox-host-exec` real com um jogo gráfico (item 2 do checklist). Só então o merge em `main` e a spec passa a "aprovada; implementada".
+3. As 6 pendências restantes da Fase 2 (do teste manual e da revisão final) continuam para depois, em "Pendências por fase".
+4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
 
 ## Limitações conhecidas da Fase 3
 
@@ -132,8 +131,9 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 - O `umu` cria o link `pfx/drive_c/users/<usuário> → steamuser` no prefixo da Steam (comportamento normal do `umu`, inofensivo).
 - O mount só desmonta depois que o `wineserver` do prefixo sai (cerca de 3 s após o jogo fechar); um prefixo travado mantém o mount até o `wineserver` sair ou o usuário usar "Unlock".
 - Cache de diretórios do Wine após um `update` a quente do VFS: não testado.
-- SKSE real (`skse64_loader.exe` com a espera do `wineserver`): ainda não verificado (Task 3). Só o Skyrim SE e o SSEEdit são o escopo testado; Flatpak e outros discos só com fixtures; demais jogos Bethesda só compilam; xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4.
+- SKSE real (`skse64_loader.exe`): verificado no ponto de controle da Task 3 com o `mo2-vfs` direto no host; pela ponte `distrobox-host-exec` (MO2 no box), só no teste manual. Só o Skyrim SE e o SSEEdit são o escopo testado; Flatpak e outros discos só com fixtures; demais jogos Bethesda só compilam; xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4.
 - `.bat`/`.cmd` com caminho Unix contendo espaços em `umu-run cmd /c`: não verificado sob o Wine (checklist).
+- A pasta "My Games" (e saves/AppData) é fixada quando o jogo é detectado, ao abrir a instância: um prefixo criado depois (jogo rodado pela Steam pela primeira vez com o MO2 aberto) só vale depois de reiniciar o MO2.
 - Valem as limitações das Fases 1 e 2, menos "Executar" só para programas nativos e "My Games"/AppData em pastas XDG (agora no prefixo, com volta às pastas XDG quando não há prefixo).
 
 ## Limitações conhecidas da Fase 2
@@ -187,6 +187,8 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-18 | Fase 3: `MO2_VFS_BRIDGE=auto\|direct\|host` escolhe onde roda o helper; em container sem `distrobox-host-exec` o MO2 não cai de volta para o mount no container (falha com a causa); `direct` é o que os testes automáticos e o e2e usam |
 | 2026-10-18 | Fase 3: os argumentos do executável são divididos como a linha de comando do Windows (`QProcess::splitCommand`): aspas duplas agrupam e aspas simples são literais (um apóstrofo como em `Assassin's` não abre aspas) |
 | 2026-10-18 | Fase 3: `compatToolName(app)` usa primeiro o `config.vdf` da instalação da Steam dona do jogo (entrada do appid, depois a `0`) e só depois as outras raízes; quem tem Steam nativa e Flatpak recebe o Proton da instalação certa |
+| 2026-10-18 | Fase 3 (revisão final): um mount deixado por um helper perdido é limpo antes de qualquer mount novo, e nunca montado por cima, mesmo quando um "Executar" sem VFS iniciou um helper novo; tabela de mounts ilegível (`--list-mounts` falhou) conta como "ainda montado"; o programa de uma ativação não é iniciado se o helper se perdeu depois dela (erro em vez de rodar sem o VFS) |
+| 2026-10-18 | Fase 3: o teste unitário de `proton`/`environment` no `ExecutablesList` previsto na spec (§8) ficou de fora (código do app fora do `organizer_tests`); coberto pelo `probe-exe` do e2e e por uma conferência da ida e volta pelo `QSettings` |
 | 2026-10-18 | Fase 3: o aviso de "sem prefixo" no `game_bethesda` só vale para jogo instalado numa biblioteca da Steam e sem prefixo (appid vazio: sem busca nem log; app não instalado: `debug`); o custo de reler os arquivos da Steam a cada chamada foi aceito, sem cache |
 
 ## Pendências por fase
@@ -207,7 +209,7 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 
 **Fase 3 (Steam/Proton) — resolvidas na Fase 3 (spec §9)**
 - ~~**Distrobox:** rodar o `mo2-vfs` no host ou antecipar o AppImage~~ (ponte `distrobox-host-exec`, Task 7).
-- ~~Processos do Wine/Proton que saem do grupo observado (`setsid`/`wineserver`)~~ (espera do `wineserver` pelo `cwd`, Task 2; SKSE real ainda a confirmar na Task 3). ~~Identificar processos do Wine/Proton por `/proc/<pid>/cmdline`~~ (substituído pelo `cwd` do `wineserver`).
+- ~~Processos do Wine/Proton que saem do grupo observado (`setsid`/`wineserver`)~~ (espera do `wineserver` pelo `cwd`, Task 2; SKSE real confirmado na Task 3, 2026-10-18). ~~Identificar processos do Wine/Proton por `/proc/<pid>/cmdline`~~ (substituído pelo `cwd` do `wineserver`).
 - ~~`waitForAllUSVFSProcessesWithLock` devolve `Completed` com mount ativo; segundo "Executar" faz `update` duplo; diretório de trabalho vazio usa o cwd do MO2~~ (Tasks 8, 9 e 11).
 - ~~Zumbis não reapados~~ (o `mo2-vfs` reapa os filhos que inicia).
 - ~~Espera de processos: `UntouchedCommandLineArguments` ainda usa aspas no estilo Windows~~ (argumentos do executável divididos como a linha de comando do Windows, Task 9).
@@ -227,8 +229,6 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 - Flake conhecido do CI: uma queda do app (core dump) no passo de seleção de instância do smoke test, vista 1 vez e não reproduzida em 60 execuções; acompanhar. Também: `--no-sandbox` do smoke deveria valer só como root.
 - Novas, da revisão por tarefa da Fase 3 (a revisão final do branch pode corrigir algumas):
   - `uibase`: o formatador de log de `QVariant` segfaulta com um `QVariant` inválido (`typeName()` nulo); contornado gravando `QString()` em vez de inválido em `environment`.
-  - `mountedRoots()` falhando é tratado como "nada montado": `cleanupLeftMounts()` pode desativar com um mount velho vivo (mais provável pela ponte); um estado "desconhecido = ainda montado" seria mais seguro.
-  - `spawn()` depois de um helper perdido não passa pelo tratamento de `m_cleanupNeeded`/`m_leftMounted` do `doActivate` e pula a limpeza do mount deixado.
   - `waitForAllUSVFSProcessesWithLock` pode girar sem pausa se um pid listado não aparecer em `/proc` (zumbi antes de ser reapado).
 
 **Fase 4 (Ecossistema)**

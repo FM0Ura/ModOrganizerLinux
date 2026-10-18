@@ -88,6 +88,10 @@ ls ~/.local/share/Steam/steamapps/compatdata/489830/pfx/drive_c/users/ > ~/skyri
 
 ## 2. SKSE: jogo no menu principal e mount some no fim
 
+Rode este item com o MO2 iniciado **pelo box**, como no item 0: é o que exercita a ponte
+`distrobox-host-exec` com um jogo gráfico (o ponto de controle da Task 3 já validou o SKSE
+com o `mo2-vfs` rodando direto no host).
+
 - [ ] **Tools -> "Modify Executables..."** -> **"+" -> "Add from file..."** e escolher
   `skse64_loader.exe` (na pasta do jogo, ao lado do `SkyrimSE.exe`). Título **SKSE**.
   Confirme com **"OK"**. Esperado: aparece na caixa ao lado do botão **"Run"**.
