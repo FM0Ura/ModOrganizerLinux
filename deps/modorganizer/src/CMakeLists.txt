@@ -10,6 +10,13 @@ endif()
 option(MO2_WITH_LIBBSARCH "use libbsarch to read files from BSA archives"
 	${_mo2_with_libbsarch_default})
 
+# libsecret stores the Nexus and Steam logins in the Secret Service of the desktop
+# (KWallet, GNOME Keyring); without it, they are kept in memory until Mod Organizer
+# exits (spec of Phase 4a, section 3)
+if (NOT WIN32)
+	option(MO2_WITH_LIBSECRET "store logins in the Secret Service with libsecret" ON)
+endif()
+
 find_package(mo2-cmake CONFIG REQUIRED)
 
 if (WIN32)
@@ -146,6 +153,7 @@ foreach(_source IN LISTS _organizer_sources)
 				OR _relative IN_LIST _organizer_env_sources
 				OR _relative IN_LIST _organizer_launch_sources
 				OR _relative STREQUAL "linux/posixspawn_linux.cpp"
+				OR _relative STREQUAL "linux/secretservice_linux.cpp"
 				OR _relative STREQUAL "archivefiletree.cpp"
 				OR _relative STREQUAL "resources.qrc")
 			continue()
@@ -231,6 +239,17 @@ if (NOT WIN32)
 	add_library(organizer_posixspawn STATIC linux/posixspawn_linux.cpp)
 	mo2_configure_target(organizer_posixspawn
 		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+
+	# libsecret, without the precompiled header and without Qt: GLib's headers break
+	# under Qt's `signals` macro (secretservice_linux.h has neither GLib nor Qt)
+	if (MO2_WITH_LIBSECRET)
+		find_package(PkgConfig REQUIRED)
+		pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1)
+		add_library(organizer_secretservice STATIC linux/secretservice_linux.cpp)
+		mo2_configure_target(organizer_secretservice
+			NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+		target_link_libraries(organizer_secretservice PRIVATE PkgConfig::LIBSECRET)
+	endif()
 
 	add_library(organizer_launch STATIC ${_organizer_launch_sources})
 	mo2_configure_target(organizer_launch

@@ -23,3 +23,14 @@ target_precompile_headers(organizer_tests REUSE_FROM organizer_datatree)
 # the archive tests load the 7z.so of the 7zip package (see test_archivefiletree.cpp)
 find_package(7zip CONFIG REQUIRED)
 target_compile_definitions(organizer_tests PRIVATE MO2_TESTS_7Z="${7zip_LIBRARY}")
+
+# the Secret Service wrapper (test_secretservice.cpp); its integration test runs against
+# a gnome-keyring-daemon of its own (secret-service.sh), 77 meaning skipped
+if (TARGET organizer_secretservice)
+	target_link_libraries(organizer_tests PRIVATE organizer_secretservice)
+	target_compile_definitions(organizer_tests PRIVATE MO2_WITH_LIBSECRET)
+	add_test(NAME secret_service_integration
+		COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/secret-service.sh
+			$<TARGET_FILE:organizer_tests>)
+	set_tests_properties(secret_service_integration PROPERTIES SKIP_RETURN_CODE 77)
+endif()
