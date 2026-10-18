@@ -86,7 +86,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Decidir o item "Revisão final, não corrigido" (helper travado com grupo observado) e as 6 correções do teste manual (abaixo) — ou levá-las para depois do merge.
+1. As 7 pendências da Fase 2 (6 do teste manual + 1 da revisão final) ficam para depois, em "Pendências por fase".
 2. Merge de `fase-2-vfs-fuse` no `main` (só com o seu ok); depois atualizar as referências ao branch antigo `claude/serene-maxwell-1dyrbg` no README, `deps/README.md` e checklist da Fase 1.
 3. Começar a Fase 3 (Steam/Proton), tratando primeiro o item do distrobox (ver "Pendências por fase").
 4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
@@ -142,6 +142,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 4. Checklist item 6b: pela distrobox com `| tee`, Ctrl+C/fechar o terminal derruba só o cliente do podman — o MO2 continua aberto (o mount também continua, como esperado). Ajustar o texto.
 5. Checklist item 8: o MO2 cria `logs/crash.log` vazio ao iniciar; checar "não vazio".
 6. `mo2-vfs`: aviso `cannot write to stdout (Broken pipe)` quando o MO2 já fechou — silenciar nesse caso.
+7. Da revisão final (adiado junto, decisão de 2026-10-17): helper travado com grupo observado → `helperLost()` chama `deactivated()` com a raiz ainda montada, e o refresh adiado pode varrer um mount vivo ou travado (só quando `update`/`watch` expira durante uma execução; correção sugerida: `keepLeftMounted()` + `m_cleanupNeeded`).
 
 Itens menores encontrados nas revisões e adiados (listas completas nos ledgers de cada fase). As pendências da Fase 1 marcadas para a Fase 2 (teste de `fileMapping()`, varredura de pastas, FILETIME/INI, guard de saves, smoke test) foram resolvidas.
 
@@ -155,7 +156,6 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 - `waitForAllUSVFSProcessesWithLock` devolve `Completed` com mount ativo (trocar de perfil mostra a lista nova com a árvore antiga até desmontar); segundo "Executar" faz `update` duplo; diretório de trabalho vazio usa o cwd do MO2.
 - Zumbis não reapados; `waitInactive` espera até 5 s após o Unlock; o destrutor do conector pode bloquear a GUI até 5 s com grupo vivo.
 - Aviso de VFS perdido só aparece no `afterRun` (execuções que o pulam avisam no próximo Run).
-- **Revisão final, não corrigido (decidir antes do merge):** helper travado com grupo observado → `helperLost()` chama `deactivated()` com a raiz ainda montada, e o refresh adiado pode varrer um mount vivo ou travado (só quando `update`/`watch` expira durante uma execução; correção sugerida: `keepLeftMounted()` + `m_cleanupNeeded`).
 - Estado "não foi possível desmontar" nunca reconfere o mountinfo (refresh fica adiado até o próximo Run); `reportError()` do `uibase` Linux abre modal mesmo offscreen (`run` pela linha de comando não termina após erro); no Windows, `run` sem UI perde o motivo no diálogo (mudança do `beforeRun` sem `#ifndef _WIN32`).
 - Passthrough (desligado por padrão): `O_RDWR` reaberto sem necessidade, janela create-vs-open, `ETXTBSY` espúrio após release tardio, contagem de `io_modes` vaza em open interrompido.
 - Whiteouts: o caminho antigo de um rename continua mascarado até desmontar (esconde mod instalado depois); whiteouts por origem superdisfarçam quando uma fonte tem dois destinos; nunca são coletados.
