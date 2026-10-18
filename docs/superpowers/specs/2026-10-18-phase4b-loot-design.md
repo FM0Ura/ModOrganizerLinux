@@ -68,6 +68,7 @@ Loot::start
 - `build_lootcli` deixa de passar `-DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON`: compila o executável e o pacote do header.
 - `src/CMakeLists.txt` do lootcli: fora do Windows, sem `WIN32`/`WIN32_EXECUTABLE`/`version.rc`, liga `CURL::libcurl` e define RUNPATH `$ORIGIN`. O `install()` atual já põe `lootcli` e `libloot.so` em `bin/loot/`.
 - Container (`build/Containerfile`): entram `tomlplusplus-devel` e `libcurl-devel`.
+- O lootcli pode rodar no host (§1.2): o toml++ é usado só como cabeçalhos (`TOML_HEADER_ONLY=1`; o host não tem `libtomlplusplus`), e o `build.sh` confere as entradas `NEEDED` do executável contra a lista de bibliotecas que o host tem (`libloot.so.0`, Qt6Core, boost_locale, libcurl, libstdc++, libm, libgcc_s, libc) e o RUNPATH `$ORIGIN`.
 - CI Linux: o `./build.sh --tests` passa a compilar libloot e lootcli; `actions/cache` para `build-out/libloot` com chave na versão e no commit do libloot, para não recompilar o Rust a cada execução.
 
 ### 3.3 lootcli no Linux (`deps/lootcli`)
@@ -86,12 +87,12 @@ Mudanças em `#ifdef _WIN32` / `#else`; o código Windows não muda.
 O fluxo de `Loot` não muda (`start()` → thread → `waitForCompletion()` → relatório → diálogo); as partes de plataforma ganham versão Linux em `src/linux/loot_linux.cpp`, com `#ifdef _WIN32` em `loot.cpp` onde o código atual é Windows.
 
 - **Arquivos:** no Linux, `lootcli.log` (saída), `lootreport.json` e `loot-loadorder.txt` ficam em `<dados da instância>/logs/`, ao lado dos `run-*.log`: o `/tmp` do container e o do host podem ser diferentes. No Windows continuam em `QDir::temp()`.
-- **`spawnLootcli` (Linux):** `prepareVFS()` (como hoje), `vfs().activate()` e `vfs().spawn()` com `argv` = caminho do lootcli e os parâmetros como lista (sem as aspas que o Windows põe na linha de comando), `workingDirectory` = `bin/loot`, sem `winePrefix`, `output` = `lootcli.log`. Os caminhos passados ao lootcli (`--gamePath`, `--pluginListPath`, `--out`, `--pluginListOutputPath`) passam por `vfsbridge::hostCanonicalPath`. Falha no spawn: `releaseIfIdle()` e "failed to start loot: <motivo>". A montagem dos parâmetros é uma função própria, testável.
+- **`spawnLootcli` (Linux):** `prepareVFS()` (como hoje), `vfs().activate()` e `vfs().spawn()` com `argv` = caminho do lootcli e os parâmetros como lista (sem as aspas que o Windows põe na linha de comando), `workingDirectory` = `bin/loot`, sem `winePrefix`, `output` = `lootcli.log`. Os caminhos passados ao lootcli (`--gamePath`, `--pluginListPath`, `--out`, `--pluginListOutputPath`) passam por `vfsbridge::hostCanonicalPath`. Falha ao montar ou no spawn: `releaseIfIdle()` e uma mensagem de erro "failed to start loot: <motivo>" (`reportError`: o diálogo do LOOT só abre depois que o lootcli inicia). A montagem dos parâmetros é uma função própria, testável.
 - **Local path do libloot:** a pasta do perfil (pai de `--pluginListPath`), como no Windows; o libloadorder lê ali o `plugins.txt`/`loadorder.txt` do perfil.
 - **`AsyncPipe` (Linux):** passa a ler o arquivo de saída: `create()` cria ou trunca o arquivo e devolve um handle válido; `read()` devolve os bytes novos desde a última leitura, sem bloquear. O `processStdout()` compartilhado recebe as mesmas linhas que no Windows.
-- **`waitForCompletion` (Linux):** laço de 100 ms na thread do LOOT: lê a saída; testa o pid (`kill(pid, 0)`, `ESRCH` = terminou); no fim, lê o restante da saída e pega o código de saída do evento `exited` (`exitcodes::take(pid, 2 s)`; o plano confirma que a chamada é segura fora da thread principal ou a leva para ela). Código ≠ 0: "Loot failed. Exit code was: 0x…", como no Windows. Sem `exited` (o helper caiu): falha, com `takeLostReason()` no log.
+- **`waitForCompletion` (Linux):** laço de 100 ms na thread do LOOT: lê a saída; testa o pid (`kill(pid, 0)`, `ESRCH` = terminou); no fim, lê o restante da saída e pega o código de saída do evento `exited` (`exitcodes::take(pid, 2 s)`; o plano confirma que a chamada é segura fora da thread principal ou a leva para ela). Código ≠ 0: "Loot failed. Exit code was: 0x…", como no Windows. Sem `exited` (o helper caiu): falha, com "lootcli ended, but mo2-vfs did not report its exit code" (o `takeLostReason()` do conector é da thread principal e fica no log dela).
 - **Cancelar:** a thread do LOOT pede `vfs().kill(pid)` na thread principal (`QMetaObject::invokeMethod`, fila) e espera o fim do processo; resultado cancelado, perfil intacto.
-- **Disponibilidade:** `lootUnavailableReason()` continua exigindo `bin/loot/lootcli` executável; a mensagem passa a ser "lootcli não encontrado em <caminho>".
+- **Disponibilidade:** `lootUnavailableReason()` continua exigindo `bin/loot/lootcli` executável; a mensagem passa a ser "lootcli was not found in <caminho>.".
 - **Depois do sucesso:** código compartilhado sem mudança: a ordem de `loot-loadorder.txt` é aplicada ao perfil; o `plugins.txt`/`loadorder.txt` do perfil chegam ao prefixo pelos mappings da Fase 3 quando o jogo roda.
 - Ao terminar o grupo do lootcli, o `mo2-vfs` desmonta sozinho se nenhum outro programa usa a montagem (regra atual).
 
@@ -106,14 +107,14 @@ O fluxo de `Loot` não muda (`start()` → thread → `waitForCompletion()` → 
 
 | Situação | Tratamento |
 |---|---|
-| `bin/loot/lootcli` ausente | Botão desativado com a dica "lootcli não encontrado em …" |
-| VFS não monta (sem FUSE etc.) | Mensagem de falha de montagem do "Executar"; lootcli não é iniciado |
-| Spawn falha (inclui `distrobox-host-exec` ausente) | "failed to start loot: <motivo>" + `releaseIfIdle()` |
-| Biblioteca faltando no host | O erro do carregador vai para `lootcli.log`; o diálogo mostra o código de saída e o conteúdo do log |
+| `bin/loot/lootcli` ausente | Botão desativado com a dica "lootcli was not found in …." |
+| VFS não monta (sem FUSE etc.) | Mensagem de erro "failed to start loot: <motivo da montagem>"; lootcli não é iniciado |
+| Spawn falha (inclui `distrobox-host-exec` ausente) | Mensagem de erro "failed to start loot: <motivo>" + `releaseIfIdle()` |
+| Biblioteca faltando no host | O erro do carregador vai para `lootcli.log`; com código ≠ 0, o diálogo mostra o código de saída e as linhas do `lootcli.log` que não são do protocolo (até 20) |
 | Sem rede / HTTP ≠ 200 | `Error downloading masterlist: …`; masterlist anterior preservada; código 1 |
 | Masterlist inexistente com `--skipUpdateMasterlist` | Erro, código 1 (§3.3) |
 | Cancelar | `kill`; diálogo fecha como cancelado; perfil intacto |
-| Helper do VFS cai durante o LOOT | O pid some sem `exited`: falha, com `takeLostReason()` |
+| Helper do VFS cai durante o LOOT | O pid some sem `exited`: falha ("mo2-vfs did not report its exit code") |
 | Jogo rodando pelo MO2 ao mesmo tempo | A interface fica travada durante o "Executar" (limitação da Fase 3); não há LOOT simultâneo |
 | Compilação Rust lenta no CI | Cache de `build-out/libloot` (§3.2) |
 
