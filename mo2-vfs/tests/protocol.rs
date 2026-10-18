@@ -244,6 +244,7 @@ fn update_and_status() {
     assert_eq!(st1["event"], "status", "{st1}");
     assert_eq!(st1["roots"], json!([env.p("Data")]));
     assert_eq!(st1["groups"], json!([]));
+    assert_eq!(st1["processes"], json!([]));
     let nodes1 = st1["nodes"].as_u64().unwrap();
     assert!(st1["masks"].is_u64());
 
@@ -832,4 +833,165 @@ fn closed_stdout_is_not_a_warning() {
     assert!(out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(!stderr.contains("cannot write to stdout"), "{stderr}");
+}
+
+/// A compatdata directory with pfx/, its Wine server directory under `tmp`, and a fake
+/// wineserver script that lives `secs` seconds in it, started detached by `launcher`.
+struct FakePrefix {
+    compat: PathBuf,
+    server: PathBuf,
+    launcher: PathBuf,
+}
+
+impl FakePrefix {
+    fn new(env: &Env, secs: f32) -> FakePrefix {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let compat = env.p("compatdata/489830");
+        fs::create_dir_all(compat.join("pfx")).unwrap();
+        let md = fs::metadata(compat.join("pfx")).unwrap();
+        let server = env
+            .p("winetmp")
+            .join(format!(".wine-{}", rustix::process::getuid().as_raw()))
+            .join(format!("server-{:x}-{:x}", md.dev(), md.ino()));
+        fs::create_dir_all(&server).unwrap();
+        let wineserver = env.p("bin/wineserver");
+        env.write("bin/wineserver", &format!("#!/bin/sh\nsleep {secs}\n"));
+        fs::set_permissions(&wineserver, fs::Permissions::from_mode(0o755)).unwrap();
+        // like skse64_loader.exe: starts something outside its group and exits at once
+        let launcher = env.p("bin/launcher");
+        env.write(
+            "bin/launcher",
+            &format!(
+                "#!/bin/sh\ncd '{}' && setsid '{}' &\nexit 0\n",
+                server.display(),
+                wineserver.display()
+            ),
+        );
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+        FakePrefix {
+            compat,
+            server,
+            launcher,
+        }
+    }
+}
+
+fn wine_env(env: &Env) -> Command {
+    let mut c = env.command();
+    c.env("MO2_VFS_WINE_TMP", env.p("winetmp"));
+    c
+}
+
+#[test]
+fn mount_kept_while_the_prefix_wineserver_lives() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let fake = FakePrefix::new(&env, 2.0);
+    let mut c = Client::start_with(wine_env(&env));
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    let mut req = spawn_request(&[fake.launcher.to_str().unwrap()], &env.root);
+    req["wineprefix"] = json!(fake.compat);
+    let pid = c.request(req)["pid"].as_i64().unwrap();
+    let (ev, _) = until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(ev["pid"], pid);
+    let started = Instant::now();
+    // the launcher's group ended, the wineserver still runs: still mounted
+    thread::sleep(Duration::from_millis(800));
+    assert!(is_mounted(&env.p("Data")));
+    let st = c.request(json!({"op": "status"}));
+    assert_eq!(st["processes"].as_array().unwrap().len(), 1, "{st}");
+    let (ev, _) = until(&mut c, "unmounted", |e| e["event"] == "unmounted");
+    assert_eq!(ev, json!({"event": "unmounted"}));
+    let waited = started.elapsed();
+    assert!(
+        waited > Duration::from_millis(900) && waited < Duration::from_secs(4),
+        "{waited:?}"
+    );
+    let _ = fake.server;
+}
+
+#[test]
+fn without_wineprefix_the_group_alone_holds_the_mount() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let fake = FakePrefix::new(&env, 3.0);
+    let mut c = Client::start_with(wine_env(&env));
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    c.request(spawn_request(&[fake.launcher.to_str().unwrap()], &env.root));
+    let started = Instant::now();
+    until(&mut c, "unmounted", |e| e["event"] == "unmounted");
+    assert!(started.elapsed() < Duration::from_secs(2));
+}
+
+#[test]
+fn same_prefix_twice_tracked_once() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let fake = FakePrefix::new(&env, 2.0);
+    let mut c = Client::start_with(wine_env(&env));
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    for _ in 0..2 {
+        let mut req = spawn_request(&[fake.launcher.to_str().unwrap()], &env.root);
+        req["wineprefix"] = json!(fake.compat);
+        assert_eq!(c.request(req)["event"], "spawned");
+    }
+    until(&mut c, "exited", |e| e["event"] == "exited");
+    until(&mut c, "exited", |e| e["event"] == "exited");
+    thread::sleep(Duration::from_millis(600));
+    let st = c.request(json!({"op": "status"}));
+    // two fake wineservers in the same directory, the prefix is listed once: both pids
+    // are processes, and the mount ends after the last
+    assert_eq!(st["processes"].as_array().unwrap().len(), 2, "{st}");
+    until(&mut c, "unmounted", |e| e["event"] == "unmounted");
+}
+
+#[test]
+fn status_lists_running_programs() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let pid = c.request(spawn_request(&["sleep", "1"], &env.root))["pid"]
+        .as_i64()
+        .unwrap();
+    let st = c.request(json!({"op": "status"}));
+    assert_eq!(st["processes"], json!([pid]));
+    until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(c.request(json!({"op": "status"}))["processes"], json!([]));
+}
+
+#[test]
+fn list_mounts() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    let _g = MountGuard(env.p("Data"));
+    let list = || -> Value {
+        let out = env.command().arg("--list-mounts").output().unwrap();
+        assert!(out.status.success());
+        serde_json::from_slice(&out.stdout).unwrap()
+    };
+    assert!(
+        !list()["roots"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(env.p("Data")))
+    );
+    let mut c = Client::start(&env);
+    assert_eq!(c.request(env.mount_request(&["modA"]))["event"], "ready");
+    assert!(
+        list()["roots"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(env.p("Data")))
+    );
+    c.request(json!({"op": "unmount"}));
 }

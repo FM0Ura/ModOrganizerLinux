@@ -68,6 +68,9 @@ pub enum Event {
         nodes: usize,
         masks: usize,
         groups: Vec<i32>,
+        /// Programs started by `spawn` that still run, and the Wine processes of the
+        /// tracked prefixes.
+        processes: Vec<i32>,
     },
     Spawned {
         pid: i32,
@@ -105,12 +108,15 @@ pub fn parse_request(line: &str) -> Result<Request, Event> {
     serde_json::from_str(line).map_err(|e| Event::bad_request(format!("invalid request: {e}")))
 }
 
-/// The mount (at most one per process), the process groups watched on its behalf and the
-/// programs started by `spawn` requests.
+/// The mount (at most one per process), the process groups and Wine prefixes watched on its
+/// behalf and the programs started by `spawn` requests.
 #[derive(Default)]
 pub struct Server {
     session: Option<Session>,
     groups: Vec<i32>,
+    /// Wine server directories of the prefixes of programs started while mounted: the
+    /// mount lasts until their wineserver ends.
+    prefixes: Vec<PathBuf>,
     children: Vec<std::process::Child>,
     /// Roots whose automatic unmount failed, retried lazily, with the directory of the
     /// state file that still lists them.
@@ -127,9 +133,9 @@ impl Server {
         self.session.is_some()
     }
 
-    /// True while something keeps the mount alive (watched process groups).
+    /// True while something keeps the mount alive (watched process groups, wineservers).
     pub fn has_watched(&self) -> bool {
-        !self.groups.is_empty()
+        !self.groups.is_empty() || !self.prefixes.is_empty()
     }
 
     pub fn handle(&mut self, request: Request) -> Event {
@@ -185,7 +191,7 @@ impl Server {
                 argv,
                 env,
                 cwd,
-                wineprefix: _,
+                wineprefix,
                 output,
             } => {
                 if argv.is_empty() {
@@ -200,6 +206,16 @@ impl Server {
                             self.groups.push(pid);
                         }
                         self.children.push(child);
+                        if let (Some(_), Some(prefix)) = (&self.session, &wineprefix) {
+                            match crate::spawn::wineserver_dir(prefix) {
+                                Ok(dir) if !self.prefixes.contains(&dir) => self.prefixes.push(dir),
+                                Ok(_) => {}
+                                Err(e) => tracing::warn!(
+                                    prefix = %prefix.display(), error = %e,
+                                    "cannot find the Wine server directory of the prefix"
+                                ),
+                            }
+                        }
                         Event::Spawned { pid }
                     }
                     Err(e) => e.into(),
@@ -214,11 +230,22 @@ impl Server {
                     Some(s) => (s.roots(), s.stats()),
                     None => (Vec::new(), Default::default()),
                 };
+                let mut processes: Vec<i32> = self.children.iter().map(|c| c.id() as i32).collect();
+                for pid in self
+                    .prefixes
+                    .iter()
+                    .flat_map(|dir| crate::spawn::wineservers(dir))
+                {
+                    if !processes.contains(&pid) {
+                        processes.push(pid);
+                    }
+                }
                 Event::Status {
                     roots,
                     nodes: stats.nodes,
                     masks: stats.masks,
                     groups: self.groups.clone(),
+                    processes,
                 }
             }
         }
@@ -250,6 +277,7 @@ impl Server {
     /// automatic unmount are tried once more (lazily).
     pub fn unmount(&mut self) -> Result<(), SessionError> {
         self.groups.clear();
+        self.prefixes.clear();
         let r = match self.session.take() {
             Some(session) => session.unmount(),
             None => Ok(()),
@@ -271,11 +299,18 @@ impl Server {
                 Err(_) => None,
             };
         }
-        if self.groups.is_empty() {
+        if self.groups.is_empty() && self.prefixes.is_empty() {
             return None;
         }
         self.groups.retain(|&g| group_alive(g));
         if !self.groups.is_empty() {
+            return None;
+        }
+        // programs that left the watched groups (skse64_loader.exe starting the game) keep
+        // the wineserver of their prefix alive until the last Wine process ends
+        self.prefixes
+            .retain(|dir| !crate::spawn::wineservers(dir).is_empty());
+        if !self.prefixes.is_empty() {
             return None;
         }
         tracing::info!("every watched process group has ended; unmounting");

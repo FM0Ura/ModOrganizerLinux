@@ -1,5 +1,5 @@
-//! `mo2-vfs`: line protocol on stdin/stdout, or `--cleanup` to unmount what a dead process
-//! left behind.
+//! `mo2-vfs`: line protocol on stdin/stdout, `--cleanup` to unmount what a dead process
+//! left behind, or `--list-mounts` to print the roots currently mounted by mo2-vfs.
 
 use mo2_vfs::ipc::{Event, Server, parse_request};
 use mo2_vfs::state;
@@ -22,6 +22,7 @@ struct Args {
     log: Option<PathBuf>,
     level: String,
     cleanup: bool,
+    list_mounts: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -29,6 +30,7 @@ fn parse_args() -> Result<Args, String> {
         log: None,
         level: "info".to_string(),
         cleanup: false,
+        list_mounts: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -42,6 +44,7 @@ fn parse_args() -> Result<Args, String> {
                 args.level = l;
             }
             "--cleanup" => args.cleanup = true,
+            "--list-mounts" => args.list_mounts = true,
             other => return Err(format!("unknown argument {other:?}")),
         }
     }
@@ -96,13 +99,21 @@ fn cleanup() -> ExitCode {
                 json!({"root": root, "ok": false, "error": e})
             }
         };
-        println!("{line}");
+        // the reader may be gone: not an error worth a panic
+        let _ = writeln!(std::io::stdout().lock(), "{line}");
     }
     if all_ok {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
+}
+
+fn list_mounts() -> ExitCode {
+    let line = json!({"roots": state::mounted_mo2_vfs()});
+    // the reader may be gone: not an error worth a panic
+    let _ = writeln!(std::io::stdout().lock(), "{line}");
+    ExitCode::SUCCESS
 }
 
 fn shutdown(server: &mut Server) {
@@ -212,11 +223,17 @@ fn main() -> ExitCode {
         Err(e) => {
             eprintln!("mo2-vfs: {e}");
             eprintln!(
-                "usage: mo2-vfs [--log <file>] [--log-level trace|debug|info|warn|error] | --cleanup"
+                "usage: mo2-vfs [--log <file>] [--log-level trace|debug|info|warn|error] | --cleanup | --list-mounts"
             );
             return ExitCode::from(2);
         }
     };
     init_logging(&args);
-    if args.cleanup { cleanup() } else { serve() }
+    if args.cleanup {
+        cleanup()
+    } else if args.list_mounts {
+        list_mounts()
+    } else {
+        serve()
+    }
 }
