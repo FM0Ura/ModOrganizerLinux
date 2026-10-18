@@ -3,14 +3,31 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 3 — Steam/Proton · **Status:** 🟢 teste manual aprovado em 2026-10-18 (Skyrim SE + SKSE e SSEEdit pelo MO2 no box, com as correções do SSEEdit: criação em raízes só de mappings de arquivo e unidade `S:` do Proton); falta o checkpoint de CI e o merge no `main` · **Anterior:** Fase 2 — VFS FUSE ✅ (merge no `main` em 2026-10-17)
-**Branch principal:** `main` (Fases 1 e 2; `fase-2-vfs-fuse` foi integrado por fast-forward; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 3:** `fase-3-steam-proton` (a partir de `main`; ainda não enviado ao GitHub)
+**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** 🟡 implementação concluída; falta o CI, o teste manual e o merge · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
+**Branch principal:** `main` (Fases 1 a 3; `fase-2-vfs-fuse` e `fase-3-steam-proton` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4a:** `fase-4a-nexus` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
 
+## Fase 4a — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md`](docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md) · Checklist manual: [`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | Build: `libsecret`, `gnome-keyring` e `dbus-daemon` no container; wrapper do Secret Service | ✅ | `1504f94`, `7eb0f49` |
+| 2 | MO2: credenciais (Nexus e Steam) guardadas no Secret Service | ✅ | `ab639fb` |
+| 3 | MO2: arquivo `.desktop` e decisão do handler `nxm` | ✅ | `16ccd1c` |
+| 4 | MO2: registro do handler `nxm` com `xdg-mime` | ✅ | `439f936` |
+| 5 | MO2: o Mod Organizer se registra para links `nxm://` | ✅ | `f67c374` |
+| 6 | Smoke: um link `nxm://` de uma segunda invocação chega ao aplicativo em execução | ✅ | `a5d0495` |
+| 7 | Documentação, checklist manual e ponto de controle de CI | 🟡 docs em andamento (`docs: Phase 4a checklist, state and roadmap`); o push e o CI dependem da autorização do usuário | este commit |
+| 8 | Teste manual no Bazzite ([`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)) | ⚪ não iniciado | — |
+
 ## Fase 3 — progresso
+
+✅ Concluída: teste manual aprovado e merge no `main` em 2026-10-18 (PR #1).
 
 Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md) · Plano: [`docs/superpowers/plans/2026-10-17-phase3-steam-proton.md`](docs/superpowers/plans/2026-10-17-phase3-steam-proton.md) · Checklist manual: [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md)
 
@@ -29,7 +46,7 @@ Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/s
 | 11 | MO2: "Executar" pelo helper (`processrunner_linux.cpp`) | ✅ | `af36b65`, `c204628` |
 | 12 | e2e: "Executar" de um `.exe` com um `umu-run` falso | ✅ | `8bcb72c`, `a7ce0c4` |
 | 13 | Documentação, checklist manual e fechamento | ✅ docs (`docs: Phase 3 manual checklist, state and roadmap [windows-ci]`) | `6d9d166`, `10869e8` |
-| — | Revisão final do branch + rodada de correções (mount deixado nunca é montado por cima, mesmo com helper novo do `spawn()`; tabela de mounts ilegível conta como montado; programa de uma ativação não roda sem o VFS se o helper se perdeu; docs do resultado da Task 3) | ✅; falta o checkpoint de CI (push só com autorização do usuário) e o teste manual | `79f9233`, `99d405b`, este commit |
+| — | Revisão final do branch + rodada de correções (mount deixado nunca é montado por cima, mesmo com helper novo do `spawn()`; tabela de mounts ilegível conta como montado; programa de uma ativação não roda sem o VFS se o helper se perdeu; docs do resultado da Task 3) | ✅ (CI verde e teste manual aprovado depois; ver o topo desta seção) | `79f9233`, `99d405b`, este commit |
 | — | Teste manual (2026-10-18): SSEEdit sob Proton abortava com "Access denied" (código 5, plugins nunca carregavam) ao criar `Plugins.sseviewsettings` em `AppData/Local/Skyrim Special Edition`, raiz que só tem os mappings de arquivo do perfil e nenhuma camada de criação (`EROFS`). Corrigido: raiz só com mappings de arquivo grava na pasta real, como o USVFS (decisão de 2026-10-18); renomear sobre um destino de mapping de arquivo dá `EXDEV`. O pop-up "Not implemented" do SSEEdit é do Wine, não do MO2 (limitações conhecidas da Fase 3) | ✅ | `99ace0c`, `504bc0f` |
 | — | Teste manual (2026-10-18): SSEEdit sob Proton abortava com "Error loading plugin list: EDirectoryNotFoundException" em `S:\steamapps\common\Skyrim Special Edition\Data\` (caminho que a Steam grava no registro do prefixo). Causa: o `S:` é o "game drive" do Proton, criado só com `STEAM_COMPAT_INSTALL_PATH` e `STEAM_COMPAT_LIBRARY_PATHS`, que o MO2 não passava (a Steam passa). Correção: o `ProtonLauncher` passa as duas, com caminhos canônicos como o host os vê (a pasta do jogo e o `steamapps` de cada biblioteca, a do jogo primeiro); verificado no sistema real, o `umu-run` cria `s:` → raiz da Steam e o jogo aparece em `S:\steamapps\common\`. Testes: 3 unitários (`WindowsExeArgv`, jogo em outra biblioteca, Steam por link simbólico) e o `probe-exe` do e2e | `deps/modorganizer` `ProtonLauncher`, `tests/vfs-e2e` |
 
@@ -37,8 +54,8 @@ Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/s
 
 | Critério | Status |
 |---|---|
-| 1. Testes do §8 passam no CI Linux; CI Windows compilando | ⏳ nenhum run de CI ainda neste branch (nada foi enviado); local: `./build.sh --tests` na distrobox com `MO2_REQUIRE_FUSE=1`, `cargo fmt --check` e `cargo clippy` verdes; Windows: o último commit do branch leva `[windows-ci]`. Desvio do §8: o teste unitário de `proton`/`environment` no `ExecutablesList` não existe (código do app fora do `organizer_tests`); coberto pelo `probe-exe` do e2e e por uma conferência da ida e volta pelo `QSettings` de valores com vírgula (registrado na spec) |
-| 2. Checklist manual no Bazzite | ⏳ [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md); o ponto de controle do SKSE (Task 3) já passou |
+| 1. Testes do §8 passam no CI Linux; CI Windows compilando | ✅ CI verde no PR #1 (merge em 2026-10-18); local: `./build.sh --tests` na distrobox com `MO2_REQUIRE_FUSE=1`, `cargo fmt --check` e `cargo clippy` verdes; Windows: o último commit do branch leva `[windows-ci]`. Desvio do §8: o teste unitário de `proton`/`environment` no `ExecutablesList` não existe (código do app fora do `organizer_tests`); coberto pelo `probe-exe` do e2e e por uma conferência da ida e volta pelo `QSettings` de valores com vírgula (registrado na spec) |
+| 2. Checklist manual no Bazzite | ✅ [`docs/testing/phase3-manual-checklist.md`](docs/testing/phase3-manual-checklist.md) aprovado em 2026-10-18 (o ponto de controle do SKSE, Task 3, passou antes) |
 | 3. `ROADMAP.md`, `STATE.md` e spec geral (§3.2) atualizados | ✅ (Task 13 e rodada de correções; §1.2 da spec com o resultado da Task 3) |
 
 ## Fase 2 — progresso
@@ -111,7 +128,9 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
-Fase 3: o branch `fase-3-steam-proton` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` ao lado); depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase3-manual-checklist.md`.
+Fase 4a: o branch `fase-4a-nexus` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` ao lado), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4a-manual-checklist.md`.
+
+(Fase 3, já no `main`: checklist em `docs/testing/phase3-manual-checklist.md`.)
 
 (Fase 2: use o artefato `mo2-linux-install` do último run Linux verde do branch `main`; ele traz o `mo2-vfs` ao lado do executável. Checklist em `docs/testing/phase2-manual-checklist.md`.)
 
@@ -119,10 +138,19 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Com a autorização do usuário: push do branch e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`).
-2. Teste manual do usuário com `docs/testing/phase3-manual-checklist.md`, **com o MO2 iniciado pelo box** (`distrobox enter mo2-run -- .../ModOrganizer`): o ponto de controle da Task 3 rodou o `mo2-vfs` direto no host, então é o teste manual que exercita a ponte `distrobox-host-exec` real com um jogo gráfico (item 2 do checklist). Só então o merge em `main` e a spec passa a "aprovada; implementada".
+1. Com a autorização do usuário: push do branch `fase-4a-nexus` e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`); no log do Linux, conferir que `secret_service_integration` está **Passed** (não `Skipped`).
+2. Teste manual do usuário com `docs/testing/phase4a-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
 3. As 6 pendências restantes da Fase 2 (do teste manual e da revisão final) continuam para depois, em "Pendências por fase".
 4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4a
+
+- Carteira trancada (KWallet/GNOME Keyring): a interface espera o prompt de desbloqueio do Secret Service (a libsecret é síncrona).
+- Uma instalação do MO2 trata todos os links `nxm://` (a última registrada).
+- Sem `modl://`: o botão das configurações gerais para links `modl` não faz nada no Linux (não há handler `modl://`).
+- Com o MO2 fechado, um link `nxm://` abre a última instância usada.
+- Sem Secret Service, as credenciais ficam só em memória até fechar o MO2 (aviso único; nada vai para o disco).
+- Valem as limitações das Fases 1 a 3, menos "Logins ... só em memória" e o `nxm://` de "Sem LOOT, ...".
 
 ## Limitações conhecidas da Fase 3
 
@@ -157,8 +185,8 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 - (Fase 1) Sem VFS: resolvido na Fase 2 para programas nativos e na Fase 3 para jogos Proton.
 - ~~"Executar" mostra aviso; jogos e ferramentas não iniciam~~ (resolvido na Fase 3, pendente do teste manual).
-- Sem LOOT, sem criação de BSA, sem atualização automática, sem plugins Python, sem `nxm://` (Fase 4/5).
-- Logins do Nexus/Steam ficam só em memória (perdidos ao fechar) até haver integração com keyring.
+- Sem LOOT, sem criação de BSA, sem atualização automática, sem plugins Python, ~~sem `nxm://`~~ (resolvido na Fase 4a, pendente do teste manual) (Fase 4/5).
+- ~~Logins do Nexus/Steam ficam só em memória (perdidos ao fechar)~~ (resolvido na Fase 4a: Secret Service; sem ele, só em memória).
 - ~~"My Games"/"AppData" apontam para pastas XDG~~ (Fase 3 leva para o prefixo do Proton; sem prefixo, volta às XDG).
 - Lixeira só funciona no mesmo sistema de arquivos da home; em outro disco a remoção falha sem apagar nada.
 - Roda dentro de uma distrobox Fedora 44 (AppImage na Fase 5).
@@ -243,7 +271,7 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 - Desenho `read64`/`readWinLong` + `static_assert` para substituir o guard de CI dos saves (o guard não vê `read(v)` deduzido nem grafias raras).
 - `MO2_VFS_TIMEOUT_MS` também pode alongar o timeout: limitar a 30 s; `mo2-vfs`: stdin não-UTF-8 tratado como EOF, ~~`println!` do modo de limpeza entra em pânico com EPIPE~~ (resolvido na Fase 3), validar destino "/" em mapeamento de arquivo (hoje `expect()`), mapeamento de arquivo ignora sufixos de skip.
 - `plugin_python`: `cmake_common` exige Python 3.13 exato; ramo `pylupdate6.exe`.
-- Credenciais via keyring; mensagem amigável quando o MO2 foi aberto como root antes (`/tmp/qipc_*`).
+- ~~Credenciais via keyring~~ (Fase 4a); mensagem amigável quando o MO2 foi aberto como root antes (`/tmp/qipc_*`).
 - Lixeira por ponto de montagem (`.Trash-$uid`).
 - Escrita de INI atômica e respeitando a codificação do arquivo; leitor de INI tratando seções repetidas como o Windows (o `#` não é comentário, como no Windows).
 - Texto do aviso da Fase 3 em inglês no código-fonte (traduções).

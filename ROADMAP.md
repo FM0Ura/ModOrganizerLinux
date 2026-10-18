@@ -13,8 +13,12 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 |---|---|---|---|---|
 | 1 | Build nativo | MO2 compila e abre no Linux; plugins Bethesda + instaladores; sem VFS | Gerencia instâncias, perfis e mods no Bazzite; build Windows continua passando | ✅ Concluída (2026-10-15) |
 | 2 | VFS FUSE | Processo auxiliar Rust `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; "Executar" de um programa Linux nativo mostra a visão virtual montada | ✅ Concluída (2026-10-17) |
-| 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | 🟢 Teste manual aprovado (2026-10-18); falta o checkpoint de CI e o merge |
-| 4 | Ecossistema | Plugins Python, LOOT, handler `nxm://`, demais plugins e ferramentas | Critério de sucesso do projeto atendido (exceto AppImage) | ⚪ Não iniciada |
+| 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | ✅ Concluída (2026-10-18) |
+| 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | 🟡 Em andamento |
+| 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | ⚪ Não iniciada |
+| 4c | Ferramentas pelo VFS e plugins C++ | BodySlide, Nemesis/Pandora, xEdit de outros jogos; BAIN, previews, checagens; pendências adiadas da Fase 2 | Ferramentas pelo VFS (critério 6) | ⚪ Não iniciada |
+| 4d | Plugins Python | `plugin_python` (pybind11 + Python + PyQt6) e plugins Python (incl. `basic_games`) | Todas as funcionalidades | ⚪ Não iniciada |
+| 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ⚪ Não iniciada |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
 
 ## Fase 1 — Build nativo
@@ -58,10 +62,14 @@ Inicia jogos e ferramentas Windows com os mods ativos, via Proton.
 - Proton e variáveis de ambiente configuráveis por executável (grupo "Proton" do diálogo de executáveis); argumentos divididos como a linha de comando do Windows.
 - Escopo testado: Steam nativa e Skyrim SE no Bazzite; Flatpak e outros discos com fixtures; ferramenta validada: SSEEdit. xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4. Jogo e ferramenta ao mesmo tempo no mesmo prefixo não são suportados.
 - Resultado dos spikes (2026-10-17, spec §1.2): `umu-run` no host vê o VFS do host; dentro do container o Wine só vê o VFS pelo mesmo caminho do mount (`/home` × `/var/home` são mounts separados lá), por isso VFS e jogo no host; os processos do Proton saem do grupo observado, mas o `umu-run` só sai depois do `wineserver` (`waitforexitandrun`); o `cwd` do `wineserver` identifica o prefixo; `distrobox-host-exec` serve de ponte para o protocolo JSON. O SKSE real foi verificado no ponto de controle da Task 3 (2026-10-18, `mo2-vfs` rodando direto no host): o `skse64_loader.exe` iniciou o `SkyrimSE.exe`, o SKSE carregou pelo `Data` montado e respondeu a `getskseversion`, e o mount caiu 0,09 s depois do `umu-run` sair, com o jogo já fechado; o grupo do `umu-run` cobriu o relançamento do loader, e a espera do `wineserver` ficou como rede de segurança.
-- Meta: Skyrim SE + SKSE rodando com mods no Bazzite — **teste manual aprovado em 2026-10-18** (MO2 no box, ponte `distrobox-host-exec`, Skyrim SE + SKSE e SSEEdit); passa a ✅ com o CI verde e o merge no `main`.
+- Meta: Skyrim SE + SKSE rodando com mods no Bazzite — **teste manual aprovado em 2026-10-18** (MO2 no box, ponte `distrobox-host-exec`, Skyrim SE + SKSE e SSEEdit); ✅ com o CI verde e o merge no `main` (PR #1, 2026-10-18).
 - Pendências herdadas resolvidas e o que sobrou: ver [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase).
 
 ## Fase 4 — Ecossistema
+
+Dividida em subfases (spec da 4a, §1.1).
+
+Fase 4a — Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md`](docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md) · Checklist manual: [`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)
 
 - `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
 - `lootcli` nativo (libloot) → ordenação com LOOT.
