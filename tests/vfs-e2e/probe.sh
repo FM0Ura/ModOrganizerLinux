@@ -24,10 +24,15 @@ OUT="${PROBE_OUT:?PROBE_OUT is not set}"
 ok() { echo "ok $*" >> "$OUT"; }
 bad() { echo "FAIL $*" >> "$OUT"; }
 
-# mountinfo: field 5 is the mount point, after " - " come the type and the source
-if awk -v t="$DATA" '
+# mountinfo: field 5 is the mount point (space, tab, newline and backslash written as
+# octal escapes: the game directory has spaces), after " - " come the type and the source
+mnt="${DATA//\\/\\134}"
+mnt="${mnt// /\\040}"
+mnt="${mnt//$'\t'/\\011}"
+mnt="${mnt//$'\n'/\\012}"
+if MNT="$mnt" awk '
     { for (i = 7; $i != "-"; i++) ; type = $(i + 1); src = $(i + 2) }
-    $5 == t && (type == "fuse.mo2-vfs" || (type == "fuse" && src == "mo2-vfs")) { f = 1 }
+    $5 == ENVIRON["MNT"] && (type == "fuse.mo2-vfs" || (type == "fuse" && src == "mo2-vfs")) { f = 1 }
     END { exit !f }' /proc/self/mountinfo; then
     ok "mounted"
 else

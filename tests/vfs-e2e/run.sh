@@ -21,6 +21,15 @@
 # - afterwards, overwrite/probe-created.txt has what the probe wrote, the real data
 #   directory has exactly its original files with their original content, and
 #   nothing is mounted under the temporary directory.
+# Then the executable "probe-exe" (probe.exe in the game directory, Proton GE-Proton11-7,
+# environment MO2_E2E_VAR=hello): the game is in a fake Steam library under $HOME
+# (steamapps/common/Skyrim Special Edition, appmanifest, Proton prefix in compatdata and
+# the custom Proton in compatibilitytools.d) and tests/vfs-e2e/umu-run, a fake umu-run
+# found through PATH, stands in for the Windows program: it records its argv, the
+# environment (WINEPREFIX, GAMEID, STORE, SteamAppId, SteamGameId, PROTONPATH,
+# STEAM_COMPAT_CLIENT_INSTALL_PATH, MO2_E2E_VAR) and the working directory, which must be
+# the ones of the Steam game and of the executable, and then runs probe.sh: the same
+# checks as above hold.
 # Then the same run with MO2_VFS_BINARY pointing to a fake helper whose mount fails:
 # beforeRun must return promptly (no dialog waits for an answer without a user
 # interface): the run command logs "Failed to run" within MO2_E2E_FAIL_TIMEOUT seconds
@@ -57,17 +66,23 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/mo2-vfs-e2e.XXXXXX")"
 HOMEDIR="$WORK/home"
 INSTANCE="$HOMEDIR/.local/share/ModOrganizer/vfs-e2e"
-GAME="$WORK/game"
+STEAM="$HOMEDIR/.local/share/Steam"
+GAME="$STEAM/steamapps/common/Skyrim Special Edition"
 PROBE_OUT="$WORK/probe.out"
 APP_OUT="$WORK/app.out"
 
 # mounts_under <dir>: the mo2-vfs mount points under <dir>, unprivileged (type
-# fuse.mo2-vfs) or made by root (type fuse, source mo2-vfs)
+# fuse.mo2-vfs) or made by root (type fuse, source mo2-vfs), with the octal escapes of
+# mountinfo (the game directory has spaces) decoded
 mounts_under() {
     awk -v d="$1/" '
         { for (i = 7; $i != "-"; i++) ; type = $(i + 1); src = $(i + 2) }
         (type == "fuse.mo2-vfs" || (type == "fuse" && src == "mo2-vfs")) &&
-            index($5 "/", d) == 1 { print $5 }' /proc/self/mountinfo
+            index($5 "/", d) == 1 {
+            p = $5
+            gsub(/\\040/, " ", p); gsub(/\\011/, "\t", p); gsub(/\\012/, "\n", p)
+            gsub(/\\134/, "\\", p)
+            print p }' /proc/self/mountinfo
 }
 
 unmount() {
@@ -146,7 +161,7 @@ mkdir -m 700 "$WORK/runtime"
 install -m 755 "$HERE/probe.sh" "$WORK/bin/probe.sh"
 # shellcheck source=../lib/instance.sh
 source "$HERE/../lib/instance.sh"
-mo2_make_instance "$FIXTURE" "$WORK" "$GAME" "$INSTANCE" "$WORK/bin/probe.sh"
+mo2_make_instance "$FIXTURE" "$WORK" "$GAME" "$INSTANCE" "$WORK/bin/probe.sh" "$STEAM"
 
 # the real data directory, to compare with afterwards
 original="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)"
@@ -168,34 +183,78 @@ env HOME="$HOMEDIR" \
 
 # --- check -------------------------------------------------------------------------
 
-[[ -s $PROBE_OUT ]] || die "the probe did not run (no $PROBE_OUT)"
-cat "$PROBE_OUT"
-grep -q '^done$' "$PROBE_OUT" || die "the probe did not finish"
-! grep -q '^FAIL' "$PROBE_OUT" || die "a check of the probe failed"
+# check_probe_run: what must hold after a run of the probe with the file system
+check_probe_run() {
+    [[ -s $PROBE_OUT ]] || die "the probe did not run (no $PROBE_OUT)"
+    cat "$PROBE_OUT"
+    grep -q '^done$' "$PROBE_OUT" || die "the probe did not finish"
+    ! grep -q '^FAIL' "$PROBE_OUT" || die "a check of the probe failed"
 
-created="$INSTANCE/overwrite/probe-created.txt"
-[[ -f $created ]] || die "$created does not exist"
-[[ $(cat "$created") == "created by the probe" ]] || die "$created has the wrong content"
-echo "ok overwrite/probe-created.txt"
+    created="$INSTANCE/overwrite/probe-created.txt"
+    [[ -f $created ]] || die "$created does not exist"
+    [[ $(cat "$created") == "created by the probe" ]] || die "$created has the wrong content"
+    echo "ok overwrite/probe-created.txt"
 
-after="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)"
-[[ $after == "$original" ]] ||
-    die "the real data directory changed:"$'\n'"before:"$'\n'"$original"$'\n'"after:"$'\n'"$after"
-[[ -z $(cd "$GAME/Data" && find . -mindepth 1 -not -type f) ]] ||
-    die "the real data directory has new entries"
-echo "ok real data directory unchanged"
+    after="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)"
+    [[ $after == "$original" ]] ||
+        die "the real data directory changed:"$'\n'"before:"$'\n'"$original"$'\n'"after:"$'\n'"$after"
+    [[ -z $(cd "$GAME/Data" && find . -mindepth 1 -not -type f) ]] ||
+        die "the real data directory has new entries"
+    echo "ok real data directory unchanged"
 
-left="$(mounts_under "$WORK")"
-[[ -z $left ]] || die "still mounted after the run: $left"
-echo "ok nothing mounted"
+    left="$(mounts_under "$WORK")"
+    [[ -z $left ]] || die "still mounted after the run: $left"
+    echo "ok nothing mounted"
 
-# the helper ends with the application (bounded: 10 s)
-for _ in $(seq 10); do
-    [[ -z $(helpers) ]] && break
-    sleep 1
-done
-[[ -z $(helpers) ]] || die "mo2-vfs still running after the application exited: $(helpers)"
-echo "ok mo2-vfs ended"
+    # the helper ends with the application (bounded: 10 s)
+    for _ in $(seq 10); do
+        [[ -z $(helpers) ]] && break
+        sleep 1
+    done
+    [[ -z $(helpers) ]] || die "mo2-vfs still running after the application exited: $(helpers)"
+    echo "ok mo2-vfs ended"
+}
+
+check_probe_run
+
+# --- a Windows program through a fake umu-run -----------------------------------
+
+install -d "$WORK/umu-bin"
+install -m 755 "$HERE/umu-run" "$WORK/umu-bin/umu-run"
+rm -f "$PROBE_OUT" "$INSTANCE/overwrite/probe-created.txt"
+
+echo "--- ModOrganizer -i vfs-e2e run -e probe-exe, fake umu-run (${TIMEOUT}s)"
+rc=0
+env HOME="$HOMEDIR" \
+    XDG_CONFIG_HOME="$HOMEDIR/.config" XDG_DATA_HOME="$HOMEDIR/.local/share" \
+    XDG_CACHE_HOME="$HOMEDIR/.cache" XDG_STATE_HOME="$HOMEDIR/.local/state" \
+    XDG_RUNTIME_DIR="$WORK/runtime" TMPDIR="$WORK/tmp" \
+    MO2_VFS_STATE_DIR="$WORK/state" MO2_VFS_BINARY="$INSTALL/bin/mo2-vfs" \
+    MO2_VFS_BRIDGE=direct PROBE_OUT="$PROBE_OUT" QT_QPA_PLATFORM=offscreen \
+    PATH="$WORK/umu-bin:$PATH" UMU_OUT="$WORK/umu.out" PROBE="$WORK/bin/probe.sh" \
+    timeout -k 10 "$TIMEOUT" "$APP" --logs -i vfs-e2e run -e probe-exe \
+    > "$APP_OUT" 2>&1 < /dev/null || rc=$?
+
+((rc == 0)) || die "the application exited with $rc (124: timeout)"
+
+[[ -s $WORK/umu.out ]] || die "umu-run was not started"
+cat "$WORK/umu.out"
+expect_line() { grep -qxF "$1" "$WORK/umu.out" || die "umu-run: missing '$1'"; }
+expect_line "arg $GAME/probe.exe"
+expect_line "arg $GAME/Data"
+expect_line "arg two words"
+expect_line "env WINEPREFIX=$STEAM/steamapps/compatdata/489830"
+expect_line "env GAMEID=umu-489830"
+expect_line "env STORE=steam"
+expect_line "env SteamAppId=489830"
+expect_line "env SteamGameId=489830"
+expect_line "env PROTONPATH=$STEAM/compatibilitytools.d/GE-Proton11-7"
+expect_line "env STEAM_COMPAT_CLIENT_INSTALL_PATH=$STEAM"
+expect_line "env MO2_E2E_VAR=hello"
+expect_line "cwd $GAME"
+echo "ok umu-run: argv, environment and working directory"
+[[ $(grep -c '^arg ' "$WORK/umu.out") == 3 ]] || die "umu-run: not exactly 3 arguments"
+check_probe_run
 
 # --- a helper whose mount fails --------------------------------------------------
 
