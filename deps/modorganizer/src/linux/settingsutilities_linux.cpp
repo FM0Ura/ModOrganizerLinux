@@ -9,7 +9,6 @@
 #include <QApplication>
 #include <QMessageBox>
 #include <QMetaObject>
-#include <QThread>
 
 #include <cerrno>
 
@@ -25,24 +24,28 @@ void warnLoginNotKept()
     return;
   }
 
-  const auto show = [] {
-    QMessageBox::warning(
-        nullptr, QObject::tr("Login not saved"),
-        QObject::tr("No secret store (KWallet, GNOME Keyring) is available: Mod "
-                    "Organizer will forget this login when it closes."));
-  };
-
-  if (QThread::currentThread() == qApp->thread()) {
-    show();
-  } else {
-    QMetaObject::invokeMethod(qApp, show, Qt::QueuedConnection);
-  }
+  // always queued: the callers (NXMAccessManager::saveRefreshedTokens, ...) are in the
+  // middle of an update and must not run a nested event loop
+  QMetaObject::invokeMethod(
+      qApp,
+      [] {
+        QMessageBox::warning(
+            nullptr, QObject::tr("Login not saved"),
+            QObject::tr("No secret store (KWallet, GNOME Keyring) is available: Mod "
+                        "Organizer will forget this login when it closes."));
+      },
+      Qt::QueuedConnection);
 }
 }  // namespace
 
 bool deleteWindowsCredential(const QString& key)
 {
-  return secretstore::instance().remove(credentialName(key));
+  if (!secretstore::instance().remove(credentialName(key))) {
+    errno = EIO;
+    return false;
+  }
+
+  return true;
 }
 
 bool addWindowsCredential(const QString& key, const QString& data)
@@ -52,6 +55,10 @@ bool addWindowsCredential(const QString& key, const QString& data)
 
   if (store.takeMemoryWarning()) {
     warnLoginNotKept();
+  }
+
+  if (!ok) {
+    errno = EIO;
   }
 
   return ok;
