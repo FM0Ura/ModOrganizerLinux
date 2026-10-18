@@ -23,12 +23,20 @@ export HOME="$work" XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" \
     XDG_RUNTIME_DIR="$work/runtime"
 unset DISPLAY WAYLAND_DISPLAY
 
+# As root in a container without CAP_IPC_LOCK (the docker container of the CI), the
+# daemon aborts while trying to keep that capability ("error dropping process
+# capabilities"): start it without any capability, like an unprivileged user
+keyring=gnome-keyring-daemon
+if [ "$(id -u)" -eq 0 ] && command -v setpriv >/dev/null 2>&1; then
+    keyring="setpriv --inh-caps=-all --bounding-set=-all gnome-keyring-daemon"
+fi
+
 # --unlock reads the password of the new "login" keyring (the default collection)
 # from stdin
 out="$work/gtest.out"
 rc=0
-dbus-run-session -- sh -c '
-    printf "mo2-tests" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
+KEYRING="$keyring" dbus-run-session -- sh -c '
+    printf "mo2-tests" | $KEYRING --unlock --components=secrets >/dev/null
     MO2_TESTS_SECRET_SERVICE=1 exec "$0" --gtest_filter="SecretServiceIntegration.*"
 ' "$TESTS" > "$out" 2>&1 || rc=$?
 cat "$out"
