@@ -5,6 +5,7 @@
 
 #include "protonlauncher_linux.h"
 
+#include <QFileInfo>
 #include <QObject>
 #include <QProcess>
 #include <QRegularExpression>
@@ -25,6 +26,33 @@ namespace
       list.append(p.displayName);
     }
     return list.isEmpty() ? QObject::tr("none") : list.join(", ");
+  }
+
+  QString canonical(const QString& path)
+  {
+    const auto real = QFileInfo(path).canonicalFilePath();
+    return real.isEmpty() ? path : real;
+  }
+
+  // STEAM_COMPAT_LIBRARY_PATHS: the steamapps directory of every library of the Steam
+  // installation, the one with the game first
+  QString libraryPaths(const steam::App& app)
+  {
+    QStringList paths;
+
+    const auto add = [&](const QString& library) {
+      const auto steamapps = canonical(library + "/steamapps");
+      if (!paths.contains(steamapps)) {
+        paths.append(steamapps);
+      }
+    };
+
+    add(app.library);
+    for (const auto& library : steam::libraries(app.root)) {
+      add(library);
+    }
+
+    return paths.join(':');
   }
 }  // namespace
 
@@ -127,13 +155,17 @@ VfsSpawnRequest makeLaunch(const LaunchParameters& p)
   r.argv           = batch ? QStringList{"umu-run", "cmd", "/c", program} + args
                            : QStringList{"umu-run", program} + args;
 
-  r.environment = QStringList{"WINEPREFIX=" + app->compatData,
-                              "GAMEID=umu-" + appId,
-                              "STORE=steam",
-                              "SteamAppId=" + appId,
-                              "SteamGameId=" + appId,
-                              "PROTONPATH=" + chosen->path,
-                              "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + app->root} +
+  r.environment = QStringList{"WINEPREFIX=" + app->compatData, "GAMEID=umu-" + appId,
+                              "STORE=steam", "SteamAppId=" + appId,
+                              "SteamGameId=" + appId, "PROTONPATH=" + chosen->path,
+                              "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + app->root,
+                              // the game drive (S:) of Proton, which the registry paths
+                              // Steam writes for the game use (SSEEdit); canonical
+                              // because umu keeps the library list only when it finds
+                              // a mount point above the game path, and /home may be a
+                              // symlink to /var/home
+                              "STEAM_COMPAT_INSTALL_PATH=" + canonical(app->gamePath),
+                              "STEAM_COMPAT_LIBRARY_PATHS=" + libraryPaths(*app)} +
                   extra;
   r.winePrefix  = app->compatData;
 

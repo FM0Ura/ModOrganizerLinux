@@ -16,6 +16,11 @@ void write(const QString& path, const QByteArray& content)
   f.write(content);
 }
 
+QString canonical(const QString& path)
+{
+  return QFileInfo(path).canonicalFilePath();
+}
+
 class ProtonLauncher : public ::testing::Test
 {
 protected:
@@ -68,7 +73,54 @@ TEST_F(ProtonLauncher, WindowsExeArgv)
                    "GAMEID=umu-489830", "STORE=steam", "SteamAppId=489830",
                    "SteamGameId=489830",
                    "PROTONPATH=" + m_steam + "/steamapps/common/Proton - Experimental",
-                   "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + m_steam}));
+                   "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + m_steam,
+                   "STEAM_COMPAT_INSTALL_PATH=" + canonical(m_game),
+                   "STEAM_COMPAT_LIBRARY_PATHS=" + canonical(m_steam + "/steamapps")}));
+}
+
+TEST_F(ProtonLauncher, GameInAnotherLibraryComesFirstInTheLibraryPaths)
+{
+  QTemporaryDir other;
+  ASSERT_TRUE(other.isValid());
+  const auto library = other.path() + "/SteamLibrary";
+  const auto game    = library + "/steamapps/common/Oblivion";
+  write(library + "/steamapps/appmanifest_22330.acf",
+        "\"AppState\" { \"installdir\" \"Oblivion\" }");
+  write(game + "/Oblivion.exe", "MZ");
+  QDir().mkpath(m_steam + "/steamapps/compatdata/22330/pfx");
+  write(m_steam + "/steamapps/compatdata/22330/version", "11.0-100");
+  write(m_steam + "/steamapps/libraryfolders.vdf",
+        "\"libraryfolders\" { \"0\" { \"path\" \"" + m_steam.toUtf8() +
+            "\" } \"1\" { \"path\" \"" + library.toUtf8() + "\" } }");
+
+  proton::LaunchParameters p;
+  p.binary         = QFileInfo(game + "/Oblivion.exe");
+  p.gameSteamAppId = "22330";
+  const auto r     = proton::makeLaunch(p);
+
+  const auto i = r.environment.indexOf("STEAM_COMPAT_CLIENT_INSTALL_PATH=" + m_steam);
+  ASSERT_GE(i, 0);
+  EXPECT_EQ(
+      r.environment.mid(i + 1),
+      (QStringList{"STEAM_COMPAT_INSTALL_PATH=" + canonical(game),
+                   "STEAM_COMPAT_LIBRARY_PATHS=" + canonical(library + "/steamapps") +
+                       ":" + canonical(m_steam + "/steamapps")}));
+}
+
+TEST_F(ProtonLauncher, SteamReachedThroughASymlinkGivesResolvedPaths)
+{
+  QTemporaryDir real;
+  ASSERT_TRUE(real.isValid());
+  const auto target = real.path() + "/RealSteam";
+  ASSERT_TRUE(QDir().rename(m_steam, target));
+  ASSERT_TRUE(QFile::link(target, m_steam));
+  ASSERT_NE(canonical(m_steam), m_steam);
+
+  const auto r = proton::makeLaunch(exe("SkyrimSE.exe"));
+  EXPECT_TRUE(r.environment.contains("STEAM_COMPAT_INSTALL_PATH=" + target +
+                                     "/steamapps/common/Skyrim Special Edition"));
+  EXPECT_TRUE(
+      r.environment.contains("STEAM_COMPAT_LIBRARY_PATHS=" + target + "/steamapps"));
 }
 
 TEST_F(ProtonLauncher, ArgumentsAreSplitLikeTheCommandLine)
@@ -194,7 +246,7 @@ TEST_F(ProtonLauncher, NativeProgramsRunDirectly)
   p.environment = {"X=1"};
   const auto r  = proton::makeLaunch(p);
   EXPECT_EQ(r.argv, (QStringList{m_tmp.path() + "/tool.sh", "a", "b c"}));
-  EXPECT_EQ(r.environment, QStringList{"X=1"});
+  EXPECT_EQ(r.environment, QStringList{"X=1"});  // no STEAM_COMPAT_* for native ones
   EXPECT_EQ(r.workingDirectory, m_tmp.path());
   EXPECT_TRUE(r.winePrefix.isEmpty());
 }
