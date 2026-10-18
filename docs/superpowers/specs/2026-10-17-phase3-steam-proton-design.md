@@ -35,7 +35,8 @@ Feitos no Bazzite com o binário `mo2-vfs` atual, um mod com um arquivo marcador
 | Processos do Proton saem do grupo observado? | Sim: `pressure-vessel`, `wineserver`, `services.exe`, `explorer.exe` e o próprio `SkyrimSE.exe` ficam cada um em sessão e grupo próprios. |
 | O mount sobrevive até o jogo fechar com `watch {pgid do umu-run}`? | Sim: o `umu-run` só sai depois do `wineserver` (`waitforexitandrun`); o grupo dele cobriu a execução inteira (~47 s até sair pelo menu). |
 | A Steam reinicia o jogo por conta própria (`SteamAPI_RestartAppIfNecessary`)? | Não: com `SteamAppId`/`SteamGameId` e a Steam do host aberta, o `SkyrimSE.exe` ficou na árvore do `umu-run` e chegou ao menu. |
-| `distrobox-host-exec` serve de ponte para o protocolo JSON? | Sim: stdin e stdout chegam ao processo do host como pipes; o processo roda no namespace de montagem do host, com pgid próprio. |
+| `distrobox-host-exec` serve de ponte para o protocolo JSON? | Sim: stdin e stdout chegam ao processo do host como pipes; o processo roda no namespace de montagem do host, com pgid próprio. Quando o cliente no container morre (`SIGKILL`), o processo do host recebe EOF no stdin e nenhum sinal. O ambiente do processo é o do host: variáveis do container não passam. |
+| O `cwd` do `wineserver` identifica o prefixo? | Sim: com o Proton Experimental real, o `wineserver` (dentro do namespace do pressure-vessel) tinha `cwd` `/tmp/.wine-1000/server-3a-35652`, igual ao calculado de `stat` do `compatdata/489830/pfx` (`dev` 0x3a, `ino` 0x35652), e o link é legível do host. |
 | Não testado | SKSE (`skse64_loader.exe` inicia o jogo e sai); cache de diretórios do Wine após `update`. Ver §11. |
 
 ### 1.3 Fora de escopo
@@ -99,15 +100,18 @@ Sem prefixo (jogo nunca rodado pela Steam), voltam às pastas XDG da Fase 1 e re
 
 | MO2 → `mo2-vfs` | Conteúdo |
 |---|---|
-| `spawn` | `argv` (lista, `argv[0]` procurado no `PATH` do ambiente final), `env` (objeto: variáveis acrescentadas ou trocadas sobre o ambiente do próprio `mo2-vfs`), `cwd`, `wineprefix` (opcional: caminho do `compatdata/<appid>`, para a espera do §5.3) |
+| `spawn` | `argv` (lista, `argv[0]` procurado no `PATH` do ambiente final), `env` (objeto: variáveis acrescentadas ou trocadas sobre o ambiente do próprio `mo2-vfs`), `cwd`, `wineprefix` (opcional: caminho do `compatdata/<appid>`, para a espera do §5.3), `output` (opcional: arquivo que recebe o stdout e o stderr do programa; sem ele, `/dev/null`. Nunca o stdout do `mo2-vfs`, que é o canal do protocolo, nem um pipe: o programa não pode morrer com `SIGPIPE` quando o MO2 fecha) |
 
 | `mo2-vfs` → MO2 | Conteúdo |
 |---|---|
 | `spawned` | `pid` (resposta ao `spawn`) |
 | `exited` | `pid`, `code` (código de saída, ou `128 + sinal`); evento espontâneo |
+| `status` | ganha `processes`: pids dos programas iniciados por `spawn` que ainda rodam e dos `wineserver` que seguram o mount (§5.3); é o que o MO2 espera em `waitForAllUSVFSProcessesWithLock` |
 | `error` | código novo `spawn_failed` (`execve`/`cwd`/`argv[0]` não encontrado), com `message` e `path` |
 
-`spawn` é aceito com ou sem mount ativo (programas sem VFS, "unhooked", usam o mesmo caminho). O filho nasce num grupo próprio (`setpgid(0, 0)`) e o grupo entra na lista de acompanhados antes da resposta `spawned`, sem corrida com um `watch` posterior. O `watch` da Fase 2 continua aceito. `exited` é o único evento espontâneo novo; como os outros espontâneos, o cliente nunca o toma como resposta a um pedido. O ambiente do filho é o do `mo2-vfs` no host (não o do container), mais `env`.
+`spawn` é aceito com ou sem mount ativo (programas sem VFS, "unhooked", usam o mesmo caminho). O filho nasce num grupo próprio (`setpgid(0, 0)`) e o grupo entra na lista de acompanhados antes da resposta `spawned`, sem corrida com um `watch` posterior. O `watch` da Fase 2 continua aceito.
+
+Linha de comando nova: `mo2-vfs --list-mounts` escreve uma linha JSON `{"roots": [...]}` com os pontos de montagem `fuse.mo2-vfs` (ou `fuse` com fonte `mo2-vfs`) do namespace de montagem em que roda, e sai com 0. O MO2 usa isso em vez de ler o próprio `/proc/self/mountinfo`, que no container não mostra os mounts do host (§6.1). `exited` é o único evento espontâneo novo; como os outros espontâneos, o cliente nunca o toma como resposta a um pedido. O ambiente do filho é o do `mo2-vfs` no host (não o do container), mais `env`.
 
 ### 5.2 Sessão do `mo2-vfs`
 
@@ -122,9 +126,9 @@ Para cada `spawn` com `wineprefix`, o `mo2-vfs` guarda o diretório do servidor 
 ### 6.1 Ponte para o host
 
 - O `LinuxVfsConnector` considera que o MO2 está em container quando existe `/run/.containerenv` ou `/.dockerenv`. Nesse caso inicia `distrobox-host-exec <caminho do mo2-vfs> <argumentos>`; senão, `mo2-vfs` direto (como na Fase 2, e como será no AppImage da Fase 5). `MO2_VFS_BINARY` continua valendo.
-- A variável `MO2_VFS_BRIDGE` troca a detecção: `direct` inicia o helper direto mesmo em container (o CI, que roda num container Fedora sem host, e quem roda o MO2 num container com acesso à Steam por dentro); `host` força o `distrobox-host-exec`; vazio ou `auto` usa a detecção.
+- A variável `MO2_VFS_BRIDGE` (os testes automáticos do MO2 e o e2e definem `direct`) troca a detecção: `direct` inicia o helper direto mesmo em container (o CI, que roda num container Fedora sem host, e quem roda o MO2 num container com acesso à Steam por dentro); `host` força o `distrobox-host-exec`; vazio ou `auto` usa a detecção.
 - Em container sem `distrobox-host-exec` no `PATH`, o conector não inicia o helper e `activate()`/`spawn` falham com a mensagem "não foi possível executar no host: `distrobox-host-exec` não encontrado". **Não** cai de volta para o mount dentro do container (o problema `/home` × `/var/home` do §1.2).
-- O `--cleanup` da inicialização também vai pela ponte (os mounts órfãos estão no host).
+- O `--cleanup` da inicialização e a conferência dos mounts depois de perder o helper (hoje `/proc/self/mountinfo` do MO2) vão pela ponte, esta com `--list-mounts` (§5.1): os mounts estão no host.
 - Caminhos passam sem tradução: no host, `/home` e `/var/home` são o mesmo diretório; o binário `mo2-vfs` vem do diretório de instalação, visível do host pela home.
 
 ### 6.2 Lançamento (`ProtonLauncher` e `ProcessRunner`)
@@ -139,11 +143,11 @@ Para cada `spawn` com `wineprefix`, o `mo2-vfs` guarda o diretório do servidor 
    - cwd: o diretório de trabalho do executável; vazio → o diretório do `.exe` (corrige a pendência "diretório de trabalho vazio usa o cwd do MO2").
    - `wineprefix` do `spawn` = `<compatdata>`.
 3. **Nativos:** argv = binário + argumentos, env = só as variáveis do executável, cwd como acima, sem `wineprefix`.
-4. **Fluxo** (o da Fase 2, trocando o início): salvar perfil → `beforeRun` (`activate()`) → `spawn` → UILocker com o `pid` → `postRun` espera o `exited` desse `pid` → `afterRun`. Se o `spawn` falhar, `releaseIfIdle()`. `spawn::startBinary` (usado por outros chamadores) passa pelo mesmo `ProtonLauncher`.
-5. **Espera:** `postRun` termina com o `exited`; o código de saída vai para o log (sem diálogo quando ≠ 0). Se o helper se perder durante a espera, o `pid` passa a ser esperado por `/proc` (o container compartilha o PID do host) e o motivo vai para `takeLostReason()`.
-6. **Log:** cada lançamento registra argv, env acrescentado e cwd enviados ao `spawn`.
+4. **Fluxo** (o da Fase 2, trocando o início): salvar perfil → `beforeRun` (`activate()`) → `VfsConnector::spawn()` → UILocker com o `pid` → `postRun` espera → `afterRun`. Se o `spawn` falhar, `releaseIfIdle()`. Execuções sem VFS ("unhooked") também usam `spawn` (o helper é iniciado sem montar), para rodarem no host como as outras. `spawn::startBinary` continua só para programas nativos: o único outro chamador é o LOOT, da Fase 4.
+5. **Espera:** a mesma da Fase 2, pela árvore de processos do `pid` em `/proc` (o container compartilha o PID do host, então o `pid` do host vale no MO2). O código de saída vem do `exited` desse `pid` (o conector guarda os códigos recebidos; `takeExitCode(pid)`), esperado por até 2 s depois do fim da árvore; vai para o log, sem diálogo quando ≠ 0. Se o helper se perder, a espera continua pela árvore e o motivo vai para `takeLostReason()`.
+6. **Log:** cada lançamento registra argv, env acrescentado e cwd enviados ao `spawn`; a saída do programa vai para `<instância>/logs/run-<nome do executável>.log` (`output`).
 
-Corrigidas de carona (pendências da Fase 2 do mesmo fluxo): `waitForAllUSVFSProcessesWithLock` espera até o `status` do helper não ter grupos (em vez de devolver `Completed` com mount ativo); o segundo "Executar" com mount ativo envia um só `update`.
+Corrigidas de carona (pendências da Fase 2 do mesmo fluxo): `waitForAllUSVFSProcessesWithLock` espera os `processes` do `status` do helper, como o Windows espera os processos do USVFS (em vez de devolver `Completed` com mount ativo); o segundo "Executar" com mount ativo envia um só `update`.
 
 ### 6.3 Configuração por executável
 
@@ -162,7 +166,7 @@ Corrigidas de carona (pendências da Fase 2 do mesmo fluxo): `waitForAllUSVFSPro
 | Sem appid, sem prefixo ou sem Proton | Erro antes de montar, com o motivo e o que fazer (§6.2). |
 | `spawn` falha (`execve`, `cwd`) | `error spawn_failed`, nenhum grupo acompanhado; o MO2 mostra o erro e chama `releaseIfIdle()`. |
 | Programa sai com código ≠ 0 | Só no log. |
-| Helper morre durante a execução | Como na Fase 2 (aviso, limpeza de órfãos ao abrir o MO2); o `pid` é esperado por `/proc` até sair. |
+| Helper morre durante a execução | Como na Fase 2 (aviso, limpeza de órfãos ao abrir o MO2); a espera continua pela árvore do `pid` em `/proc`; sem `exited`, o código de saída fica desconhecido (log). |
 | MO2 fecha ou cai durante a execução | O helper segue sozinho e desmonta quando os grupos e o `wineserver` terminam; sem aviso de `Broken pipe`. |
 | `wineserver` não sai (prefixo travado) | Não desmonta; o MO2 continua "em execução" até o usuário usar "Desbloquear" no UILocker; o mount fica até o `wineserver` sair ou até a limpeza de órfãos ao reabrir o MO2. |
 
@@ -205,6 +209,6 @@ Novo, encontrado no spike: dentro do container, `/home` e `/var/home` são mount
 |---|---|
 | `skse64_loader.exe` se comporta diferente do esperado (ex.: o `umu-run` sai antes do jogo e o `wineserver` também) | Espera do `wineserver` (§5.3); primeira tarefa do plano com o SKSE real verifica, antes do resto da integração. |
 | Cálculo de `server-<dev>-<ino>` diferente do Wine do Proton, ou `cwd` do `wineserver` ilegível dentro do pressure-vessel | Verificado na mesma tarefa inicial com o Proton real; alternativa: rodar `<proton>/files/bin/wineserver -w` com o `WINEPREFIX` no host. |
-| `host-spawn` não entrega EOF do stdin ao `mo2-vfs` quando o MO2 cai, ou não repassa sinais | Testado na tarefa inicial; o comportamento sem EOF é o mesmo de "grupo vivo" (desmonta quando acabar), e a limpeza de órfãos cobre o resto. |
+| `host-spawn` não repassa sinais ao `mo2-vfs` | Verificado: o EOF do stdin chega quando o cliente morre (§1.2), e é o sinal que o `mo2-vfs` usa; sinais não são necessários. |
 | Cache de diretórios do Wine após `update` com o jogo rodando | Com a interface travada durante a execução, `update` a quente é raro; fica registrado como limitação se aparecer no teste manual. |
 | Atualização do runtime pelo `umu` na primeira execução (download) | Mensagem no log; o UILocker mostra o programa em execução enquanto isso. |
