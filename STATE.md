@@ -30,6 +30,7 @@ Spec: [`docs/superpowers/specs/2026-10-17-phase3-steam-proton-design.md`](docs/s
 | 12 | e2e: "Executar" de um `.exe` com um `umu-run` falso | ✅ | `8bcb72c`, `a7ce0c4` |
 | 13 | Documentação, checklist manual e fechamento | ✅ docs (`docs: Phase 3 manual checklist, state and roadmap [windows-ci]`) | `6d9d166`, `10869e8` |
 | — | Revisão final do branch + rodada de correções (mount deixado nunca é montado por cima, mesmo com helper novo do `spawn()`; tabela de mounts ilegível conta como montado; programa de uma ativação não roda sem o VFS se o helper se perdeu; docs do resultado da Task 3) | ✅; falta o checkpoint de CI (push só com autorização do usuário) e o teste manual | `79f9233`, `99d405b`, este commit |
+| — | Teste manual (2026-10-18): SSEEdit sob Proton abortava com "Access denied" (código 5, plugins nunca carregavam) ao criar `Plugins.sseviewsettings` em `AppData/Local/Skyrim Special Edition`, raiz que só tem os mappings de arquivo do perfil e nenhuma camada de criação (`EROFS`). Corrigido: raiz sem camada de criação grava na pasta real, como o USVFS (decisão de 2026-10-18). O pop-up "Not implemented" do SSEEdit é do Wine, não do MO2 (limitações conhecidas da Fase 3) | ✅ | `99ace0c` |
 
 ### Critérios de pronto (spec da Fase 3, §10)
 
@@ -134,6 +135,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 - SKSE real (`skse64_loader.exe`): verificado no ponto de controle da Task 3 com o `mo2-vfs` direto no host; pela ponte `distrobox-host-exec` (MO2 no box), só no teste manual. Só o Skyrim SE e o SSEEdit são o escopo testado; Flatpak e outros discos só com fixtures; demais jogos Bethesda só compilam; xEdit de outros jogos, BodySlide e Nemesis/Pandora ficam para a Fase 4.
 - `.bat`/`.cmd` com caminho Unix contendo espaços em `umu-run cmd /c`: não verificado sob o Wine (checklist).
 - A pasta "My Games" (e saves/AppData) é fixada quando o jogo é detectado, ao abrir a instância: um prefixo criado depois (jogo rodado pela Steam pela primeira vez com o MO2 aberto) só vale depois de reiniciar o MO2.
+- SSEEdit sob Proton mostra um pop-up "Not implemented" ao abrir: é a limitação de OLE do RichEdit do Wine na janela de texto inicial (`EOleException` em `TfrmRichEdit.BuildTOC`), não o MO2; contorno: `protontricks 489830 riched20`.
 - Valem as limitações das Fases 1 e 2, menos "Executar" só para programas nativos e "My Games"/AppData em pastas XDG (agora no prefixo, com volta às pastas XDG quando não há prefixo).
 
 ## Limitações conhecidas da Fase 2
@@ -190,6 +192,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-18 | Fase 3 (revisão final): um mount deixado por um helper perdido é limpo antes de qualquer mount novo, e nunca montado por cima, mesmo quando um "Executar" sem VFS iniciou um helper novo; tabela de mounts ilegível (`--list-mounts` falhou) conta como "ainda montado"; o programa de uma ativação não é iniciado se o helper se perdeu depois dela (erro em vez de rodar sem o VFS) |
 | 2026-10-18 | Fase 3: o teste unitário de `proton`/`environment` no `ExecutablesList` previsto na spec (§8) ficou de fora (código do app fora do `organizer_tests`); coberto pelo `probe-exe` do e2e e por uma conferência da ida e volta pelo `QSettings` |
 | 2026-10-18 | Fase 3: o aviso de "sem prefixo" no `game_bethesda` só vale para jogo instalado numa biblioteca da Steam e sem prefixo (appid vazio: sem busca nem log; app não instalado: `debug`); o custo de reler os arquivos da Steam a cada chamada foi aceito, sem cache |
+| 2026-10-18 | Fase 3 (teste manual): numa raiz sem camada de criação (nenhum mapping de diretório com `createTarget`, ex.: `AppData/Local/<jogo>` só com `plugins.txt`/`loadorder.txt`, e as raízes de "My Games" no mesmo caso), a pasta real age como camada de criação, como o USVFS: criar/`mkdir` vão para ela, excluir apaga de fato e renomear move dentro dela. A proteção dos originais (decisão de 2026-10-15) continua nas raízes com camada de criação (o `Data` com o `overwrite/`); decidido pelos mappings, então um `overwrite/` indisponível não expõe os originais |
 
 ## Pendências por fase
 
