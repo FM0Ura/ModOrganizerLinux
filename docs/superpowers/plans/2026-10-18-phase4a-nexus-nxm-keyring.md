@@ -16,7 +16,7 @@
 - O app continua compilando no Windows **contra o `uibase` upstream**. Código Linux do app em `src/linux/<nome>_linux.{h,cpp}`; em `settings.cpp` (arquivo compartilhado) as funções Windows-only ficam em `#ifdef _WIN32` e as versões Linux em `src/linux/settings_linux.cpp` (regras de `deps/modorganizer/src/linux/README.md`).
 - Esquema libsecret: nome `org.modorganizer.ModOrganizer2`, flags `SECRET_SCHEMA_NONE`, um atributo string `key` com o valor `credentialName(key)` (`ModOrganizer2_APIKEY`, `ModOrganizer2_NEXUS_OAUTH_TOKENS`, `ModOrganizer2_steam_password`); coleção `SECRET_COLLECTION_DEFAULT`; rótulo `Mod Organizer 2: <nome>`; segredos UTF-8.
 - Sem Secret Service: só memória, nada de segredo no disco; aviso por `log::warn` uma vez e um `QMessageBox::warning` único na primeira **gravação** em memória.
-- Arquivo do handler: `$XDG_DATA_HOME/applications/modorganizer2-nxm-handler.desktop` (`QStandardPaths::GenericDataLocation` + `/applications`); MIME `x-scheme-handler/nxm`. Lançador, primeira regra que valer: `$APPIMAGE`; modo `Host` da `vfsbridge` com `CONTAINER_ID` → `distrobox enter <CONTAINER_ID> -- <executável>`; senão o executável. Modo `Host` sem `CONTAINER_ID`: registro recusado.
+- Arquivo do handler: `$XDG_DATA_HOME/applications/org.modorganizer.ModOrganizer2.nxm.desktop` (`QStandardPaths::GenericDataLocation` + `/applications`); MIME `x-scheme-handler/nxm`. Lançador, primeira regra que valer: `$APPIMAGE`; modo `Host` da `vfsbridge` com `CONTAINER_ID` → `distrobox enter <CONTAINER_ID> -- <executável>`; senão o executável. Modo `Host` sem `CONTAINER_ID`: registro recusado.
 - Registro: sem forçar só grava/define quando não há handler (ou regrava o arquivo se o handler já é o nosso); forçando, sempre grava e define. Tudo assíncrono; falha sem forçar só vai para o log.
 - Opção CMake `MO2_WITH_LIBSECRET` (Linux, padrão ON). OFF: compila e roda só com memória.
 - Todo teste automático do app, o smoke e o e2e definem `MO2_VFS_BRIDGE=direct` (o CI roda num container). Nenhum teste toca o keyring, o `mimeapps.list` ou o `~/.local/share/applications` reais.
@@ -37,7 +37,7 @@ A distrobox precisa dos pacotes novos (Task 1): `distrobox enter mo2-run -- sudo
 1. **Caminho do executável com espaço, `$`, `"`, `\`, `%` e não-ASCII** (`/home/u/Mod Organizer/Módulos/$x`) no `Exec=` do `.desktop`: o Plasma precisa receber o caminho intacto → testes `QuoteExecArgument` e `DesktopFileEscapesBackslashes` (Task 3).
 2. **Segredos grandes com aspas e não-ASCII** (tokens OAuth em JSON, ~2 KB): ida e volta byte a byte pelo Secret Service → `SecretServiceIntegration.RoundTrip` usa um JSON de 4 KB com aspas e `çãø🔑` (Task 1).
 3. **Carteira trancada ou prompt cancelado** (erro que não é "serviço ausente"): não pode jogar a sessão para a memória nem apagar nada; a próxima chamada tenta o Secret Service de novo → teste `FailedKeepsTheSecretService` (Task 2).
-4. **Saída do `xdg-mime query` com quebra de linha ou espaços** (`modorganizer2-nxm-handler.desktop\n`): reconhecida como o nosso handler → caso com `\n` e espaços em `Decide` (Task 3).
+4. **Saída do `xdg-mime query` com quebra de linha ou espaços** (`org.modorganizer.ModOrganizer2.nxm.desktop\n`): reconhecida como o nosso handler → caso com `\n` e espaços em `Decide` (Task 3).
 5. **`xdg-mime` ausente** (CI, hosts mínimos) na abertura: nenhum diálogo, nada travado, só log; pelo botão, diálogo com a causa → teste `MissingXdgMimeFails` (Task 4) e o caminho sem forçar de `settings_linux.cpp` (Task 5).
 
 ---
@@ -1095,7 +1095,7 @@ git commit -m "deps/modorganizer: Linux: store credentials in the Secret Service
 **Interfaces:**
 - Consumes: `vfsbridge::mode(const QString& rootDir = "/")`, `vfsbridge::Mode::{Direct, Host}`, `vfsbridge::Command{QString program; QStringList arguments;}`, `vfsbridge::helperCommand(const QString& binary, const QStringList& args, const QString& rootDir = "/")` (lança `std::runtime_error` no modo `Host` sem `distrobox-host-exec`), `vfsbridge::hostCanonicalPath(const QString&, const QString& rootDir = "/")` — de `src/linux/vfsbridge_linux.h`.
 - Produces (namespace `nxmhandler`):
-  - `inline constexpr char DesktopFileName[] = "modorganizer2-nxm-handler.desktop";`
+  - `inline constexpr char DesktopFileName[] = "org.modorganizer.ModOrganizer2.nxm.desktop";`
   - `inline constexpr char MimeType[] = "x-scheme-handler/nxm";`
   - `struct Environment { QString appImage; QString containerId; bool inContainer = false; QString executable; };`
   - `Environment currentEnvironment();`
@@ -1237,12 +1237,14 @@ TEST(NxmHandler, Decide)
   using nxmhandler::decide;
   EXPECT_EQ(decide("", false), Action::WriteFileAndSetDefault);
   EXPECT_EQ(decide("  \n", false), Action::WriteFileAndSetDefault);
-  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", false), Action::WriteFile);
-  EXPECT_EQ(decide(" modorganizer2-nxm-handler.desktop\n", false), Action::WriteFile);
+  EXPECT_EQ(decide("org.modorganizer.ModOrganizer2.nxm.desktop", false), Action::WriteFile);
+  EXPECT_EQ(decide(" org.modorganizer.ModOrganizer2.nxm.desktop\n", false), Action::WriteFile);
   EXPECT_EQ(decide("vortex-nxm.desktop", false), Action::None);
+  // o arquivo do instalador Wine do MO2 é outro handler, não o nosso
+  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", false), Action::None);
 
   EXPECT_EQ(decide("", true), Action::WriteFileAndSetDefault);
-  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", true),
+  EXPECT_EQ(decide("org.modorganizer.ModOrganizer2.nxm.desktop", true),
             Action::WriteFileAndSetDefault);
   EXPECT_EQ(decide("vortex-nxm.desktop", true), Action::WriteFileAndSetDefault);
 }
@@ -1253,7 +1255,7 @@ TEST(NxmHandler, Paths)
   ScopedEnv xdg("XDG_DATA_HOME", data.path().c_str());
   const auto dir = QString::fromStdString(data.path().string()) + "/applications";
   EXPECT_EQ(nxmhandler::applicationsDir(), dir);
-  EXPECT_EQ(nxmhandler::desktopFilePath(), dir + "/modorganizer2-nxm-handler.desktop");
+  EXPECT_EQ(nxmhandler::desktopFilePath(), dir + "/org.modorganizer.ModOrganizer2.nxm.desktop");
 }
 
 TEST(NxmHandler, CommandsDirect)
@@ -1266,7 +1268,7 @@ TEST(NxmHandler, CommandsDirect)
 
   c = nxmhandler::setDefaultCommand();
   EXPECT_EQ(c.program, "xdg-mime");
-  EXPECT_EQ(c.arguments, (QStringList{"default", "modorganizer2-nxm-handler.desktop",
+  EXPECT_EQ(c.arguments, (QStringList{"default", "org.modorganizer.ModOrganizer2.nxm.desktop",
                                       "x-scheme-handler/nxm"}));
 
   c = nxmhandler::updateDatabaseCommand("/home/u/.local/share/applications");
@@ -1341,7 +1343,7 @@ Expected: FAIL — `nxmhandler_linux.h` / `nxmhandler_linux.cpp` não existem.
 namespace nxmhandler
 {
 // the name of the desktop file, which is also how xdg-mime names the handler
-inline constexpr char DesktopFileName[] = "modorganizer2-nxm-handler.desktop";
+inline constexpr char DesktopFileName[] = "org.modorganizer.ModOrganizer2.nxm.desktop";
 inline constexpr char MimeType[]        = "x-scheme-handler/nxm";
 
 // what decides how the desktop file starts Mod Organizer
@@ -1625,7 +1627,7 @@ struct FakeTools
   QString desktopFile() const
   {
     QFile f(QString::fromStdString(
-        (data / "applications" / "modorganizer2-nxm-handler.desktop").string()));
+        (data / "applications" / "org.modorganizer.ModOrganizer2.nxm.desktop").string()));
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
   }
 
@@ -1673,7 +1675,7 @@ TEST(NxmHandlerRegistration, NoHandlerWritesTheFileAndSetsTheDefault)
       << t.desktopFile().toStdString();
   EXPECT_TRUE(t.calls().contains("xdg-mime query default x-scheme-handler/nxm"));
   EXPECT_TRUE(t.calls().contains(
-      "xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm"));
+      "xdg-mime default org.modorganizer.ModOrganizer2.nxm.desktop x-scheme-handler/nxm"));
   EXPECT_TRUE(t.calls().contains("update-desktop-database "));
 }
 
@@ -1685,9 +1687,9 @@ TEST(NxmHandlerRegistration, OurHandlerOnlyRewritesTheFile)
   ScopedEnv path("PATH", t.pathWithSh().c_str());
   ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
 
-  t.setDefault("modorganizer2-nxm-handler.desktop");
+  t.setDefault("org.modorganizer.ModOrganizer2.nxm.desktop");
   fs::create_directories(t.data / "applications");
-  std::ofstream(t.data / "applications" / "modorganizer2-nxm-handler.desktop")
+  std::ofstream(t.data / "applications" / "org.modorganizer.ModOrganizer2.nxm.desktop")
       << "old\n";
 
   const auto [ok, message] = registerAndWait(false);
@@ -1716,7 +1718,7 @@ TEST(NxmHandlerRegistration, OtherHandlerIsKeptUnlessForced)
   ASSERT_TRUE(ok) << message.toStdString();
   EXPECT_FALSE(t.desktopFile().isEmpty());
   EXPECT_TRUE(t.calls().contains(
-      "xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm"));
+      "xdg-mime default org.modorganizer.ModOrganizer2.nxm.desktop x-scheme-handler/nxm"));
 }
 
 TEST(NxmHandlerRegistration, MissingXdgMimeFails)
@@ -2239,12 +2241,12 @@ Spec: [`../superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](..
 | 1b | Fechar e reabrir o MO2. | Continua conectado, sem pedir login. No KWallet Manager, entrada `Mod Organizer 2: ModOrganizer2_NEXUS_OAUTH_TOKENS`. | |
 | 2 | Desconectar do Nexus nas configurações. | A entrada some do KWallet. | |
 | 2b | Conectar por API key (colar a chave). Fechar e reabrir. | Continua conectado; entrada `…_APIKEY` no KWallet. | |
-| 3 | No host: `xdg-mime query default x-scheme-handler/nxm`; `cat ~/.local/share/applications/modorganizer2-nxm-handler.desktop`. | `modorganizer2-nxm-handler.desktop`; `Exec=distrobox enter mo2-run -- <caminho>/ModOrganizer %u`. | |
+| 3 | No host: `xdg-mime query default x-scheme-handler/nxm`; `cat ~/.local/share/applications/org.modorganizer.ModOrganizer2.nxm.desktop`. | `org.modorganizer.ModOrganizer2.nxm.desktop`; `Exec=distrobox enter mo2-run -- <caminho>/ModOrganizer %u`. | |
 | 4 | Com o MO2 aberto: no site do Nexus, "Mod Manager Download" de um mod pequeno de Skyrim SE. | O Firefox pode perguntar com qual programa abrir (aceite e lembre); o download aparece na aba Downloads e termina. | |
 | 4b | Fechar o MO2 e repetir com outro mod. | O MO2 abre na instância e baixa. | |
 | 5 | Instalar o mod do item 4 e um mod FOMOD baixado do mesmo jeito; ativar. | Instalação normal (FOMOD com o assistente); arquivos na aba Data. | |
-| 6 | No host: `xdg-mime default firefox.desktop x-scheme-handler/nxm` (simula outro handler). Reabrir o MO2. Depois, Configurações → Nexus → "Associate with Download Manager Links". | Reabrir não troca (`xdg-mime query …` = `firefox.desktop`); o botão mostra "now handles nxm:// links" e o query volta a `modorganizer2-nxm-handler.desktop`. | |
-| 7 | `distrobox enter mo2-run -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent <repo>/install/bin/ModOrganizer`; conectar por API key. | Aviso "Login not saved" uma vez; conectado durante a sessão; ao reabrir normalmente, a chave do item 2b continua no KWallet (nada foi apagado). | |
+| 6 | No host: `xdg-mime default org.mozilla.firefox.desktop x-scheme-handler/nxm` (simula outro handler; o Firefox é o Flatpak, e o xdg-utils ignora um padrão cujo `.desktop` não existe). Reabrir o MO2. Depois, Configurações → Nexus → `Associate with "Download with manager" links`. | Reabrir não troca (`xdg-mime query …` = `org.mozilla.firefox.desktop`); o botão mostra um diálogo ("Mod Organizer now handles nxm:// links.") e o query volta a `org.modorganizer.ModOrganizer2.nxm.desktop`. | |
+| 7 | Com o MO2 fechado: `distrobox enter mo2-run -- env DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent <repo>/install/bin/ModOrganizer`; conectar por API key. | Aviso "Login not saved" uma vez; conectado durante a sessão; ao reabrir normalmente, a chave do item 2b continua no KWallet (nada foi apagado). | |
 
 **Ao terminar:** registre aqui o resultado de cada item e, em "Observações", o que precisou de correção.
 

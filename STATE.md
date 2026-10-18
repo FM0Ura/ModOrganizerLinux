@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** 🟡 implementação concluída; falta o CI, o teste manual e o merge · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
+**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** 🟡 implementação concluída (inclui a rodada de correções da revisão final); CI e teste manual pendentes, depois o merge · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
 **Branch principal:** `main` (Fases 1 a 3; `fase-2-vfs-fuse` e `fase-3-steam-proton` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4a:** `fase-4a-nexus` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
@@ -22,7 +22,8 @@ Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](
 | 4 | MO2: registro do handler `nxm` com `xdg-mime` | ✅ | `439f936` |
 | 5 | MO2: o Mod Organizer se registra para links `nxm://` | ✅ | `f67c374` |
 | 6 | Smoke: um link `nxm://` de uma segunda invocação chega ao aplicativo em execução | ✅ | `a5d0495` |
-| 7 | Documentação, checklist manual e ponto de controle de CI | 🟡 docs em andamento (`docs: Phase 4a checklist, state and roadmap`); o push e o CI dependem da autorização do usuário | este commit |
+| 7 | Documentação, checklist manual e ponto de controle de CI | ✅ docs, checklist e ponto de controle de CI; o push e o CI dependem da autorização do usuário | `7fb33a5` |
+| — | Revisão final do branch + rodada de correções (id próprio do `.desktop`, `org.modorganizer.ModOrganizer2.nxm.desktop`, para não colidir com o instalador Wine do MO2; smoke e e2e sem o keyring real; aviso de login sempre enfileirado e `errno` nas falhas; `secret-service.sh` exige `PASSED`; checklist e docs) | ✅ | `08371e2`, `ea5d0b7`, `d0ba64f`, `2a0b8c4` |
 | 8 | Teste manual no Bazzite ([`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)) | ⚪ não iniciado | — |
 
 ## Fase 3 — progresso
@@ -172,7 +173,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 (Fase 2; "Executar" de `.exe` e o mount invisível para a Steam do host foram resolvidos na Fase 3.)
 
-- ~~"Executar" só funciona para programas Linux nativos; `.exe`/Proton continuam com o aviso da Fase 3.~~ (resolvido na Fase 3, pendente do teste manual)
+- ~~"Executar" só funciona para programas Linux nativos; `.exe`/Proton continuam com o aviso da Fase 3.~~ (resolvido na Fase 3; teste manual aprovado em 2026-10-18)
 - ~~O MO2 roda no distrobox `mo2-run`: o mount FUSE existe só no namespace de montagem do container e **não** é visto pela Steam do host. O `findmnt` do host não o mostra; confira dentro do box.~~ (resolvido na Fase 3: o mount é feito no host)
 - Só há mount enquanto um programa roda (monta ao executar, desmonta quando o último grupo observado termina); a aba Data e o refresh continuam usando a árvore nativa.
 - Enquanto há mount ativo, o refresh de mods fica adiado e roda quando o VFS desmonta; trocar de perfil nesse período mostra a lista nova com a árvore antiga até desmontar.
@@ -184,7 +185,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 ## Limitações conhecidas da Fase 1
 
 - (Fase 1) Sem VFS: resolvido na Fase 2 para programas nativos e na Fase 3 para jogos Proton.
-- ~~"Executar" mostra aviso; jogos e ferramentas não iniciam~~ (resolvido na Fase 3, pendente do teste manual).
+- ~~"Executar" mostra aviso; jogos e ferramentas não iniciam~~ (resolvido na Fase 3; teste manual aprovado em 2026-10-18).
 - Sem LOOT, sem criação de BSA, sem atualização automática, sem plugins Python, ~~sem `nxm://`~~ (resolvido na Fase 4a, pendente do teste manual) (Fase 4/5).
 - ~~Logins do Nexus/Steam ficam só em memória (perdidos ao fechar)~~ (resolvido na Fase 4a: Secret Service; sem ele, só em memória).
 - ~~"My Games"/"AppData" apontam para pastas XDG~~ (Fase 3 leva para o prefixo do Proton; sem prefixo, volta às XDG).

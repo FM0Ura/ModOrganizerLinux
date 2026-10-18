@@ -71,12 +71,12 @@ Dividida em subfases (spec da 4a, §1.1).
 
 Fase 4a — Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md`](docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md) · Checklist manual: [`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)
 
-- `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
-- `lootcli` nativo (libloot) → ordenação com LOOT.
-- Handler `nxm://` (`.desktop` + `xdg-mime`) → downloads pelo site do Nexus.
-- Demais plugins (BAIN, previews, ferramentas); detecção completa de jogos via `steam/`.
-- Criação de BSA/BA2 com alternativa nativa ao `libbsarch`.
-- Armazenamento seguro de credenciais (Nexus/Steam) via Secret Service/keyring.
+- (4d) `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
+- (4b) `lootcli` nativo (libloot) → ordenação com LOOT.
+- (4a) Handler `nxm://` (`.desktop` + `xdg-mime`) → downloads pelo site do Nexus.
+- (4c) Demais plugins (BAIN, previews, ferramentas); detecção completa de jogos via `steam/`.
+- (4e) Criação de BSA/BA2 com alternativa nativa ao `libbsarch`.
+- (4a) Armazenamento seguro de credenciais (Nexus/Steam) via Secret Service/keyring.
 
 ## Fase 5 — Distribuição
 

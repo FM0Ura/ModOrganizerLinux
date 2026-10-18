@@ -48,7 +48,7 @@ A Fase 4 (Ecossistema) foi dividida em subfases, cada uma com spec, plano, CI, t
 ## 2. Arquitetura
 
 ```
-Firefox (Flatpak) ──portal OpenURI──▶ modorganizer2-nxm-handler.desktop
+Firefox (Flatpak) ──portal OpenURI──▶ org.modorganizer.ModOrganizer2.nxm.desktop
                                          │ Exec=distrobox enter mo2-run -- <ModOrganizer> %u
                                          ▼
                                ModOrganizer nxm://…  ──MOMultiProcess──▶ MO2 aberto
@@ -94,7 +94,7 @@ O fluxo de download (`NexusInterface`, `NXMAccessManager`, `DownloadManager`, `M
 
 ### 4.1 Arquivo `.desktop`
 
-Caminho: `$XDG_DATA_HOME/applications/modorganizer2-nxm-handler.desktop` (padrão `~/.local/share/applications`; a home é a mesma no box e no host).
+Caminho: `$XDG_DATA_HOME/applications/org.modorganizer.ModOrganizer2.nxm.desktop` (padrão `~/.local/share/applications`; a home é a mesma no box e no host). O nome é próprio de propósito: `modorganizer2-nxm-handler.desktop` é o arquivo que o instalador Wine do MO2 (modorganizer2-linux-installer) grava, e tratá-lo como nosso o sobrescreveria a cada abertura.
 
 ```ini
 [Desktop Entry]
@@ -120,7 +120,7 @@ Sem `Icon` nesta fase (a instalação Linux não tem um arquivo de ícone; entra
 Comandos (no host em modo `Host`, como `distrobox-host-exec xdg-mime …`; direto no modo `Direct`):
 
 - consulta: `xdg-mime query default x-scheme-handler/nxm`;
-- definição: `xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm`;
+- definição: `xdg-mime default org.modorganizer.ModOrganizer2.nxm.desktop x-scheme-handler/nxm`;
 - depois: `update-desktop-database <pasta applications>`, se existir; falha ignorada (só log).
 
 Decisão (função pura, testável):
@@ -128,8 +128,8 @@ Decisão (função pura, testável):
 | Handler atual | Sem forçar (ao abrir o MO2) | Forçando (botão) |
 |---|---|---|
 | nenhum | grava o `.desktop` e define | grava e define |
-| `modorganizer2-nxm-handler.desktop` | regrava o `.desktop` (atualiza o caminho) | grava e define |
-| outro | nada (log `debug` com o nome do handler) | grava e define |
+| `org.modorganizer.ModOrganizer2.nxm.desktop` | regrava o `.desktop` (atualiza o caminho) | grava e define |
+| outro (inclusive `modorganizer2-nxm-handler.desktop`, o arquivo do instalador Wine do MO2) | nada (log `debug` com o nome do handler) | grava e define |
 
 - Tudo roda de forma assíncrona (`QProcess`, encadeado), para não atrasar a abertura. Uma falha no registro automático vai só para o log (`warn`). Pelo botão, um diálogo mostra a causa (comando ausente, código de saída e stderr).
 - `NexusSettings::dump()` no Linux registra o handler atual (`xdg-mime query`) e o `Exec` do nosso `.desktop`, em vez da chave do registro do Windows e do `downloadhandler.ini`.
