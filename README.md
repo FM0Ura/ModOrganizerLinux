@@ -71,7 +71,7 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
      distrobox enter mo2-run -- sudo dnf -y install --setopt=install_weak_deps=False \
          qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtwebsockets-devel \
          qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
-         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland
+         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret
      ```
 2. Obtenha o artefato `mo2-linux-install`. Duas rotas:
    - **Pelo navegador:** GitHub -> repositório `FM0Ura/ModOrganizerLinux` -> aba Actions ->
