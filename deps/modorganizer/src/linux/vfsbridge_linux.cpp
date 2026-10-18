@@ -6,6 +6,7 @@
 
 #include "vfsbridge_linux.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <stdexcept>
@@ -56,5 +57,31 @@ Command helperCommand(const QString& binary, const QStringList& args,
   }
 
   return {hostExec, QStringList{binary} + args};
+}
+
+QString hostCanonicalPath(const QString& path, const QString& rootDir)
+{
+  QString real;
+
+  if (mode(rootDir) == Mode::Host) {
+    const auto hostRoot = QDir::cleanPath(rootDir + "/run/host");
+    if (QFileInfo(hostRoot).isDir()) {
+      const auto prefix = QFileInfo(hostRoot).canonicalFilePath();
+      const auto inHost = QFileInfo(hostRoot + path).canonicalFilePath();
+
+      if (!prefix.isEmpty() && inHost.startsWith(prefix)) {
+        real = inHost.mid(prefix.size());
+        if (real.isEmpty()) {
+          real = "/";
+        }
+      }
+    }
+  }
+
+  if (real.isEmpty()) {
+    real = QFileInfo(path).canonicalFilePath();
+  }
+
+  return real.isEmpty() ? path : real;
 }
 }  // namespace vfsbridge

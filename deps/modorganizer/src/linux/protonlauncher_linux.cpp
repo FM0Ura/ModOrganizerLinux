@@ -5,6 +5,8 @@
 
 #include "protonlauncher_linux.h"
 
+#include "vfsbridge_linux.h"
+
 #include <QFileInfo>
 #include <QObject>
 #include <QProcess>
@@ -28,12 +30,6 @@ namespace
     return list.isEmpty() ? QObject::tr("none") : list.join(", ");
   }
 
-  QString canonical(const QString& path)
-  {
-    const auto real = QFileInfo(path).canonicalFilePath();
-    return real.isEmpty() ? path : real;
-  }
-
   // STEAM_COMPAT_LIBRARY_PATHS: the steamapps directory of every library of the Steam
   // installation, the one with the game first
   QString libraryPaths(const steam::App& app)
@@ -41,7 +37,7 @@ namespace
     QStringList paths;
 
     const auto add = [&](const QString& library) {
-      const auto steamapps = canonical(library + "/steamapps");
+      const auto steamapps = vfsbridge::hostCanonicalPath(library + "/steamapps");
       if (!paths.contains(steamapps)) {
         paths.append(steamapps);
       }
@@ -163,8 +159,10 @@ VfsSpawnRequest makeLaunch(const LaunchParameters& p)
                               // Steam writes for the game use (SSEEdit); canonical
                               // because umu keeps the library list only when it finds
                               // a mount point above the game path, and /home may be a
-                              // symlink to /var/home
-                              "STEAM_COMPAT_INSTALL_PATH=" + canonical(app->gamePath),
+                              // symlink to /var/home (in a distrobox, they are
+                              // resolved as the host sees them)
+                              "STEAM_COMPAT_INSTALL_PATH=" +
+                                  vfsbridge::hostCanonicalPath(app->gamePath),
                               "STEAM_COMPAT_LIBRARY_PATHS=" + libraryPaths(*app)} +
                   extra;
   r.winePrefix  = app->compatData;

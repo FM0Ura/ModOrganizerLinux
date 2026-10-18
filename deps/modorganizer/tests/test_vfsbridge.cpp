@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <QFile>
+#include <QFileInfo>
 #include <filesystem>
 #include <fstream>
 
@@ -91,4 +92,46 @@ TEST(VfsBridge, Commands)
     qputenv("PATH", "/nonexistent");
     EXPECT_THROW(vfsbridge::helperCommand("/opt/mo2/mo2-vfs", {}), std::runtime_error);
   }
+}
+
+TEST(VfsBridge, HostCanonicalPathThroughRunHost)
+{
+  // the box sees /home as a mount; on the host it is a symlink to var/home
+  TempDir root;
+  fs::create_directories(root.path() / "run/host/var/home/u/x");
+  fs::create_symlink("var/home", root.path() / "run/host/home");
+  fs::create_directories(root.path() / "home/u/x");
+
+  Env e("host");
+  EXPECT_EQ(vfsbridge::hostCanonicalPath("/home/u/x", q(root.path())), "/var/home/u/x");
+  EXPECT_EQ(vfsbridge::hostCanonicalPath("/var/home/u/x", q(root.path())),
+            "/var/home/u/x");
+  // missing paths are returned as they are
+  EXPECT_EQ(vfsbridge::hostCanonicalPath("/home/u/missing", q(root.path())),
+            "/home/u/missing");
+}
+
+TEST(VfsBridge, HostCanonicalPathDirectMode)
+{
+  TempDir root;
+  fs::create_directories(root.path() / "real/x");
+  fs::create_symlink("real", root.path() / "link");
+  const auto link = q(root.path() / "link/x");
+
+  Env e("direct");
+  EXPECT_EQ(vfsbridge::hostCanonicalPath(link), QFileInfo(link).canonicalFilePath());
+  EXPECT_NE(vfsbridge::hostCanonicalPath(link), link);
+  EXPECT_EQ(vfsbridge::hostCanonicalPath("/nonexistent/path"), "/nonexistent/path");
+}
+
+TEST(VfsBridge, HostCanonicalPathWithoutRunHostFallsBack)
+{
+  TempDir root;
+  fs::create_directories(root.path() / "real/x");
+  fs::create_symlink("real", root.path() / "link");
+  const auto link = q(root.path() / "link/x");
+
+  Env e("host");
+  EXPECT_EQ(vfsbridge::hostCanonicalPath(link, "/nonexistent-root"),
+            QFileInfo(link).canonicalFilePath());
 }

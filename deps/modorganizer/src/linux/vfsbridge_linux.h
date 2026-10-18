@@ -30,6 +30,15 @@ struct Command
 // mode when distrobox-host-exec is not in the PATH
 Command helperCommand(const QString& binary, const QStringList& args,
                       const QString& rootDir = "/");
+
+// `path` as the host, where the helper and the programs run, resolves it. In a
+// distrobox, `canonicalFilePath()` gives the container's view: /home is a real mount
+// there but a symlink to var/home on the host, and tools that compare lexical parents
+// of the path with the host's mounts (umu) need the host's spelling. Direct mode: the
+// canonical path. Host mode: if <rootDir>/run/host (the host's root in the container)
+// is a directory, the canonical path of <rootDir>/run/host + path without that prefix;
+// otherwise the canonical path. A path that does not exist is returned unchanged.
+QString hostCanonicalPath(const QString& path, const QString& rootDir = "/");
 }  // namespace vfsbridge
 
 #endif  // VFSBRIDGE_LINUX_H

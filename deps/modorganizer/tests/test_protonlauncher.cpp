@@ -26,7 +26,9 @@ class ProtonLauncher : public ::testing::Test
 protected:
   void SetUp() override
   {
-    m_oldHome = qgetenv("HOME");
+    m_oldHome   = qgetenv("HOME");
+    m_oldBridge = qgetenv("MO2_VFS_BRIDGE");
+    qputenv("MO2_VFS_BRIDGE", "direct");
     qputenv("HOME", QFile::encodeName(m_tmp.path()));
     m_steam = m_tmp.path() + "/.local/share/Steam";
     m_game  = m_steam + "/steamapps/common/Skyrim Special Edition";
@@ -44,7 +46,11 @@ protected:
           "\"install_path\" \".\" \"display_name\" \"GE-Proton11-7\" } } }");
   }
 
-  void TearDown() override { qputenv("HOME", m_oldHome); }
+  void TearDown() override
+  {
+    qputenv("HOME", m_oldHome);
+    qputenv("MO2_VFS_BRIDGE", m_oldBridge);
+  }
 
   proton::LaunchParameters exe(const QString& rel, const QString& args = {})
   {
@@ -56,7 +62,7 @@ protected:
   }
 
   QTemporaryDir m_tmp;
-  QByteArray m_oldHome;
+  QByteArray m_oldHome, m_oldBridge;
   QString m_steam, m_game;
 };
 }  // namespace
