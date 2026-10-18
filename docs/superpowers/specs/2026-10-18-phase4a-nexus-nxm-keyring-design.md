@@ -1,7 +1,7 @@
 # Fase 4a — Nexus, `nxm://` e keyring — Design
 
 - **Data:** 2026-10-18
-- **Status:** aguardando revisão
+- **Status:** aprovada; implementada (teste manual aprovado em 2026-10-18)
 - **Spec geral:** [`2026-10-14-mo2-linux-port-design.md`](2026-10-14-mo2-linux-port-design.md) (§3.3 resume a Fase 4; este documento a substitui onde divergirem)
 - **Fase anterior:** [`2026-10-17-phase3-steam-proton-design.md`](2026-10-17-phase3-steam-proton-design.md) (ponte `vfsbridge` para o host, usada aqui para o `xdg-mime`)
 - **Branch:** `fase-4a-nexus` (a partir de `main`)

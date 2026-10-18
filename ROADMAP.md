@@ -14,7 +14,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 1 | Build nativo | MO2 compila e abre no Linux; plugins Bethesda + instaladores; sem VFS | Gerencia instâncias, perfis e mods no Bazzite; build Windows continua passando | ✅ Concluída (2026-10-15) |
 | 2 | VFS FUSE | Processo auxiliar Rust `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; "Executar" de um programa Linux nativo mostra a visão virtual montada | ✅ Concluída (2026-10-17) |
 | 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | ✅ Concluída (2026-10-18) |
-| 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | 🟡 Em andamento |
+| 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | 🟢 Teste manual aprovado (2026-10-18); falta o checkpoint de CI e o merge |
 | 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | ⚪ Não iniciada |
 | 4c | Ferramentas pelo VFS e plugins C++ | BodySlide, Nemesis/Pandora, xEdit de outros jogos; BAIN, previews, checagens; pendências adiadas da Fase 2 | Ferramentas pelo VFS (critério 6) | ⚪ Não iniciada |
 | 4d | Plugins Python | `plugin_python` (pybind11 + Python + PyQt6) e plugins Python (incl. `basic_games`) | Todas as funcionalidades | ⚪ Não iniciada |

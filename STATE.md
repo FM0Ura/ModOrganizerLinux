@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** 🟡 implementação concluída (inclui a rodada de correções da revisão final); CI e teste manual pendentes, depois o merge · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
+**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** 🟢 teste manual aprovado em 2026-10-18 (checklist completo no Bazzite: login OAuth e API key lembrados no KWallet, handler `nxm://` com o Firefox Flatpak, download e instalação inclusive FOMOD); falta o checkpoint de CI e o merge no `main` · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
 **Branch principal:** `main` (Fases 1 a 3; `fase-2-vfs-fuse` e `fase-3-steam-proton` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4a:** `fase-4a-nexus` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
@@ -24,7 +24,7 @@ Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](
 | 6 | Smoke: um link `nxm://` de uma segunda invocação chega ao aplicativo em execução | ✅ | `a5d0495` |
 | 7 | Documentação, checklist manual e ponto de controle de CI | ✅ docs, checklist e ponto de controle de CI; o push e o CI dependem da autorização do usuário | `7fb33a5` |
 | — | Revisão final do branch + rodada de correções (id próprio do `.desktop`, `org.modorganizer.ModOrganizer2.nxm.desktop`, para não colidir com o instalador Wine do MO2; smoke e e2e sem o keyring real; aviso de login sempre enfileirado e `errno` nas falhas; `secret-service.sh` exige `PASSED`; checklist e docs) | ✅ | `08371e2`, `ea5d0b7`, `d0ba64f`, `2a0b8c4` |
-| 8 | Teste manual no Bazzite ([`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)) | ⚪ não iniciado | — |
+| 8 | Teste manual no Bazzite ([`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)) | ✅ aprovado pelo usuário em 2026-10-18 (itens 1–7, sem correções) | — |
 
 ## Fase 3 — progresso
 
@@ -226,6 +226,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-18 | Fase 3 (teste manual): numa raiz só com mappings de arquivo (ex.: `AppData/Local/<jogo>` com `plugins.txt`/`loadorder.txt`, e as raízes de "My Games" no mesmo caso), a pasta real age como camada de criação, como o USVFS: criar/`mkdir` vão para ela, excluir apaga de fato e renomear move dentro dela. Toda raiz com mapping de diretório mantém a proteção dos originais (decisão de 2026-10-15), mesmo sem camada de criação (o MO2 omite um `overwrite/` apagado; o `Data` continua `EROFS` então). Renomear sobre um destino de mapping de arquivo dá `EXDEV` (a cópia+exclusão grava no arquivo do perfil) |
 | 2026-10-18 | Fase 3 (teste manual): o MO2 passa `STEAM_COMPAT_INSTALL_PATH` (pasta do jogo) e `STEAM_COMPAT_LIBRARY_PATHS` (`steamapps` de cada biblioteca, a do jogo primeiro) ao `umu-run`, como a Steam, para o Proton criar o `S:` que o registro do prefixo usa. Caminhos canônicos **como o host os vê** (`vfsbridge::hostCanonicalPath`, por `/run/host` quando o MO2 roda no distrobox, onde `/home` é mount e não link): o `umu` mantém a lista só se achar um ponto de montagem acima do caminho do jogo, e no host do Bazzite `/home` é link para `/var/home`. A primeira versão (`canonicalFilePath` dentro do box) não bastou no teste manual |
 | 2026-10-18 | Fase 3: teste manual aprovado pelo usuário no Bazzite (MO2 no box `mo2-run` com a ponte `distrobox-host-exec`): Skyrim SE + SKSE e SSEEdit rodando com mods. Merge no `main` depois do checkpoint de CI (Linux + Windows) |
+| 2026-10-18 | Fase 4a: teste manual aprovado pelo usuário no Bazzite (MO2 no box `mo2-run`, Firefox Flatpak, KWallet): itens 1–7 do checklist sem correções. Merge no `main` depois do checkpoint de CI (Linux + Windows) |
 
 ## Pendências por fase
 
