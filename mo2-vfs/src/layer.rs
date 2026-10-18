@@ -20,7 +20,7 @@ pub struct Layer {
     pub file: Option<OsString>,
     /// Placement inside the root (empty for the original layer).
     pub target: PathBuf,
-    /// Creations land here. Set on the original layer when the root has no create layer.
+    /// Creations land here. Set on the original layer of a root with only file mappings.
     pub create: bool,
     pub original: bool,
     /// For logging only.
@@ -29,7 +29,7 @@ pub struct Layer {
 
 impl Layer {
     /// An original layer whose files are never deleted or renamed: deletions only mask,
-    /// renames copy to the create layer. Without a create layer in the root the original is
+    /// renames copy to the create layer. In a root with only file mappings the original is
     /// writable instead, like a mod layer that is also the create layer (as USVFS does).
     pub fn protected(&self) -> bool {
         self.original && !self.create
@@ -71,12 +71,11 @@ pub fn layers_over(
     original: OwnedFd,
     created_mountpoint: bool,
 ) -> io::Result<Layers> {
-    // Decided on the mappings, not on the opened layers: an unavailable create layer must
-    // not expose the originals.
-    let writable_original = !root
-        .layers
-        .iter()
-        .any(|s| s.create_target && s.is_directory);
+    // Only roots fed by file mappings alone (AppData, "My Games") get a writable original.
+    // A root with any directory mapping keeps its originals protected even without a create
+    // layer: MO2 leaves out a missing overwrite/, and the game's Data must not become
+    // writable then. Decided on the mappings, not on the layers that could be opened.
+    let writable_original = root.layers.iter().all(|s| !s.is_directory);
     if writable_original {
         tracing::info!(root = %root.mountpoint.display(), "no create layer in this root; new files go to the real directory");
     }

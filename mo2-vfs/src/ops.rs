@@ -1,8 +1,9 @@
 //! Operations on the merged tree and the real disk (spec section 4), without FUSE.
 //!
-//! Every disk access is an `*at` call relative to a layer fd. In a root with a create layer,
-//! original-layer files are never deleted or renamed: deletions only mask, renames copy to
-//! the create layer. Without one, the original layer is the create layer (`Layer::protected`).
+//! Every disk access is an `*at` call relative to a layer fd. In a root with a directory
+//! mapping, original-layer files are never deleted or renamed: deletions only mask, renames
+//! copy to the create layer. In a root with only file mappings the original layer is the
+//! create layer (`Layer::protected`).
 
 use crate::layer::{LayerId, Layers};
 use crate::name::fold;
@@ -448,6 +449,15 @@ pub fn rename(
             }
             _ => {}
         }
+        // A file mapping destination (the profile's plugins.txt) is replaced by copy and
+        // delete, which writes into the mapped file; a move would only mask it.
+        let victim = tree.node(d).origin.layer;
+        if tree.node(d).kind == Kind::File
+            && layers.list.get(victim).is_some_and(|l| l.file.is_some())
+            && victim != tree.node(src).origin.layer
+        {
+            return Err(Errno::XDEV);
+        }
     }
 
     let new_vpath = tree.path_of(new_parent).join(new_name);
@@ -809,16 +819,58 @@ mod tests {
     }
 
     #[test]
-    fn create_without_create_layer_goes_to_original() {
-        let mut fx = fixture(&[("orig", &[]), ("A", &["a.txt", "m/b.txt"])], false);
+    fn create_without_create_layer_is_erofs() {
+        let mut fx = fixture(&[("orig", &[]), ("A", &["a.txt"])], false);
+        assert_eq!(fx.create("", "x.txt").err(), Some(Errno::ROFS));
+        assert!(!fx.p("A/x.txt").exists());
+        assert!(!fx.p("orig/x.txt").exists());
+        assert!(fx.gone("x.txt"));
+        let root = fx.tree.root();
+        let r = mkdir(
+            &mut fx.tree,
+            &fx.layers,
+            root,
+            OsStr::new("d"),
+            Mode::from_raw_mode(0o755),
+        );
+        assert_eq!(r.err(), Some(Errno::ROFS));
+    }
+
+    /// `orig` holding `orig_files` plus one file mapping per `(source, target)`: a root with
+    /// only file mappings, like AppData/Local/<game>. Content is "orig:<path>" / "map:<source>".
+    fn file_only_fixture(orig_files: &[&str], maps: &[(&str, &str)]) -> Fx {
+        let tmp = TempDir::new().unwrap();
+        std::fs::create_dir_all(tmp.path().join("orig")).unwrap();
+        for f in orig_files {
+            write(&tmp.path().join("orig"), f, &format!("orig:{f}"));
+        }
+        let specs = maps
+            .iter()
+            .map(|(src, target)| {
+                write(tmp.path(), src, &format!("map:{src}"));
+                spec(tmp.path().join(src), target, false, false)
+            })
+            .collect();
+        assemble(tmp, specs)
+    }
+
+    #[test]
+    fn create_in_file_only_root_goes_to_original() {
+        let mut fx = file_only_fixture(
+            &[],
+            &[
+                ("prof/plugins.txt", "plugins.txt"),
+                ("prof/x.ini", "sub/x.ini"),
+            ],
+        );
         fx.create("", "x.txt").unwrap();
         assert!(fx.p("orig/x.txt").is_file());
-        assert!(!fx.p("A/x.txt").exists());
+        assert!(!fx.p("prof/x.txt").exists());
         assert_eq!(fx.layer_of("X.TXT"), 0);
-        // m exists only in A: the real parent is made in the original
-        fx.create("m", "c.txt").unwrap();
-        assert!(fx.p("orig/m/c.txt").is_file());
-        assert!(!fx.p("A/m/c.txt").exists());
+        // sub only exists through a file mapping: the real parent is made in the original
+        fx.create("sub", "c.txt").unwrap();
+        assert!(fx.p("orig/sub/c.txt").is_file());
+        assert!(!fx.p("prof/c.txt").exists());
         let root = fx.tree.root();
         mkdir(
             &mut fx.tree,
@@ -837,6 +889,8 @@ mod tests {
             (n.origin.layer, n.origin.rel.as_path()),
             (0, Path::new("d/y"))
         );
+        let n = t.node(t.lookup(Path::new("sub/x.ini")).unwrap());
+        assert_eq!(n.origin.layer, 2, "the mapping still wins its path");
     }
 
     #[test]
@@ -875,6 +929,22 @@ mod tests {
         fx.unlink("", "top.ini").unwrap();
         assert!(fx.p("orig/top.ini").exists(), "only masked");
         assert!(fx.gone("top.ini"));
+    }
+
+    #[test]
+    fn dir_mapping_without_create_layer_keeps_originals_protected() {
+        // MO2 leaves out a missing overwrite/: Data then has mods but no create layer
+        let mut fx = fixture(
+            &[("orig", &["Skyrim.esm", "d/x"]), ("A", &["a.esp"])],
+            false,
+        );
+        fx.unlink("", "Skyrim.esm").unwrap();
+        assert!(fx.p("orig/Skyrim.esm").exists(), "only masked");
+        fx.unlink("d", "x").unwrap();
+        fx.rmdir("", "d").unwrap();
+        assert!(fx.p("orig/d/x").exists());
+        assert_eq!(fx.create("", "new.esp").err(), Some(Errno::ROFS));
+        assert!(!fx.p("orig/new.esp").exists());
     }
 
     #[test]
@@ -932,8 +1002,8 @@ mod tests {
     }
 
     #[test]
-    fn unlink_and_rmdir_original_without_create_layer_delete_it() {
-        let mut fx = fixture(&[("orig", &["x.ini", "d/y"]), ("A", &["a.txt"])], false);
+    fn unlink_and_rmdir_original_in_file_only_root_delete_it() {
+        let mut fx = file_only_fixture(&["x.ini", "d/y"], &[("prof/plugins.txt", "plugins.txt")]);
         fx.unlink("", "X.ini").unwrap();
         assert!(!fx.p("orig/x.ini").exists());
         assert!(fx.gone("x.ini"));
@@ -942,7 +1012,7 @@ mod tests {
         fx.rmdir("", "D").unwrap();
         assert!(!fx.p("orig/d").exists());
         assert!(fx.gone("d"));
-        assert!(fx.p("A/a.txt").exists());
+        assert!(fx.p("prof/plugins.txt").exists());
         let t = fx.rebuild();
         assert!(t.lookup(Path::new("x.ini")).is_none() && t.lookup(Path::new("d")).is_none());
     }
@@ -1144,8 +1214,17 @@ mod tests {
     }
 
     #[test]
-    fn rename_original_without_create_layer_moves_it() {
-        let mut fx = fixture(&[("orig", &["x", "d/z"]), ("A", &["m/a"])], false);
+    fn rename_original_file_without_create_layer_is_erofs() {
+        let mut fx = fixture(&[("orig", &["x"]), ("A", &[])], false);
+        assert_eq!(fx.rename("", "x", "", "y").err(), Some(Errno::ROFS));
+        assert!(fx.p("orig/x").exists());
+        assert!(fx.tree.lookup(Path::new("x")).is_some());
+        assert!(fx.tree.whiteouts().paths.is_empty());
+    }
+
+    #[test]
+    fn rename_original_in_file_only_root_moves_it() {
+        let mut fx = file_only_fixture(&["x", "d/z"], &[("prof/f.ini", "sub/f.ini")]);
         let id = fx.id("x");
         fx.rename("", "x", "", "y").unwrap();
         assert!(!fx.p("orig/x").exists());
@@ -1153,25 +1232,107 @@ mod tests {
         assert!(fx.gone("x"));
         assert_eq!(fx.layer_of("Y"), 0);
         assert_eq!(fx.id("y"), id, "node id follows the rename");
-        // into a directory only a mod has: the real parent is made in the original
-        fx.rename("", "y", "m", "y2").unwrap();
+        // into a directory only a file mapping has: the real parent is made in the original
+        fx.rename("", "y", "sub", "y2").unwrap();
         assert_eq!(
-            std::fs::read_to_string(fx.p("orig/m/y2")).unwrap(),
+            std::fs::read_to_string(fx.p("orig/sub/y2")).unwrap(),
             "orig:x"
         );
-        assert!(fx.p("A/m/a").exists() && !fx.p("A/m/y2").exists());
+        assert!(!fx.p("prof/y2").exists());
         // an original directory moves too
         fx.rename("", "d", "", "e").unwrap();
         assert!(fx.p("orig/e/z").is_file() && !fx.p("orig/d").exists());
         assert_eq!(fx.tree.node(fx.id("e/z")).origin.rel, Path::new("e/z"));
         let t = fx.rebuild();
-        let n = t.node(t.lookup(Path::new("m/y2")).unwrap());
+        let n = t.node(t.lookup(Path::new("sub/y2")).unwrap());
         assert_eq!(
             (n.origin.layer, n.origin.rel.as_path()),
-            (0, Path::new("m/y2"))
+            (0, Path::new("sub/y2"))
         );
         assert!(t.lookup(Path::new("e/z")).is_some());
         assert!(t.lookup(Path::new("y")).is_none() && t.lookup(Path::new("d")).is_none());
+    }
+
+    #[test]
+    fn save_by_temp_and_rename_over_existing_original_in_file_only_root() {
+        let mut fx = file_only_fixture(
+            &["Plugins.sseviewsettings"],
+            &[("prof/plugins.txt", "plugins.txt")],
+        );
+        for (tmp, name, content) in [
+            ("a.tmp", "Plugins.sseviewsettings", "second"),
+            ("b.tmp", "plugins.SSEVIEWSETTINGS", "third"),
+        ] {
+            let parent = fx.tree.root();
+            let (_, fd) = create_file(
+                &mut fx.tree,
+                &fx.layers,
+                parent,
+                OsStr::new(tmp),
+                Mode::from_raw_mode(0o644),
+                OFlags::WRONLY,
+            )
+            .unwrap();
+            rustix::io::write(&fd, content.as_bytes()).unwrap();
+            drop(fd);
+            fx.rename("", tmp, "", name).unwrap();
+            assert_eq!(
+                std::fs::read_to_string(fx.p("orig").join(name)).unwrap(),
+                content
+            );
+            assert!(!fx.p("orig").join(tmp).exists());
+        }
+        let names: Vec<_> = std::fs::read_dir(fx.p("orig"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(
+            names,
+            [OsStr::new("plugins.SSEVIEWSETTINGS")],
+            "old spelling replaced"
+        );
+        assert_eq!(fx.layer_of("plugins.sseviewsettings"), 0);
+        assert_eq!(
+            std::fs::read_to_string(fx.p("prof/plugins.txt")).unwrap(),
+            "map:prof/plugins.txt"
+        );
+    }
+
+    #[test]
+    fn rename_onto_file_mapping_is_exdev() {
+        let mut fx = file_only_fixture(&["new.tmp"], &[("prof/plugins.txt", "plugins.txt")]);
+        assert_eq!(
+            fx.rename("", "new.tmp", "", "PLUGINS.TXT").err(),
+            Some(Errno::XDEV)
+        );
+        assert!(fx.p("orig/new.tmp").exists());
+        assert!(!fx.p("orig/PLUGINS.TXT").exists() && !fx.p("orig/plugins.txt").exists());
+        assert_eq!(fx.layer_of("plugins.txt"), 1);
+        assert!(fx.tree.whiteouts().paths.is_empty() && fx.tree.whiteouts().origins.is_empty());
+        // the same in a root with a create layer: a create-layer file onto a mapped file
+        let tmp = TempDir::new().unwrap();
+        write(tmp.path(), "orig/Skyrim.ini", "o");
+        write(tmp.path(), "extra/custom.ini", "c");
+        write(tmp.path(), "ov/new.ini", "n");
+        let specs = vec![
+            spec(
+                tmp.path().join("extra/custom.ini"),
+                "Skyrim.ini",
+                false,
+                false,
+            ),
+            spec(tmp.path().join("ov"), "", true, true),
+        ];
+        let mut fx = assemble(tmp, specs);
+        assert_eq!(
+            fx.rename("", "new.ini", "", "skyrim.ini").err(),
+            Some(Errno::XDEV)
+        );
+        assert!(fx.p("ov/new.ini").exists());
+        assert_eq!(
+            std::fs::read_to_string(fx.p("extra/custom.ini")).unwrap(),
+            "c"
+        );
     }
 
     #[test]
