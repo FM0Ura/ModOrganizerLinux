@@ -900,12 +900,14 @@ impl FakePrefix {
         let wineserver = env.p("bin/wineserver");
         env.write("bin/wineserver", &format!("#!/bin/sh\nsleep {secs}\n"));
         fs::set_permissions(&wineserver, fs::Permissions::from_mode(0o755)).unwrap();
-        // like skse64_loader.exe: starts something outside its group and exits at once
+        // like skse64_loader.exe: starts something outside its group and exits at once;
+        // `setsid -f` forks the new session itself, so no subshell of the launcher's group
+        // is left waiting for it (`cmd &` would keep one alive as long as the wineserver)
         let launcher = env.p("bin/launcher");
         env.write(
             "bin/launcher",
             &format!(
-                "#!/bin/sh\ncd '{}' && setsid '{}' &\nexit 0\n",
+                "#!/bin/sh\ncd '{}' || exit 1\nsetsid -f '{}'\nexit 0\n",
                 server.display(),
                 wineserver.display()
             ),
