@@ -35,6 +35,9 @@ class EditExecutablesDialog;
 }
 
 class ModList;
+#ifndef _WIN32
+class ProtonSettingsWidget;
+#endif
 class OrganizerCore;
 
 /** helper class to manage custom overwrites within the edit executables
@@ -203,6 +206,10 @@ private:
   // true when the change events being triggered are in response to loading
   // the executable's data into the UI, not from a user change
   bool m_settingUI;
+
+#ifndef _WIN32
+  ProtonSettingsWidget* m_proton = nullptr;
+#endif
 
   void loadCustomOverwrites();
   void loadForcedLibraries();

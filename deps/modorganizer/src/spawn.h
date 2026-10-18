@@ -23,6 +23,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #define WIN32_LEAN_AND_MEAN
 #include <QDir>
 #include <QFileInfo>
+#include <QStringList>
 #ifdef _WIN32
 #include <tchar.h>
 #include <windows.h>
@@ -53,6 +54,8 @@ struct SpawnParameters
   QString arguments;
   QDir currentDirectory;
   QString steamAppID;
+  QString proton;           // Linux: Proton of the executable (empty: Steam's choice)
+  QStringList environment;  // Linux: NAME=value added to the environment
   bool hooked   = false;
   HANDLE stdOut = INVALID_HANDLE_VALUE;
   HANDLE stdErr = INVALID_HANDLE_VALUE;

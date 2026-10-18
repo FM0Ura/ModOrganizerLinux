@@ -27,6 +27,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <QFileInfo>
 #include <QMetaType>
+#include <QStringList>
 
 #include <uibase/iexecutable.h>
 
@@ -65,6 +66,8 @@ public:
   const QString& arguments() const override;
   const QString& steamAppID() const override;
   const QString& workingDirectory() const override;
+  const QString& proton() const;
+  const QStringList& environment() const;
   Flags flags() const;
 
   Executable& title(const QString& s);
@@ -72,6 +75,8 @@ public:
   Executable& arguments(const QString& s);
   Executable& steamAppID(const QString& s);
   Executable& workingDirectory(const QString& s);
+  Executable& proton(const QString& s);
+  Executable& environment(const QStringList& s);
   Executable& flags(Flags f);
 
   bool isShownOnToolbar() const;
@@ -88,6 +93,8 @@ private:
   QString m_arguments;
   QString m_steamAppID;
   QString m_workingDirectory;
+  QString m_proton;           // Linux: Proton of the executable (empty: Steam's choice)
+  QStringList m_environment;  // Linux: NAME=value added to the environment
   Flags m_flags;
 };
 

@@ -98,6 +98,8 @@ void ExecutablesList::load(const MOBase::IPluginGame* game, const Settings& s)
                       .binaryInfo(QFileInfo(map["binary"].toString()))
                       .arguments(map["arguments"].toString())
                       .steamAppID(map["steamAppID"].toString())
+                      .proton(map["proton"].toString())
+                      .environment(map["environment"].toStringList())
                       .workingDirectory(map["workingDirectory"].toString())
                       .flags(flags));
   }
@@ -125,6 +127,12 @@ void ExecutablesList::store(Settings& s)
     map["arguments"]            = item.arguments();
     map["workingDirectory"]     = item.workingDirectory();
     map["steamAppID"]           = item.steamAppID();
+    map["proton"]               = item.proton();
+    // QSettings writes an empty list as "@Invalid()" and reads it back as an invalid
+    // QVariant, which the settings log cannot format: write an empty string instead
+    map["environment"] = item.environment().isEmpty()
+                             ? QVariant(QString())
+                             : QVariant(item.environment());
     map["minimizeToSystemTray"] = item.minimizeToSystemTray();
 
     v.push_back(std::move(map));
@@ -412,6 +420,16 @@ const QString& Executable::workingDirectory() const
   return m_workingDirectory;
 }
 
+const QString& Executable::proton() const
+{
+  return m_proton;
+}
+
+const QStringList& Executable::environment() const
+{
+  return m_environment;
+}
+
 Executable::Flags Executable::flags() const
 {
   return m_flags;
@@ -438,6 +456,20 @@ Executable& Executable::arguments(const QString& s)
 Executable& Executable::steamAppID(const QString& s)
 {
   m_steamAppID = s;
+  return *this;
+}
+
+Executable& Executable::proton(const QString& s)
+{
+  m_proton = s;
+  return *this;
+}
+
+Executable& Executable::environment(const QStringList& s)
+{
+  // a stored empty string reads back as a list of one empty entry
+  m_environment = s;
+  m_environment.removeAll(QString());
   return *this;
 }
 
@@ -491,6 +523,8 @@ void Executable::mergeFrom(const Executable& other)
   m_binaryInfo       = other.binaryInfo();
   m_arguments        = other.arguments();
   m_steamAppID       = other.steamAppID();
+  m_proton           = other.proton();
+  m_environment      = other.environment();
   m_workingDirectory = other.workingDirectory();
   m_flags            = other.flags();
 }

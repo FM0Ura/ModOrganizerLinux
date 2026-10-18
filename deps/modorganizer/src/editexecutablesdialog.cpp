@@ -25,6 +25,10 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "spawn.h"
 #include "ui_editexecutablesdialog.h"
 
+#ifndef _WIN32
+#include "linux/protonsettings_linux.h"
+#endif
+
 #include <QMessageBox>
 #ifdef _WIN32
 #include <Shellapi.h>
@@ -62,6 +66,13 @@ EditExecutablesDialog::EditExecutablesDialog(OrganizerCore& oc, int sel,
   ui->splitter->setSizes({200, 1});
   ui->splitter->setStretchFactor(0, 0);
   ui->splitter->setStretchFactor(1, 1);
+
+#ifndef _WIN32
+  m_proton = new ProtonSettingsWidget(this);
+  ui->verticalLayout_5->insertWidget(
+      ui->verticalLayout_5->indexOf(ui->horizontalLayout_5) + 1, m_proton);
+  connect(m_proton, &ProtonSettingsWidget::changed, [&] { save(); });
+#endif
 
   loadCustomOverwrites();
   loadForcedLibraries();
@@ -391,6 +402,9 @@ void EditExecutablesDialog::clearEdits()
   ui->minimizeToSystemTray->setChecked(false);
   ui->hide->setEnabled(false);
   ui->hide->setChecked(false);
+#ifndef _WIN32
+  m_proton->clearAndDisable();
+#endif
 
   m_lastGoodTitle = "";
 }
@@ -404,6 +418,9 @@ void EditExecutablesDialog::setEdits(const Executable& e)
   ui->overwriteSteamAppID->setChecked(!e.steamAppID().isEmpty());
   ui->steamAppID->setEnabled(!e.steamAppID().isEmpty());
   ui->steamAppID->setText(e.steamAppID());
+#ifndef _WIN32
+  m_proton->setFrom(e);
+#endif
   ui->useApplicationIcon->setChecked(e.usesOwnIcon());
   ui->minimizeToSystemTray->setChecked(e.minimizeToSystemTray());
   ui->hide->setChecked(e.hide());
@@ -505,6 +522,9 @@ void EditExecutablesDialog::save()
   } else {
     e->steamAppID("");
   }
+#ifndef _WIN32
+  m_proton->saveTo(*e);
+#endif
 
   if (ui->useApplicationIcon->isChecked()) {
     e->flags(e->flags() | Executable::UseApplicationIcon);
