@@ -256,6 +256,49 @@ fn update_and_status() {
     c.request(json!({"op": "unmount"}));
 }
 
+/// A root that exists only for a file mapping (the profile's plugins.txt in AppData/Local)
+/// has no create layer: new files go to its real directory, as USVFS does on Windows.
+#[test]
+fn root_without_create_layer_creates_in_real_directory() {
+    if !require_fuse() {
+        return;
+    }
+    let env = Env::new();
+    env.write("Local/Game/old.ini", "old");
+    env.write("profile/plugins.txt", "*Mod.esp");
+    let root = env.p("Local/Game");
+    let _g = MountGuard(root.clone());
+    let mut c = Client::start(&env);
+    let ev = c.request(json!({"op": "mount", "mappings": [{
+        "source": env.p("profile/plugins.txt"),
+        "destination": root.join("plugins.txt"),
+        "is_directory": false,
+        "create_target": false,
+    }]}));
+    assert_eq!(ev["event"], "ready", "{ev}");
+    assert_eq!(ev["roots"], json!([root]));
+    fs::write(root.join("new.txt"), "novo").unwrap();
+    // shares its stem with the mapped plugins.txt but is another name: a new file
+    fs::write(root.join("Plugins.sseviewsettings"), "view").unwrap();
+    let read = |p: PathBuf| fs::read_to_string(p).unwrap();
+    assert_eq!(read(root.join("new.txt")), "novo");
+    assert_eq!(read(root.join("Plugins.sseviewsettings")), "view");
+    assert_eq!(read(root.join("PLUGINS.TXT")), "*Mod.esp");
+    assert_eq!(read(root.join("old.ini")), "old");
+    let ev = c.request(json!({"op": "unmount"}));
+    assert_eq!(ev, json!({"event": "unmounted"}));
+    assert!(!is_mounted(&root));
+    assert_eq!(read(root.join("new.txt")), "novo");
+    assert_eq!(read(root.join("Plugins.sseviewsettings")), "view");
+    assert!(!root.join("plugins.txt").exists());
+    assert_eq!(read(env.p("profile/plugins.txt")), "*Mod.esp");
+    let profile: Vec<_> = fs::read_dir(env.p("profile"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(profile, ["plugins.txt"]);
+}
+
 trait TapOp {
     fn tap_op(self, op: &str) -> Value;
 }
