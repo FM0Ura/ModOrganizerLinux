@@ -22,7 +22,9 @@
 #    application did not crash (no crash dump, exit by TERM or 0). Nothing may be
 #    written in the real HOME (checked with a marker file). It needs the installed
 #    Skyrim SE plugin; MO2_SMOKE_MAIN_WINDOW=0 skips it (build.sh does that when the
-#    plugin is not installed).
+#    plugin is not installed). While it runs, a second `ModOrganizer nxm://...` must exit
+#    with 0 and the running one must log `download requested: nxm://...` (the nxm://
+#    handler, spec of Phase 4a).
 set -euo pipefail
 
 INSTALL="${1:?usage: $0 <install prefix>}"
@@ -72,7 +74,7 @@ start() {
 # main_window: see 3. above
 main_window() {
     # work and pid are global: the EXIT trap uses them after fail() left the function
-    local here home instance game marker out rc=0 i found=0 f
+    local here home instance game marker out rc=0 i found=0 f app_env link second rc2 got
     here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     echo "--- ModOrganizer -i smoke (ready instance, up to the main window)"
     pid=""
@@ -103,13 +105,13 @@ main_window() {
     # QtWebEngine (the main window's Nexus/browser parts) refuses to run as root (CI
     # container) without --no-sandbox; the application has no --disable-gpu option, the
     # Chromium flag is the equivalent
-    env HOME="$home" \
-        XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
-        XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state" \
-        XDG_RUNTIME_DIR="$work/runtime" TMPDIR="$work/tmp" \
-        MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen \
-        QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu" \
-        "$APP" --logs -i smoke > "$out" 2>&1 < /dev/null &
+    app_env=(HOME="$home"
+        XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share"
+        XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state"
+        XDG_RUNTIME_DIR="$work/runtime" TMPDIR="$work/tmp"
+        MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen
+        QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu")
+    env "${app_env[@]}" "$APP" --logs -i smoke > "$out" 2>&1 < /dev/null &
     pid=$!
 
     for ((i = 0; i < 60; i++)); do
@@ -122,6 +124,25 @@ main_window() {
     if ((found)); then
         # let the event loop start before stopping it
         sleep 2
+        # spec of Phase 4a, section 4.3: a second invocation with an nxm:// link (what
+        # the desktop file of the handler runs) is forwarded to the running application
+        # (MOMultiProcess, same TMPDIR) and exits; the running one logs the download
+        echo "--- ModOrganizer nxm://... (forwarded to the running application)"
+        link='nxm://skyrimspecialedition/mods/1/files/2?key=k&expires=1&user_id=1'
+        second="$work/second.out"
+        rc2=0
+        env "${app_env[@]}" timeout -k 5 20 "$APP" "$link" > "$second" 2>&1 < /dev/null ||
+            rc2=$?
+        cat "$second"
+        ((rc2 == 0)) || fail "the nxm:// invocation exited with $rc2"
+        got=0
+        for ((i = 0; i < 20; i++)); do
+            grep -qF "download requested: $link" "$instance"/logs/mo_interface.log "$out" \
+                2>/dev/null && { got=1; break; }
+            sleep 0.5
+        done
+        ((got)) || fail "the running application did not receive the nxm:// link"
+        echo "nxm:// link forwarded"
         kill -TERM "$pid" 2>/dev/null || true
         for ((i = 0; i < 20; i++)); do
             kill -0 "$pid" 2>/dev/null || break
