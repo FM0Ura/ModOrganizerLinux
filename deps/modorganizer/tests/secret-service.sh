@@ -25,7 +25,16 @@ unset DISPLAY WAYLAND_DISPLAY
 
 # --unlock reads the password of the new "login" keyring (the default collection)
 # from stdin
+out="$work/gtest.out"
+rc=0
 dbus-run-session -- sh -c '
     printf "mo2-tests" | gnome-keyring-daemon --unlock --components=secrets >/dev/null
     MO2_TESTS_SECRET_SERVICE=1 exec "$0" --gtest_filter="SecretServiceIntegration.*"
-' "$TESTS"
+' "$TESTS" > "$out" 2>&1 || rc=$?
+cat "$out"
+
+# a filter that matches nothing (or a test that skips itself) also exits 0
+if [ "$rc" -ne 0 ] || ! grep -q '^\[  PASSED  \] 1 test' "$out"; then
+    echo "FAILED: the Secret Service integration test did not run and pass" >&2
+    exit 1
+fi
