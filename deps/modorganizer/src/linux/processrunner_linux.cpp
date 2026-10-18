@@ -145,8 +145,9 @@ ProcessRunner::Results waitForProcess(HANDLE initialProcess, LPDWORD exitCode,
 {
   const auto r = waitForProcesses({initialProcess}, ls);
 
-  // as long as it's not running anymore, try to get the exit code
-  if (exitCode && r != ProcessRunner::Running) {
+  // the exit code is only awaited after the process tree has ended: after an unlock,
+  // a cancel or an error the program may still be running
+  if (exitCode && r == ProcessRunner::Completed) {
     int status = 0;
 
     if (::waitpid(toPid(initialProcess), &status, WNOHANG) == toPid(initialProcess)) {
@@ -159,6 +160,8 @@ ProcessRunner::Results waitForProcess(HANDLE initialProcess, LPDWORD exitCode,
                    exitcodes::take(toPid(initialProcess), std::chrono::seconds(2))) {
       // started by mo2-vfs: not a child of this process
       *exitCode = static_cast<DWORD>(*code);
+      log::info("process {} ended with exit code {}",
+                static_cast<int>(toPid(initialProcess)), *code);
     } else {
       log::warn("failed to get exit code of process {}",
                 static_cast<int>(toPid(initialProcess)));

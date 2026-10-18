@@ -92,7 +92,7 @@ FileExecutionContext getFileExecutionContext(QWidget* parent, const QFileInfo& t
 FileExecutionTypes getFileExecutionType(const QFileInfo& target);
 
 #ifndef _WIN32
-QString launchUnavailableMessage();  // Windows programs come in Phase 3 on Linux
+QString launchUnavailableMessage();  // why startBinary() refuses Windows programs: Run starts them
 bool isNativeProgram(const QFileInfo& target);  // an ELF or #! file the user can run
 #endif
 }  // namespace spawn

@@ -1,12 +1,15 @@
 // Linux implementation of spawn.h (spawn.cpp is Windows-only).
 //
-// Native programs (ELF executables and #! scripts the user can run, isNativeProgram())
-// are started by startBinary() with posix_spawn() (posixspawn_linux.cpp) in a process
-// group of their own, which mo2-vfs watches to keep the virtual file system mounted
-// while the program runs (ProcessRunner::run(), processrunner_linux.cpp), in the
-// working directory of the parameters and with the environment of Mod Organizer; the
-// HANDLE returned is the pid (envmodule.h). The standard output and error handles of
-// the parameters are not used (they are for lootcli on Windows, see loot_linux.cpp).
+// Run (ProcessRunner::run(), processrunner_linux.cpp) does not use startBinary(): it
+// builds the launch with proton::makeLaunch() and starts the program through mo2-vfs
+// (VfsConnector::spawn()), which keeps the virtual file system mounted while the
+// program's process group lives. startBinary() is for the other callers (LOOT, in
+// Phase 4): it starts native programs (ELF executables and #! scripts the user can
+// run, isNativeProgram()) with posix_spawn() (posixspawn_linux.cpp) in a process group
+// of their own, in the working directory of the parameters and with the environment of
+// Mod Organizer; the HANDLE returned is the pid (envmodule.h). The standard output and
+// error handles of the parameters are not used (they are for lootcli on Windows, see
+// loot_linux.cpp).
 //
 // Windows programs (.exe, .bat, ...) are started by ProcessRunner::run() through
 // mo2-vfs and Proton (processrunner_linux.cpp, protonlauncher_linux.cpp); startBinary()
