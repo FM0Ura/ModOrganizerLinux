@@ -133,14 +133,20 @@ TEST(NxmHandler, Decide)
   using nxmhandler::decide;
   EXPECT_EQ(decide("", false), Action::WriteFileAndSetDefault);
   EXPECT_EQ(decide("  \n", false), Action::WriteFileAndSetDefault);
-  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", false), Action::WriteFile);
-  EXPECT_EQ(decide(" modorganizer2-nxm-handler.desktop\n", false), Action::WriteFile);
+  EXPECT_EQ(decide("org.modorganizer.ModOrganizer2.nxm.desktop", false),
+            Action::WriteFile);
+  EXPECT_EQ(decide(" org.modorganizer.ModOrganizer2.nxm.desktop\n", false),
+            Action::WriteFile);
   EXPECT_EQ(decide("vortex-nxm.desktop", false), Action::None);
+  // the file of the Wine installer of Mod Organizer 2 is another handler, not ours
+  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", false), Action::None);
 
   EXPECT_EQ(decide("", true), Action::WriteFileAndSetDefault);
-  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", true),
+  EXPECT_EQ(decide("org.modorganizer.ModOrganizer2.nxm.desktop", true),
             Action::WriteFileAndSetDefault);
   EXPECT_EQ(decide("vortex-nxm.desktop", true), Action::WriteFileAndSetDefault);
+  EXPECT_EQ(decide("modorganizer2-nxm-handler.desktop", true),
+            Action::WriteFileAndSetDefault);
 }
 
 TEST(NxmHandler, Paths)
@@ -149,7 +155,8 @@ TEST(NxmHandler, Paths)
   ScopedEnv xdg("XDG_DATA_HOME", data.path().c_str());
   const auto dir = QString::fromStdString(data.path().string()) + "/applications";
   EXPECT_EQ(nxmhandler::applicationsDir(), dir);
-  EXPECT_EQ(nxmhandler::desktopFilePath(), dir + "/modorganizer2-nxm-handler.desktop");
+  EXPECT_EQ(nxmhandler::desktopFilePath(),
+            dir + "/org.modorganizer.ModOrganizer2.nxm.desktop");
 }
 
 TEST(NxmHandler, CommandsDirect)
@@ -162,8 +169,9 @@ TEST(NxmHandler, CommandsDirect)
 
   c = nxmhandler::setDefaultCommand();
   EXPECT_EQ(c.program, "xdg-mime");
-  EXPECT_EQ(c.arguments, (QStringList{"default", "modorganizer2-nxm-handler.desktop",
-                                      "x-scheme-handler/nxm"}));
+  EXPECT_EQ(c.arguments,
+            (QStringList{"default", "org.modorganizer.ModOrganizer2.nxm.desktop",
+                         "x-scheme-handler/nxm"}));
 
   c = nxmhandler::updateDatabaseCommand("/home/u/.local/share/applications");
   EXPECT_EQ(c.program, "update-desktop-database");
@@ -251,7 +259,8 @@ struct FakeTools
   QString desktopFile() const
   {
     QFile f(QString::fromStdString(
-        (data / "applications" / "modorganizer2-nxm-handler.desktop").string()));
+        (data / "applications" / "org.modorganizer.ModOrganizer2.nxm.desktop")
+            .string()));
     return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
   }
 
@@ -298,8 +307,9 @@ TEST(NxmHandlerRegistration, NoHandlerWritesTheFileAndSetsTheDefault)
       "Exec=" + nxmhandler::quoteExecArgument(QCoreApplication::applicationFilePath())))
       << t.desktopFile().toStdString();
   EXPECT_TRUE(t.calls().contains("xdg-mime query default x-scheme-handler/nxm"));
-  EXPECT_TRUE(t.calls().contains(
-      "xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm"));
+  EXPECT_TRUE(
+      t.calls().contains("xdg-mime default org.modorganizer.ModOrganizer2.nxm.desktop "
+                         "x-scheme-handler/nxm"));
   EXPECT_TRUE(t.calls().contains("update-desktop-database "));
 }
 
@@ -311,9 +321,9 @@ TEST(NxmHandlerRegistration, OurHandlerOnlyRewritesTheFile)
   ScopedEnv path("PATH", t.pathWithSh().c_str());
   ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
 
-  t.setDefault("modorganizer2-nxm-handler.desktop");
+  t.setDefault("org.modorganizer.ModOrganizer2.nxm.desktop");
   fs::create_directories(t.data / "applications");
-  std::ofstream(t.data / "applications" / "modorganizer2-nxm-handler.desktop")
+  std::ofstream(t.data / "applications" / "org.modorganizer.ModOrganizer2.nxm.desktop")
       << "old\n";
 
   const auto [ok, message] = registerAndWait(false);
@@ -341,8 +351,9 @@ TEST(NxmHandlerRegistration, OtherHandlerIsKeptUnlessForced)
   std::tie(ok, message) = registerAndWait(true);
   ASSERT_TRUE(ok) << message.toStdString();
   EXPECT_FALSE(t.desktopFile().isEmpty());
-  EXPECT_TRUE(t.calls().contains(
-      "xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm"));
+  EXPECT_TRUE(
+      t.calls().contains("xdg-mime default org.modorganizer.ModOrganizer2.nxm.desktop "
+                         "x-scheme-handler/nxm"));
 }
 
 TEST(NxmHandlerRegistration, MissingXdgMimeFails)

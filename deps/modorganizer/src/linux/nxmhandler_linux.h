@@ -14,8 +14,10 @@
 // section 4). Replaces nxmhandler.exe of Windows.
 namespace nxmhandler
 {
-// the name of the desktop file, which is also how xdg-mime names the handler
-inline constexpr char DesktopFileName[] = "modorganizer2-nxm-handler.desktop";
+// the name of the desktop file, which is also how xdg-mime names the handler; not
+// modorganizer2-nxm-handler.desktop, the file the Wine installer of Mod Organizer 2
+// writes
+inline constexpr char DesktopFileName[] = "org.modorganizer.ModOrganizer2.nxm.desktop";
 inline constexpr char MimeType[]        = "x-scheme-handler/nxm";
 
 // what decides how the desktop file starts Mod Organizer
