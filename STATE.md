@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-17
-**Fase atual:** 2 — VFS FUSE · **Status:** ✅ implementada — aguardando teste manual no Bazzite (Task 18 em fechamento) · **Anterior:** Fase 1 — Build nativo ✅
+**Fase atual:** 2 — VFS FUSE · **Status:** ✅ implementada e aprovada no teste manual (2026-10-17) — aguardando merge no `main` · **Anterior:** Fase 1 — Build nativo ✅
 **Branch de trabalho:** `fase-2-vfs-fuse` (Fase 1 em `claude/serene-maxwell-1dyrbg`)
 
 ## Repositório
@@ -41,7 +41,7 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 | Critério | Status |
 |---|---|
 | 1. Testes da §8 passam no CI Linux; CI Windows continua verde | 🚧 Linux verde nos checkpoints: [#38828968997](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/38828968997) (sonda FUSE), [#39026042925](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39026042925) (suíte Rust como root, protocolo, 53/53), [#39049120299](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39049120299) (organizer 66/66, e2e); final do branch: Linux [#39067367446](https://github.com/FM0Ura/ModOrganizerLinux/actions/runs/39067367446) (tudo como root: Rust, organizer, smoke até a janela principal, e2e); Windows: commit `[windows-ci]` deste fechamento |
-| 2. Checklist manual no Bazzite | ⏳ com você — [`docs/testing/phase2-manual-checklist.md`](docs/testing/phase2-manual-checklist.md) |
+| 2. Checklist manual no Bazzite | ✅ aprovado pelo usuário em 2026-10-17 (instância `fase2-teste`, Skyrim SE real, terminal de teste `xterm`); itens 0–8 ok, com as observações em "Pendências por fase → Antes do merge / Fase 2" |
 | 3. Metas de desempenho registradas | ✅ [`benchmarks/results/2026-10-phase2-vfs.md`](benchmarks/results/2026-10-phase2-vfs.md): mount 916 ms (primeira execução a frio: 2972 ms), update 906 ms, `readdir` 0,84x do nativo, `open`+`read` 3,36x (meta de 2x **não atingida**: um round trip de OPEN por arquivo; passthrough recusado sem `CAP_SYS_ADMIN`) |
 | 4. Pendências da §9 resolvidas | ✅ (Tasks 12 a 17) |
 | 5. `ROADMAP.md`, `STATE.md` e spec geral atualizados | ✅ (esta tarefa) |
@@ -86,9 +86,9 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Você: rodar o checklist da Fase 2 no Bazzite ([`docs/testing/phase2-manual-checklist.md`](docs/testing/phase2-manual-checklist.md)) e reportar.
-2. Controlador: revisão final do branch e checkpoint de CI (Linux + Windows `[windows-ci]`); registrar o run final nos critérios acima.
-3. Com o teste manual aprovado: marcar a Fase 2 como concluída aqui e no `ROADMAP.md` e começar a Fase 3 (Steam/Proton), tratando primeiro o item do distrobox (ver "Pendências por fase").
+1. Decidir o item "Revisão final, não corrigido" (helper travado com grupo observado) e as 6 correções do teste manual (abaixo) — ou levá-las para depois do merge.
+2. Merge de `fase-2-vfs-fuse` no `main` (só com o seu ok); depois atualizar as referências ao branch antigo `claude/serene-maxwell-1dyrbg` no README, `deps/README.md` e checklist da Fase 1.
+3. Começar a Fase 3 (Steam/Proton), tratando primeiro o item do distrobox (ver "Pendências por fase").
 4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
 
 ## Limitações conhecidas da Fase 2
@@ -134,6 +134,14 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-17 | MO2 segue no distrobox `mo2-run` até a Fase 5; mounts de lá não chegam à Steam do host, então a Fase 3 deve rodar o `mo2-vfs` no host (`distrobox-host-exec`) ou antecipar o AppImage |
 
 ## Pendências por fase
+
+**Fase 2 — encontradas no teste manual (2026-10-17), adiadas a pedido**
+1. Sem tela (`WAYLAND_DISPLAY`/`DISPLAY` vazios, ex. por SSH) o MO2 aborta com "has crashed" e backtrace; deveria dizer claramente que não há display e sair.
+2. Konsole como programa de teste precisa de `--separate --nofork`: sem `--separate` ele entrega a janela ao Konsole do host (D-Bus), sai na hora e o VFS desmonta. Corrigir o checklist e o exemplo de executável.
+3. Checklist: rodar o MO2 por SSH exige `WAYLAND_DISPLAY`, `XDG_SESSION_TYPE`, `XDG_RUNTIME_DIR`, `DISPLAY` e `XAUTHORITY` (sem `XAUTHORITY` programas X11 como o xterm não abrem: "Authorization required"); ou rodar do Konsole da área de trabalho.
+4. Checklist item 6b: pela distrobox com `| tee`, Ctrl+C/fechar o terminal derruba só o cliente do podman — o MO2 continua aberto (o mount também continua, como esperado). Ajustar o texto.
+5. Checklist item 8: o MO2 cria `logs/crash.log` vazio ao iniciar; checar "não vazio".
+6. `mo2-vfs`: aviso `cannot write to stdout (Broken pipe)` quando o MO2 já fechou — silenciar nesse caso.
 
 Itens menores encontrados nas revisões e adiados (listas completas nos ledgers de cada fase). As pendências da Fase 1 marcadas para a Fase 2 (teste de `fileMapping()`, varredura de pastas, FILETIME/INI, guard de saves, smoke test) foram resolvidas.
 
