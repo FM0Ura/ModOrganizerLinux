@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 // Mod Organizer as the handler of nxm:// links on Linux: a desktop file that runs it
 // with the link, made the default handler of x-scheme-handler/nxm with xdg-mime, run on
 // the host through vfsbridge when Mod Organizer runs in a container (spec of Phase 4a,
@@ -65,6 +67,20 @@ QString desktopFilePath();
 vfsbridge::Command queryCommand();
 vfsbridge::Command setDefaultCommand();
 vfsbridge::Command updateDatabaseCommand(const QString& dir);
+
+// ok is false only on an error, with its cause in message; nothing changed (the
+// handler of another program, without force) is a success
+using Done = std::function<void(bool ok, const QString& message)>;
+
+// registers Mod Organizer for nxm:// links (decide(), then the desktop file, `xdg-mime
+// default` and `update-desktop-database`, whose failure is only logged). Asynchronous:
+// `done` is always called later from the event loop of the application, never from
+// inside this call.
+void registerHandler(bool force, Done done);
+
+// logs the current handler and the Exec line of our desktop file (debug), for
+// NexusSettings::dump(); waits up to 5 seconds for xdg-mime
+void dump();
 }  // namespace nxmhandler
 
 #endif  // NXMHANDLER_LINUX_H

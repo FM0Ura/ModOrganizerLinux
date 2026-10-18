@@ -1,11 +1,18 @@
 #include "../src/linux/nxmhandler_linux.h"
 #include "tempdir.h"
 
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QFile>
+#include <QTimer>
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <stdexcept>
+#include <tuple>
 
 namespace fs = std::filesystem;
 using nxmhandler::Action;
@@ -192,4 +199,196 @@ TEST(NxmHandler, CurrentEnvironment)
   EXPECT_EQ(e.containerId, "box");
   EXPECT_TRUE(e.inContainer);
   EXPECT_FALSE(e.executable.isEmpty());
+}
+
+namespace
+{
+// a fake xdg-mime and update-desktop-database in a directory put first in the PATH:
+// they append their arguments to calls.log; `xdg-mime query` prints the content of
+// default.txt, `xdg-mime default` writes it
+struct FakeTools
+{
+  TempDir dir;
+  fs::path bin, data, log, defaultFile;
+
+  FakeTools()
+      : bin(dir.path() / "bin"), data(dir.path() / "data"),
+        log(dir.path() / "calls.log"), defaultFile(dir.path() / "default.txt")
+  {
+    fs::create_directories(bin);
+    script("xdg-mime", "echo \"xdg-mime $*\" >> '" + log.string() +
+                           "'\n"
+                           "case \"$1\" in\n"
+                           "  query) cat '" +
+                           defaultFile.string() +
+                           "' 2>/dev/null; exit 0 ;;\n"
+                           "  default) echo \"$2\" > '" +
+                           defaultFile.string() +
+                           "' ;;\n"
+                           "esac\n");
+    script("update-desktop-database",
+           "echo \"update-desktop-database $*\" >> '" + log.string() + "'\n");
+  }
+
+  void script(const std::string& name, const std::string& body)
+  {
+    const auto p = bin / name;
+    std::ofstream(p) << "#!/bin/sh\n" << body;
+    fs::permissions(p, fs::perms::owner_all);
+  }
+
+  void setDefault(const std::string& handler)
+  {
+    std::ofstream(defaultFile) << handler << "\n";
+  }
+
+  QString calls() const
+  {
+    QFile f(QString::fromStdString(log.string()));
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+  }
+
+  QString desktopFile() const
+  {
+    QFile f(QString::fromStdString(
+        (data / "applications" / "modorganizer2-nxm-handler.desktop").string()));
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+  }
+
+  std::string pathWithSh() const { return bin.string() + ":/usr/bin:/bin"; }
+};
+
+// runs registerHandler() and its event loop until `done` (10 s at most)
+std::pair<bool, QString> registerAndWait(bool force)
+{
+  std::optional<std::pair<bool, QString>> r;
+  bool synchronous = true;
+  QEventLoop loop;
+
+  nxmhandler::registerHandler(force, [&](bool ok, const QString& message) {
+    r = {ok, message};
+    loop.quit();
+  });
+
+  // the contract: never called from inside registerHandler()
+  synchronous = r.has_value();
+  EXPECT_FALSE(synchronous);
+
+  if (!r) {
+    QTimer::singleShot(10000, &loop, &QEventLoop::quit);
+    loop.exec();
+  }
+
+  return r.value_or(std::pair<bool, QString>{false, "timeout"});
+}
+}  // namespace
+
+TEST(NxmHandlerRegistration, NoHandlerWritesTheFileAndSetsTheDefault)
+{
+  FakeTools t;
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "direct");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  const auto [ok, message] = registerAndWait(false);
+  ASSERT_TRUE(ok) << message.toStdString();
+
+  EXPECT_TRUE(t.desktopFile().contains(
+      "Exec=" + nxmhandler::quoteExecArgument(QCoreApplication::applicationFilePath())))
+      << t.desktopFile().toStdString();
+  EXPECT_TRUE(t.calls().contains("xdg-mime query default x-scheme-handler/nxm"));
+  EXPECT_TRUE(t.calls().contains(
+      "xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm"));
+  EXPECT_TRUE(t.calls().contains("update-desktop-database "));
+}
+
+TEST(NxmHandlerRegistration, OurHandlerOnlyRewritesTheFile)
+{
+  FakeTools t;
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "direct");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  t.setDefault("modorganizer2-nxm-handler.desktop");
+  fs::create_directories(t.data / "applications");
+  std::ofstream(t.data / "applications" / "modorganizer2-nxm-handler.desktop")
+      << "old\n";
+
+  const auto [ok, message] = registerAndWait(false);
+  ASSERT_TRUE(ok) << message.toStdString();
+
+  EXPECT_TRUE(t.desktopFile().startsWith("[Desktop Entry]\n"));
+  EXPECT_FALSE(t.calls().contains("xdg-mime default "));
+}
+
+TEST(NxmHandlerRegistration, OtherHandlerIsKeptUnlessForced)
+{
+  FakeTools t;
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "direct");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  t.setDefault("vortex-nxm.desktop");
+
+  auto [ok, message] = registerAndWait(false);
+  ASSERT_TRUE(ok) << message.toStdString();
+  EXPECT_TRUE(t.desktopFile().isEmpty());
+  EXPECT_FALSE(t.calls().contains("xdg-mime default "));
+
+  std::tie(ok, message) = registerAndWait(true);
+  ASSERT_TRUE(ok) << message.toStdString();
+  EXPECT_FALSE(t.desktopFile().isEmpty());
+  EXPECT_TRUE(t.calls().contains(
+      "xdg-mime default modorganizer2-nxm-handler.desktop x-scheme-handler/nxm"));
+}
+
+TEST(NxmHandlerRegistration, MissingXdgMimeFails)
+{
+  TempDir empty, data;
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "direct");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv path("PATH", empty.path().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", data.path().c_str());
+
+  const auto [ok, message] = registerAndWait(false);
+  EXPECT_FALSE(ok);
+  EXPECT_TRUE(message.contains("xdg-mime")) << message.toStdString();
+  EXPECT_FALSE(fs::exists(data.path() / "applications"));
+}
+
+TEST(NxmHandlerRegistration, ContainerWithoutIdFails)
+{
+  FakeTools t;
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "host");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv container("CONTAINER_ID", nullptr);
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  const auto [ok, message] = registerAndWait(true);
+  EXPECT_FALSE(ok);
+  EXPECT_TRUE(message.contains("CONTAINER_ID")) << message.toStdString();
+  EXPECT_TRUE(t.calls().isEmpty());
+}
+
+TEST(NxmHandlerRegistration, HostModeGoesThroughDistroboxHostExec)
+{
+  FakeTools t;
+  t.script("distrobox-host-exec",
+           "echo \"host $*\" >> '" + t.log.string() + "'\nexec \"$@\"\n");
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "host");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv container("CONTAINER_ID", "test-box");
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  const auto [ok, message] = registerAndWait(false);
+  ASSERT_TRUE(ok) << message.toStdString();
+
+  EXPECT_TRUE(t.calls().contains("host xdg-mime query default x-scheme-handler/nxm"));
+  EXPECT_TRUE(t.desktopFile().contains("Exec=distrobox enter test-box -- "))
+      << t.desktopFile().toStdString();
 }
