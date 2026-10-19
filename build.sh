@@ -22,7 +22,7 @@ BUILD_OUT="$ROOT/build-out"
 # underscores). A target without such a function is "not implemented yet". An optional
 # function pre_<t> runs first, outside --allow-fail.
 ALL_TARGETS=(
-    7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk lootcli
+    7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
 )
 
@@ -143,6 +143,12 @@ build_bsatk() {
 # esptk reads plugin headers; with --tests its GoogleTest suite runs against synthetic plugins.
 build_esptk() {
     cmake_build esptk "$ROOT/deps/esptk"
+}
+
+# libloot is LOOT's library (Rust, with a C++ wrapper), needed by the lootcli executable;
+# the logic lives in build/libloot/build-libloot.sh (source pinned to 0.29.5).
+build_libloot() {
+    INSTALL="$INSTALL" BUILD_OUT="$BUILD_OUT" "$ROOT/build/libloot/build-libloot.sh"
 }
 
 # lootcli: only the header package mo2-lootcli-header (mo2::lootcli-header) is built, like
