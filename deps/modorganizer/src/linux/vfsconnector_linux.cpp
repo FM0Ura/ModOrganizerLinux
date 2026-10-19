@@ -411,6 +411,20 @@ public:
     return pid;
   }
 
+  void kill(qint64 pid) override
+  {
+    if (!m_client || !m_client->running()) {
+      throw std::runtime_error("mo2-vfs is not running");
+    }
+
+    QJsonObject r;
+    r["op"]  = "kill";
+    r["pid"] = pid;
+
+    log::debug("asking mo2-vfs to end {}", pid);
+    send(r, 10s);
+  }
+
   std::vector<qint64> runningPrograms() override
   {
     if (!m_client || !m_client->running()) {
