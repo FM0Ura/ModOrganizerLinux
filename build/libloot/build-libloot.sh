@@ -38,7 +38,9 @@ log() { echo "==> libloot: $*"; }
 die() { echo "build-libloot.sh: $*" >&2; exit 1; }
 
 # --- fetch (cached in build-out/libloot/src, verified by commit hash) -------
-head_of() { git -C "$SRC" rev-parse HEAD 2>/dev/null || true; }
+# safe.directory: in CI the cache is restored by another user than the one running the
+# build, and git would refuse the tree ("dubious ownership") and force a re-clone
+head_of() { git -c safe.directory="$SRC" -C "$SRC" rev-parse HEAD 2>/dev/null || true; }
 
 if [[ $(head_of) != "$LIBLOOT_COMMIT" ]]; then
     log "fetching $LIBLOOT_REPO @ $LIBLOOT_TAG"
@@ -69,7 +71,7 @@ log "install into $INSTALL"
 cmake --install "$OBJ"
 
 # --- check ------------------------------------------------------------------
-lib="$(readlink -f "$INSTALL/lib/libloot.so")" || die "libloot.so was not installed"
+lib="$(readlink -e "$INSTALL/lib/libloot.so")" || die "libloot.so was not installed"
 soname="$(readelf -d "$lib" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p')"
 [[ $soname == libloot.so.0 ]] || die "unexpected soname '$soname' (lootcli expects libloot.so.0, see build.sh)"
 compgen -G "$INSTALL/lib/cmake/libloot/*onfig.cmake" >/dev/null ||
