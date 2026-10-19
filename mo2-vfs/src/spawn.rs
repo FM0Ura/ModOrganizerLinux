@@ -62,6 +62,17 @@ pub fn start(
         .map_err(|e| failed(format!("cannot start {program}: {e}"), Path::new(program)))
 }
 
+/// Sends `signal` to the process group `pgid`; a group that is gone is not an error.
+pub fn signal_group(pgid: i32, signal: rustix::process::Signal) {
+    let Some(pid) = rustix::process::Pid::from_raw(pgid) else {
+        return;
+    };
+    match rustix::process::kill_process_group(pid, signal) {
+        Ok(()) | Err(rustix::io::Errno::SRCH) => {}
+        Err(e) => tracing::warn!(pgid, error = %e, "cannot signal the process group"),
+    }
+}
+
 /// The exit code of a program, or 128 + the signal that killed it.
 pub fn exit_code(status: ExitStatus) -> i32 {
     status

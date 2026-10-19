@@ -759,6 +759,74 @@ fn spawn_exit_by_signal_is_128_plus_signal() {
 }
 
 #[test]
+fn kill_ends_a_spawned_program() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let ev = c.request(spawn_request(&["sleep", "60"], &env.root));
+    assert_eq!(ev["event"], "spawned", "{ev}");
+    let pid = ev["pid"].as_i64().unwrap();
+    let started = Instant::now();
+    let ev = c.request(json!({"op": "kill", "pid": pid}));
+    assert_eq!(ev, json!({"event": "ok"}));
+    let (ev, _) = until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(ev, json!({"event": "exited", "pid": pid, "code": 143}));
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+    // reaped: no longer one of its programs
+    let ev = c.request(json!({"op": "kill", "pid": pid}));
+    assert_eq!(ev["event"], "error", "{ev}");
+    assert_eq!(ev["code"], "not_spawned", "{ev}");
+}
+
+#[test]
+fn kill_of_a_program_that_ignores_sigterm_sends_sigkill() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    // the ignored SIGTERM is inherited by sleep
+    let ev = c.request(spawn_request(
+        &["sh", "-c", "trap '' TERM; while :; do sleep 1; done"],
+        &env.root,
+    ));
+    assert_eq!(ev["event"], "spawned", "{ev}");
+    let pid = ev["pid"].as_i64().unwrap();
+    // let the shell install its trap
+    thread::sleep(Duration::from_millis(300));
+    let started = Instant::now();
+    assert_eq!(
+        c.request(json!({"op": "kill", "pid": pid})),
+        json!({"event": "ok"})
+    );
+    let (ev, _) = until(&mut c, "exited", |e| e["event"] == "exited");
+    assert_eq!(ev, json!({"event": "exited", "pid": pid, "code": 137}));
+    let took = started.elapsed();
+    assert!(
+        took >= Duration::from_secs(3),
+        "SIGKILL before the grace period: {took:?}"
+    );
+    assert!(took < Duration::from_secs(8), "{took:?}");
+}
+
+#[test]
+fn kill_of_a_pid_not_spawned_is_not_spawned() {
+    let env = Env::new();
+    let mut c = Client::start(&env);
+    let mut other = sleeper(30);
+    let ev = c.request(json!({"op": "kill", "pid": other.id()}));
+    assert_eq!(ev["event"], "error", "{ev}");
+    assert_eq!(ev["code"], "not_spawned", "{ev}");
+    thread::sleep(Duration::from_millis(200));
+    assert!(
+        other.try_wait().unwrap().is_none(),
+        "a process it did not start was killed"
+    );
+    other.kill().unwrap();
+    other.wait().unwrap();
+}
+
+#[test]
 fn spawn_failures() {
     let env = Env::new();
     let mut c = Client::start(&env);

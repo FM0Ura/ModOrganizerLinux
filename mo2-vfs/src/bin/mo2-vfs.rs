@@ -204,6 +204,7 @@ fn serve() -> ExitCode {
         for event in server.poll_children() {
             emit(&event);
         }
+        server.poll_kills();
         if let Some(event) = server.poll_groups() {
             // a program that ended after the poll above is a zombie, which counts as a dead
             // group: reap it again so its `exited` comes before this event

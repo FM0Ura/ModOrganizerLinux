@@ -31,6 +31,8 @@ pub enum ErrorCode {
     BadRequest,
     /// A program of a `spawn` request could not be started.
     SpawnFailed,
+    /// The pid of a `kill` request is not a running program started by `spawn`.
+    NotSpawned,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
