@@ -99,7 +99,21 @@ class Helper:
 
     def close(self):
         self.proc.stdin.close()
-        self.proc.wait(30)
+        try:
+            self.proc.wait(30)
+        except subprocess.TimeoutExpired:
+            fail("mo2-vfs did not end within 30s of the end of its input")
+
+    def terminate(self):
+        """Stops mo2-vfs whatever happened (also after a failure): SIGTERM, then SIGKILL."""
+        if self.proc.poll() is not None:
+            return
+        self.proc.terminate()
+        try:
+            self.proc.wait(5)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
 
 
 def set_up():
@@ -181,40 +195,45 @@ def main():
                MO2_VFS_STATE_DIR=str(WORK / "state"))
     (WORK / "home").mkdir()
     helper = Helper(env)
+    try:
+        print("--- mounted, cached masterlist")
+        mount(helper)
+        check_sorted("mounted", *run_lootcli(helper, "mounted"))
+        # its group ended: mo2-vfs unmounts by itself
+        helper.until(lambda e: e.get("event") == "unmounted", 30)
 
-    print("--- mounted, cached masterlist")
-    mount(helper)
-    check_sorted("mounted", *run_lootcli(helper, "mounted"))
-    # its group ended: mo2-vfs unmounts by itself
-    helper.until(lambda e: e.get("event") == "unmounted", 30)
+        print("--- mounted, masterlist downloaded from file://")
+        source = WORK / "served-masterlist.yaml"
+        shutil.copy(FIXTURE / "masterlist.yaml", source)
+        (XDG / "LOOT/settings.toml").write_text(
+            '[[games]]\ngameId = "SkyrimSE"\nfolder = "Skyrim Special Edition"\n'
+            f'masterlistSource = "{source.as_uri()}"\n')
+        (LOOT_GAME / "masterlist.yaml").unlink()
+        mount(helper)
+        check_sorted("download", *run_lootcli(helper, "download", skip_update=False))
+        if (LOOT_GAME / "masterlist.yaml").read_text() != source.read_text():
+            fail("the downloaded masterlist was not written")
+        helper.until(lambda e: e.get("event") == "unmounted", 30)
 
-    print("--- mounted, masterlist downloaded from file://")
-    source = WORK / "served-masterlist.yaml"
-    shutil.copy(FIXTURE / "masterlist.yaml", source)
-    (XDG / "LOOT/settings.toml").write_text(
-        '[[games]]\ngameId = "SkyrimSE"\nfolder = "Skyrim Special Edition"\n'
-        f'masterlistSource = "{source.as_uri()}"\n')
-    (LOOT_GAME / "masterlist.yaml").unlink()
-    mount(helper)
-    check_sorted("download", *run_lootcli(helper, "download", skip_update=False))
-    if (LOOT_GAME / "masterlist.yaml").read_text() != source.read_text():
-        fail("the downloaded masterlist was not written")
-    helper.until(lambda e: e.get("event") == "unmounted", 30)
+        print("--- not mounted")
+        code, output, order, _ = run_lootcli(helper, "unmounted")
+        # a clean run that sees only the game's own plugin: a crash does not pass as a control
+        if code != 0 or "[error]" in output or order != ["Skyrim.esm"]:
+            fail(f"not mounted: expected exit 0, no error and the load order ['Skyrim.esm'] "
+                 f"(the mods' plugins exist only through the mount), got exit {code}, "
+                 f"order {order}:\n{output}")
 
-    print("--- not mounted")
-    code, output, order, _ = run_lootcli(helper, "unmounted")
-    if code == 0 and "Blank.esp" in order:
-        fail(f"without the virtual file system lootcli still saw Blank.esp: {order}")
+        print("--- no masterlist")
+        empty = WORK / "empty-xdg"
+        empty.mkdir()
+        code, output, _, _ = run_lootcli(helper, "no-masterlist", env={"XDG_DATA_HOME": str(empty)})
+        if code != 1 or "Masterlist not found" not in output:
+            fail(f"no masterlist: exit {code}, expected 1 and 'Masterlist not found':\n{output}")
 
-    print("--- no masterlist")
-    empty = WORK / "empty-xdg"
-    empty.mkdir()
-    code, output, _, _ = run_lootcli(helper, "no-masterlist", env={"XDG_DATA_HOME": str(empty)})
-    if code != 1 or "Masterlist not found" not in output:
-        fail(f"no masterlist: exit {code}, expected 1 and 'Masterlist not found':\n{output}")
-
-    helper.close()
-    print("loot e2e test passed")
+        helper.close()
+        print("loot e2e test passed")
+    finally:
+        helper.terminate()
 
 
 main()

@@ -46,19 +46,66 @@ fi
 # --- run ---------------------------------------------------------------------------
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/mo2-loot-e2e.XXXXXX")"
 
+# mounts_under <dir>: the mo2-vfs mount points under <dir>, unprivileged (type
+# fuse.mo2-vfs) or made by root (type fuse, source mo2-vfs), with the octal escapes of
+# mountinfo (the test's directories have spaces) decoded
 mounts_under() {
-    awk -v d="$1/" '{ if (index($5 "/", d) == 1) print $5 }' /proc/self/mountinfo
+    awk -v d="$1/" '
+        { for (i = 7; $i != "-"; i++) ; type = $(i + 1); src = $(i + 2) }
+        (type == "fuse.mo2-vfs" || (type == "fuse" && src == "mo2-vfs")) &&
+            index($5 "/", d) == 1 {
+            p = $5
+            gsub(/\\040/, " ", p); gsub(/\\011/, "\t", p); gsub(/\\012/, "\n", p)
+            gsub(/\\134/, "\\", p)
+            print p }' /proc/self/mountinfo
 }
 
+unmount() {
+    if [[ $(id -u) == 0 ]]; then
+        umount "$1" 2>/dev/null || umount -l "$1" 2>/dev/null || true
+    else
+        fusermount3 -u "$1" 2>/dev/null || fusermount3 -uz "$1" 2>/dev/null || true
+    fi
+}
+
+# helpers: the pids of the processes of this run: mo2-vfs (its command line has the
+# log file in $WORK) and the lootcli it started (its command line has paths in $WORK)
+helpers() {
+    local d cmd
+    for d in /proc/[0-9]*; do
+        cmd="$(tr '\0' ' ' 2>/dev/null < "$d/cmdline")"
+        [[ $cmd == "$INSTALL/bin/mo2-vfs "*"$WORK/"* ||
+            $cmd == "$INSTALL/bin/loot/lootcli "*"$WORK/"* ]] && echo "${d#/proc/}"
+    done
+    return 0
+}
+
+# never removes the temporary directory through a live mount: a process left behind
+# (after a failure or a timeout) is stopped, whatever is still mounted under the
+# directory is unmounted, and if that fails the directory is left
 cleanup() {
-    local rc=$? m
-    while read -r m; do
-        [[ -n $m ]] || continue
-        echo "cleanup: unmounting $m" >&2
-        if [[ $(id -u) == 0 ]]; then umount -l "$m" || true; else fusermount3 -uz "$m" || true; fi
-    done <<< "$(mounts_under "$WORK")"
+    local rc=$? m left p
+    for p in $(helpers); do
+        echo "cleanup: stopping $p" >&2
+        kill -TERM "$p" 2>/dev/null || true
+    done
+    for _ in 1 2 3 4 5; do
+        [[ -z $(helpers) ]] && break
+        sleep 1
+    done
+    for p in $(helpers); do kill -KILL "$p" 2>/dev/null || true; done
+    for _ in 1 2 3; do
+        left="$(mounts_under "$WORK")"
+        [[ -z $left ]] && break
+        while read -r m; do
+            echo "cleanup: unmounting $m" >&2
+            unmount "$m"
+        done <<< "$left"
+        sleep 1
+    done
     if [[ -n $(mounts_under "$WORK") ]]; then
-        echo "cleanup: still mounted under $WORK, not removing it" >&2
+        echo "cleanup: still mounted under $WORK, not removing it:" >&2
+        mounts_under "$WORK" >&2
     else
         rm -rf "$WORK"
     fi
