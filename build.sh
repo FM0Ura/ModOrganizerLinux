@@ -160,7 +160,9 @@ build_libloot() {
 # must reject a missing argument.
 LOOTCLI_HOST_LIBS="libloot.so.0 libQt6Core.so.6 libboost_locale.so.1.90.0 libcurl.so.4 libstdc++.so.6 libm.so.6 libgcc_s.so.1 libc.so.6"
 build_lootcli() {
-    cmake_build lootcli "$ROOT/deps/lootcli"
+    # -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=OFF: a build-out/lootcli left by an earlier phase
+    # keeps Qt6 disabled in its cache, and the executable would not be configured
+    cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=OFF
     local exe="$INSTALL/bin/loot/lootcli" lib out
     [[ -x $exe ]] || die "lootcli was not installed in $INSTALL/bin/loot"
     [[ -e $INSTALL/bin/loot/libloot.so.0 ]] || die "libloot.so.0 is not next to lootcli"
