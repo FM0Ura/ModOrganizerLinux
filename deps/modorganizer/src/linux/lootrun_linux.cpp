@@ -123,7 +123,9 @@ bool Loot::waitForCompletion()
 
   processStdout(m_pipe->read());
 
-  // taken even when cancelled, so that it doesn't stay recorded
+  // taken even when cancelled, so that it doesn't stay recorded; this is the LOOT
+  // thread and the exited event is recorded on the main thread (which runs the event
+  // loop of the dialog), so take() only waits on the map, which is protected by a mutex
   const auto code = exitcodes::take(pid, std::chrono::seconds(2));
 
   if (m_cancel) {
@@ -132,8 +134,9 @@ bool Loot::waitForCompletion()
   }
 
   if (!code) {
-    emit log(log::Levels::Error,
-             tr("lootcli ended, but mo2-vfs did not report its exit code"));
+    const auto message = tr("lootcli ended, but mo2-vfs did not report its exit code");
+    m_errors.push_back(message);
+    emit log(log::Levels::Error, message);
     return false;
   }
 
@@ -144,8 +147,9 @@ bool Loot::waitForCompletion()
       emit log(log::Levels::Error, line);
     }
 
-    emit log(log::Levels::Error,
-             tr("Loot failed. Exit code was: 0x%1").arg(*code, 0, 16));
+    const auto message = tr("Loot failed. Exit code was: 0x%1").arg(*code, 0, 16);
+    m_errors.push_back(message);
+    emit log(log::Levels::Error, message);
     return false;
   }
 

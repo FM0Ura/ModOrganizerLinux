@@ -664,6 +664,7 @@ void Loot::processStdout(const std::string& lootOut)
 
     if (m.type == lootcli::MessageType::None) {
       log::error("unrecognised loot output: '{}'", line);
+      start = newline + 1;
       continue;
     }
 
