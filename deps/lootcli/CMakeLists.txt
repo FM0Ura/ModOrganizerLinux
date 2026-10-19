@@ -6,6 +6,12 @@ project(lootcli)
 
 add_subdirectory(src)
 
+# the tests of the Linux parts (build.sh --tests sets BUILD_TESTING)
+if (BUILD_TESTING AND NOT WIN32)
+	enable_testing()
+	add_subdirectory(tests)
+endif()
+
 # install the header helper
 configure_package_config_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/config.cmake.in
   "${CMAKE_CURRENT_BINARY_DIR}/mo2-lootcli-header-config.cmake"

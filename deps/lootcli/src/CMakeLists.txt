@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Linux: the LOOT data folder and the masterlist download of lootcli (posix_support.cpp,
+# the Windows versions are in lootthread.cpp), a library of their own for the tests
+if (NOT WIN32)
+	find_package(CURL REQUIRED)
+	add_library(lootcli_posix STATIC posix_support.cpp posix_support.h)
+	set_target_properties(lootcli_posix PROPERTIES CXX_STANDARD 20)
+	target_include_directories(lootcli_posix PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+	target_link_libraries(lootcli_posix PUBLIC CURL::libcurl)
+endif()
+
 # Qt is not required, this allows us to skip building the executable and only create
 # the single-header interface when using this as a VCPKG dependency
 
