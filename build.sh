@@ -258,6 +258,27 @@ vfs_e2e() {
     log "vfs end-to-end test passed"
 }
 
+# With --tests, after every target: the end-to-end test of LOOT (tests/loot-e2e/run.sh,
+# see there): lootcli, started by mo2-vfs with the virtual file system mounted, sorts
+# the plugins of the mods of a fake Skyrim SE. It needs mo2-vfs and lootcli: always in
+# a full build, and with --only when libloot, lootcli or mo2-vfs was built and both are
+# installed.
+loot_e2e() {
+    [[ $TESTS == 1 ]] || return 0
+    if ((${#ONLY[@]})); then
+        [[ " ${ONLY[*]} " == *" libloot "* || " ${ONLY[*]} " == *" lootcli "* ||
+            " ${ONLY[*]} " == *" mo2-vfs "* ]] || return 0
+        if [[ ! -x $INSTALL/bin/mo2-vfs || ! -x $INSTALL/bin/loot/lootcli ]]; then
+            log "loot end-to-end test skipped: build mo2-vfs and lootcli first"
+            return 0
+        fi
+    fi
+    log "loot end-to-end test"
+    "$ROOT/tests/loot-e2e/run.sh" "$INSTALL" "$BUILD_OUT/testing-plugins" ||
+        die "loot end-to-end test failed"
+    log "loot end-to-end test passed"
+}
+
 # With --tests, the unit tests of the application (organizer_tests: the data tree and
 # the Linux env layer, which build without the rest of the application) are built and
 # run before the application (with MO2_VFS_BINARY set to the installed mo2-vfs). This
@@ -383,6 +404,12 @@ if [[ " ${failed[*]} " == *" mo2-vfs "* || " ${failed[*]} " == *" modorganizer "
     log "vfs end-to-end test skipped: a target it needs failed"
 else
     vfs_e2e
+fi
+if [[ " ${failed[*]} " == *" mo2-vfs "* || " ${failed[*]} " == *" libloot "* ||
+    " ${failed[*]} " == *" lootcli "* ]]; then
+    log "loot end-to-end test skipped: a target it needs failed"
+else
+    loot_e2e
 fi
 ((${#skipped[@]})) && log "skipped (not implemented yet): ${skipped[*]}"
 ((${#failed[@]})) && log "failed (allowed): ${failed[*]}"

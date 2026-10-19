@@ -1,0 +1,5 @@
+# Masterlist of the LOOT end-to-end test (tests/loot-e2e): one rule, Blank.esp after
+# Blank - Different.esp, the opposite of the order of the test's plugins.txt
+plugins:
+  - name: 'Blank.esp'
+    after: [ 'Blank - Different.esp' ]
