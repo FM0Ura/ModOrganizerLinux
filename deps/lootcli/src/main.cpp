@@ -45,6 +45,7 @@ loot::LogLevel getLogLevel(const std::vector<std::string>& arguments)
   return lootcli::toLootLogLevel(level);
 }
 
+#ifdef _WIN32
 int wWinMain(HINSTANCE, HINSTANCE, LPTSTR, int)
 {
   _setmode(_fileno(stdout), _O_BINARY);
@@ -93,3 +94,39 @@ int wWinMain(HINSTANCE, HINSTANCE, LPTSTR, int)
     return 1;
   }
 }
+#else
+#include <clocale>
+
+// same as wWinMain(): argv is UTF-8 already
+int main(int argc, char** argv)
+{
+  setlocale(LC_ALL, "C.UTF-8");
+
+  const std::vector<std::string> arguments(argv, argv + argc);
+
+  try {
+    lootcli::LOOTWorker worker;
+
+    worker.setUpdateMasterlist(!getParameter<bool>(arguments, "skipUpdateMasterlist"));
+    worker.setGame(getParameter<std::string>(arguments, "game"));
+    worker.setGamePath(getParameter<std::string>(arguments, "gamePath"));
+
+    const auto pluginListPath = getParameter<std::string>(arguments, "pluginListPath");
+    worker.setPluginListPath(pluginListPath);
+    worker.setReportOutputPath(getParameter<std::string>(arguments, "out"));
+    worker.setSortedPluginListOutputPath(getOptionalParameter<std::string>(
+        arguments, "pluginListOutputPath", pluginListPath));
+    worker.setLogLevel(getLogLevel(arguments));
+
+    const auto lang = getOptionalParameter<std::string>(arguments, "language", "");
+    if (!lang.empty()) {
+      worker.setLanguageCode(lang);
+    }
+
+    return worker.run();
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return 1;
+  }
+}
+#endif

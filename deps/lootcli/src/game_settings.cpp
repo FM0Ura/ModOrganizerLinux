@@ -405,6 +405,7 @@ GameSettings& GameSettings::SetGameLocalPath(const std::filesystem::path& path)
 
 GameSettings& GameSettings::SetGameLocalFolder(const std::string& folderName)
 {
+#ifdef _WIN32
   TCHAR path[MAX_PATH];
 
   HRESULT res = ::SHGetFolderPath(nullptr, CSIDL_LOCAL_APPDATA, nullptr,
@@ -416,6 +417,11 @@ GameSettings& GameSettings::SetGameLocalFolder(const std::string& folderName)
     appData = fs::path("");
   }
   gameLocalPath_ = appData / fs::path(folderName);
+#else
+  // no local AppData folder (the Windows code falls back to "" as well); lootcli does
+  // not use the game local path, libloot gets the profile folder instead
+  gameLocalPath_ = fs::path(folderName);
+#endif
   return *this;
 }
 }  // namespace loot
