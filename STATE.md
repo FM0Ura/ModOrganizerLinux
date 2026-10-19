@@ -168,6 +168,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 - As listas de plugins dos INIs (`sTestFile`, Oblivion/Fallout 3/NV) não são lidas fora do Windows (spec §1.3).
 - Na distrobox o `lootcli` roda no host e usa as bibliotecas Qt6Core, Boost.Locale 1.90 e libcurl de lá (o `build.sh` confere a lista).
 - Só o Skyrim SE foi testado.
+- O portão do `build.sh` confere só os nomes das bibliotecas (`NEEDED`) do `lootcli`, não as versões dos símbolos: o `lootcli` compilado na distrobox exige `Qt_6.11` e `GLIBCXX_3.4.32` (versões do box hoje). Se o Qt ou o GCC do box passarem à frente dos do host Bazzite, o `lootcli` falha no host (o erro aparece no diálogo do LOOT); a Fase 5 (AppImage) elimina isso.
 - Valem as limitações das Fases 1 a 4a, menos "Sem LOOT".
 
 ## Limitações conhecidas da Fase 4a
