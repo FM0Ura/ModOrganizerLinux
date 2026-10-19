@@ -14,7 +14,7 @@ Spec: [`../superpowers/specs/2026-10-18-phase4b-loot-design.md`](../superpowers/
 | 3 | Só com o LOOT Flatpak: criar no LOOT uma regra de userlist (ex.: um plugin "load after" outro que hoje vem depois), fechar o LOOT, "Ordenar" de novo no MO2. | A ordem respeita a regra. | |
 | 4 | "Ordenar" e, durante o progresso, "Cancelar". No host: `<repo>/install/bin/mo2-vfs --list-mounts`. | O diálogo fecha cancelado; a ordem da aba não mudou; nada listado. | |
 | 5 | Desligar a rede (Wi-Fi/cabo). Fechar e reabrir o MO2; "Ordenar". | Erro claro `Error downloading masterlist: …`; a masterlist anterior continua na pasta do item 1. | |
-| 5b | Ainda sem rede: Configurações → Nexus/Geral → modo offline ligado; "Ordenar". Religar a rede e desligar o modo offline ao fim. | Ordena com a masterlist em cache, sem erro. | |
+| 5b | Ainda sem rede: Configurações → Workarounds → Network → Offline Mode ligado; "Ordenar". Religar a rede e desligar o modo offline ao fim. | Ordena com a masterlist em cache, sem erro. | |
 
 **Ao terminar:** registre aqui o resultado de cada item e, em "Observações", o que precisou de correção.
 

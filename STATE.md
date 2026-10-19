@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 4b — LOOT · **Status:** 🟡 implementação concluída; falta o CI, o teste manual e o merge · **Anterior:** 4a — Nexus, `nxm://` e keyring ✅ (merge no `main` em 2026-10-18, PR #2)
+**Fase atual:** 4b — LOOT · **Status:** 🟡 implementação concluída; revisão final, CI e teste manual pendentes · **Anterior:** 4a — Nexus, `nxm://` e keyring ✅ (merge no `main` em 2026-10-18, PR #2)
 **Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
@@ -24,7 +24,7 @@ Spec: [`docs/superpowers/specs/2026-10-18-phase4b-loot-design.md`](docs/superpow
 | 6 | `VfsConnector::kill` | ✅ | `31c0d76` |
 | 7 | Helpers `loot_linux` | ✅ | `310d9b0` |
 | 8 | LOOT roda o `lootcli` pelo `mo2-vfs` | ✅ | `928be58`, `37804a3` (o segundo corrige um bug do upstream em `Loot::processStdout`: uma linha não reconhecida repetia para sempre) |
-| 9 | Documentação, checklist e ponto de controle de CI | ✅ docs e checklist; o push e o CI dependem da autorização do usuário | este commit |
+| 9 | Documentação, checklist e ponto de controle de CI | ✅ docs e checklist; o push e o CI dependem da autorização do usuário | `6aade61` |
 | 10 | Teste manual no Bazzite ([`docs/testing/phase4b-manual-checklist.md`](docs/testing/phase4b-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4a — progresso
@@ -146,7 +146,7 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
-Fase 4b: o branch `fase-4b-loot` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` e o `lootcli` ao lado), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4b-manual-checklist.md`.
+Fase 4b: o branch `fase-4b-loot` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4b-manual-checklist.md`.
 
 (Fase 4a, já no `main`: checklist em `docs/testing/phase4a-manual-checklist.md`.)
 
