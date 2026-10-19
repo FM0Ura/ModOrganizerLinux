@@ -11,7 +11,7 @@
 # message, unless MO2_REQUIRE_FUSE=1 (set in CI), where it fails.
 set -euo pipefail
 
-INSTALL="$(cd "${1:?usage: $0 <install prefix> <cache directory>}" && pwd)"
+INSTALL="$(cd "${1:?usage: $0 <install prefix> <cache directory>}" && pwd -P)"
 CACHE="${2:?usage: $0 <install prefix> <cache directory>}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TP_VERSION=1.6.2
@@ -36,7 +36,7 @@ mkdir -p "$CACHE"
 plugins="$CACHE/testing-plugins-$TP_VERSION/SkyrimSE/Data"
 if [[ ! -f $plugins/Blank.esp ]]; then
     archive="$CACHE/testing-plugins-$TP_VERSION.tar.gz"
-    curl -sSfL -o "$archive" \
+    curl -sSfL --retry 3 --max-time 120 -o "$archive" \
         "https://github.com/Ortham/testing-plugins/archive/refs/tags/$TP_VERSION.tar.gz"
     echo "$TP_SHA256  $archive" | sha256sum -c --quiet - ||
         fail "testing-plugins $TP_VERSION does not match its SHA-256"
@@ -45,6 +45,9 @@ fi
 
 # --- run ---------------------------------------------------------------------------
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/mo2-loot-e2e.XXXXXX")"
+# physical path: drive.py resolves it and mountinfo lists resolved paths, so under a
+# symlinked TMPDIR the mount and process lookups below would otherwise miss
+WORK="$(cd "$WORK" && pwd -P)"
 
 # mounts_under <dir>: the mo2-vfs mount points under <dir>, unprivileged (type
 # fuse.mo2-vfs) or made by root (type fuse, source mo2-vfs), with the octal escapes of
