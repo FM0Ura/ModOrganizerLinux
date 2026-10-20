@@ -71,10 +71,10 @@ Manual no Bazzite, em `docs/testing/phase4c1-manual-checklist.md`:
 1. Instalar um mod BAIN (pacote com `00 Core`/`10 …`): o diálogo BAIN aparece; as opções escolhidas viram os arquivos do mod.
 2. Instalar um "bundle" (arquivo com outro arquivo dentro): o MO2 oferece o arquivo interno.
 3. Pré-visualizar um `.txt`/`.ini` e uma imagem pela aba Data; ver o conteúdo de um `.bsa` pela pré-visualização.
-4. Com a extração ligada nas configurações do `bsa_extractor`, instalar um mod com BSA: os arquivos extraídos aparecem no mod.
+4. Em Configurações → Plugins → BSA Extractor, desligar "only trigger bsa extraction for alternate game sources" (padrão: ligado), instalar um mod com BSA e responder Sim em "Extract BSA": os arquivos extraídos aparecem no mod.
 5. Deixar arquivos no `overwrite`: aviso no ícone de problemas; não há opção de atributos de arquivo nas configurações do plugin.
-6. INI Editor (Ferramentas): editar e salvar um INI do perfil; no modo externo, abre no editor do host.
-7. Só para quem usa FNIS: mudar os dados do FNIS e executar o jogo: pergunta "Run FNIS before …?" e o FNIS roda pelo Proton.
+6. INI Editor (Ferramentas): editar e salvar um INI do perfil; com "Use an external editor to open the files" ligado nas configurações do plugin, abre no editor do host.
+7. Só para quem usa FNIS: mudar os arquivos de animação que ele confere (`FNIS_*_List.txt`, `FNIS*Behavior.txt`, `PatchList.txt`, `skeleton*.hkx`) e executar o jogo: pergunta "Run FNIS before …?" e o FNIS roda pelo Proton.
 
 ## 5. Riscos
 

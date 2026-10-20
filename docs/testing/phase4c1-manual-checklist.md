@@ -11,10 +11,10 @@ Spec: [`../superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md`](../supe
 | 1 | Instalar um mod BAIN (pacote com `00 Core`/`10 …`). | O diálogo BAIN aparece; as opções escolhidas viram os arquivos do mod. | |
 | 2 | Instalar um "bundle" (arquivo com outro arquivo dentro). | O MO2 oferece o arquivo interno. | |
 | 3 | Pela aba Data, pré-visualizar um `.txt` ou `.ini` e uma imagem; depois ver o conteúdo de um `.bsa` pela pré-visualização. | O texto, a imagem e a lista de arquivos do BSA aparecem na janela de pré-visualização. | |
-| 4 | Ligar a extração nas configurações do `bsa_extractor` e instalar um mod com `.bsa`. | Os arquivos extraídos aparecem no mod. | |
+| 4 | Configurações → Plugins → BSA Extractor: desligar "only trigger bsa extraction for alternate game sources" (padrão: ligado, e então a pergunta não aparece para um mod comum). Instalar um mod com `.bsa` e responder Sim em "Extract BSA". | Os arquivos do BSA são extraídos para a pasta do mod (o MO2 ainda pergunta se remove os BSA extraídos). | |
 | 5 | Deixar arquivos no `overwrite`. Abrir as configurações do plugin `diagnose_basic` (Configurações → Plugins). | Aviso no ícone de problemas; não há opção de atributos de arquivo (`check_fileattributes`) nas configurações do plugin. | |
-| 6 | Ferramentas → INI Editor: editar e salvar um INI do perfil; depois, com o modo externo ligado, abrir o INI. | O INI é salvo; no modo externo abre no editor do host (`xdg-open`). | |
-| 7 | Só para quem usa FNIS: mudar os dados do FNIS e executar o jogo. | Pergunta "Run FNIS before …?" e o FNIS roda pelo Proton. | |
+| 6 | Ferramentas → INI Editor: editar e salvar um INI do perfil. Depois, em Configurações → Plugins → INI Editor, ligar "Use an external editor to open the files" (a opção seguinte, "associated", não tem efeito no Linux) e abrir o INI Editor de novo. | O INI é salvo; no modo externo o INI abre no editor do host (`xdg-open`). | |
+| 7 | Só para quem usa FNIS (instalado como mod, com `tools/GenerateFNIS_for_Users/GenerateFNISforUsers.exe` no Data virtual): instalar, ativar ou desativar um mod de animação com arquivos `FNIS_*_List.txt`, `FNIS*Behavior.txt`, `PatchList.txt` ou `skeleton*.hkx`, e executar o jogo (SKSE). | Pergunta "Run FNIS before …?" ("FNIS source data has been changed") e, respondendo Sim, o `GenerateFNISforUsers.exe` roda pelo Proton com o VFS. | |
 
 **Ao terminar:** registre aqui o resultado de cada item e, em "Observações", o que precisou de correção.
 

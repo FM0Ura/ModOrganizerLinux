@@ -17,7 +17,7 @@ Spec: [`docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md`](docs/
 | # | Tarefa | Status | Commits principais |
 |---|---|---|---|
 | 1 | `tests/plugin-load`: tipos de plugin `preview`, `tool`, `diagnose` e `plugin`; configurações | ✅ | `3ce2c41` |
-| 2 | `installer_bain` e `installer_bundle` (subtrees + alvos no `build.sh`) | ✅ | `3bdecfa` (+ subtrees) |
+| 2 | `installer_bain` e `installer_bundle` (subtrees + alvos no `build.sh`) | ✅ | `3bdecfa` |
 | 3 | `preview_base` e `preview_bsa` | ✅ | `9f2d3d4`, `b4c7567` (`bsatk` com código independente de posição, necessário para ligá-lo aos plugins), `778402f` |
 | 4 | `bsa_extractor` | ✅ | `e992baa`, `32fcbe9` |
 | 5 | `diagnose_basic` (sem a checagem de atributos NTFS no Linux) | ✅ | `819f84e`, `64fd32a` |
