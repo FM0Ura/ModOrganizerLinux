@@ -28,6 +28,7 @@ using namespace MOBase;
 
 CheckFNIS::CheckFNIS()
     : m_MOInfo(nullptr), m_Active(false),
+#ifdef _WIN32
       m_MatchExpressions(std::vector<QRegularExpression>{
           // MSVC2013 bug. The (std::vector<QRegExp> shouldn't be necessary
           QRegularExpression("\\\\FNIS_.*_List\\.txt$",
@@ -42,6 +43,22 @@ CheckFNIS::CheckFNIS()
       m_SensitiveMatchExpressions(std::vector<QRegularExpression>{
           QRegularExpression("\\\\animations\\\\.*\\.hkx$",
                              QRegularExpression::PatternOption::CaseInsensitiveOption)})
+#else
+      // FileInfo::filePath has / on Linux (fileentry.cpp)
+      m_MatchExpressions(std::vector<QRegularExpression>{
+          QRegularExpression("[\\\\/]FNIS_.*_List\\.txt$",
+                             QRegularExpression::PatternOption::CaseInsensitiveOption),
+          QRegularExpression("[\\\\/]FNIS.*Behavior\\.txt$",
+                             QRegularExpression::PatternOption::CaseInsensitiveOption),
+          QRegularExpression("[\\\\/]PatchList\\.txt$",
+                             QRegularExpression::PatternOption::CaseInsensitiveOption),
+          QRegularExpression(
+              "[\\\\/]skeleton.*\\.hkx$",
+              QRegularExpression::PatternOption::CaseInsensitiveOption)}),
+      m_SensitiveMatchExpressions(std::vector<QRegularExpression>{
+          QRegularExpression("[\\\\/]animations[\\\\/].*\\.hkx$",
+                             QRegularExpression::PatternOption::CaseInsensitiveOption)})
+#endif
 {}
 
 CheckFNIS::~CheckFNIS() {}
