@@ -124,6 +124,10 @@ int SimpleFileTreeModel::rowCount(const QModelIndex& parent) const
 void SimpleFileTreeModel::setupModelData(const QStringList& lines, SimpleFileTreeItem*)
 {
   for (QString line : lines) {
+#ifndef _WIN32
+    // the archive paths have \, which cleanPath() only converts on Windows
+    line.replace('\\', '/');
+#endif
     auto fullPath           = QDir::cleanPath(line);
     QStringList lineEntries = fullPath.split("/");
     auto currentParent      = m_RootItem;
