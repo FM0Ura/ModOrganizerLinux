@@ -33,6 +33,7 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `preview_bsa` | https://github.com/ModOrganizer2/modorganizer-preview_bsa | `master` (`fb477c0850de24cebfb2922c437a97fbd014e1e3`) | 2026-10-06 |
 | `bsa_extractor` | https://github.com/ModOrganizer2/modorganizer-bsa_extractor | `master` (`d6b32b9d9d894bb71734843d62528748b4f06f03`) | 2026-10-06 |
 | `diagnose_basic` | https://github.com/ModOrganizer2/modorganizer-diagnose_basic | `master` (`558e3583bd97905126c88bb1a3b3219def3bd394`) | 2026-10-06 |
+| `check_fnis` | https://github.com/ModOrganizer2/modorganizer-check_fnis | `master` (`53522c3157607bd1c8d6a9639b3bbda9795f27fe`) | 2026-10-06 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`

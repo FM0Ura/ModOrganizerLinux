@@ -388,6 +388,13 @@ build_diagnose_basic() {
     fi
 }
 
+# check_fnis (Phase 4c.1): before the game runs, offers to run FNIS when its data changed;
+# FNIS (a Windows program) runs through IOrganizer::startApplication() like Run
+build_check_fnis() {
+    cmake_build check_fnis "$ROOT/deps/check_fnis"
+    check_plugins plugin "$INSTALL/bin/plugins/libcheck_fnis.so"
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
