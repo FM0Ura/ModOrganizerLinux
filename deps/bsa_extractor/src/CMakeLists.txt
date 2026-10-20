@@ -6,7 +6,12 @@ find_package(mo2-dds-header CONFIG REQUIRED)
 find_package(mo2-bsatk CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(lz4 CONFIG REQUIRED)
-find_package(Boost CONFIG REQUIRED COMPONENTS thread interprocess)
+if (WIN32)
+	find_package(Boost CONFIG REQUIRED COMPONENTS thread interprocess)
+else()
+	# interprocess is header-only, and Fedora installs no CMake package for it
+	find_package(Boost CONFIG REQUIRED COMPONENTS thread)
+endif()
 
 add_library(bsa_extractor SHARED)
 mo2_configure_plugin(bsa_extractor WARNINGS OFF)
