@@ -1,6 +1,6 @@
 // Skyrim Special Edition on Linux: the plugin (loaded like Mod Organizer loads it, with
 // QPluginLoader) finds the game in a Steam library of a temporary HOME and reads the
-// information fields of its saves.
+// information fields of its saves, and creates the profile INIs.
 
 #include <gtest/gtest.h>
 
@@ -214,6 +214,155 @@ TEST_F(SkyrimSE, ReadsSaveInformation)
   EXPECT_EQ(list[0]->getName(), "Dovahkiin, #7, Level 42, Whiterun");
   EXPECT_EQ(list[0]->getSaveGroupIdentifier(), "Dovahkiin");
   EXPECT_EQ(list[0]->getCreationTime(), created);
+}
+
+// the profile INIs on Linux: the INIs of the Proton prefix (Skyrim.ini,
+// SkyrimPrefs.ini) and the default INI of the game (Skyrim_Default.ini) do not have the
+// lowercase names of iniFiles(); a profile INI that an earlier version created empty
+// because of that is restored from them
+class SkyrimSEProfileInis : public SkyrimSE
+{
+protected:
+  void SetUp() override
+  {
+    SkyrimSE::SetUp();
+    if (HasFatalFailure()) {
+      return;
+    }
+
+    m_myGames = m_library + "/steamapps/compatdata/489830/pfx/drive_c/users/steamuser"
+                            "/Documents/My Games/Skyrim Special Edition";
+    ASSERT_TRUE(QDir().mkpath(m_myGames));
+    m_profile = m_home.path() + "/profiles/Default";
+    ASSERT_TRUE(QDir().mkpath(m_profile));
+
+    m_plugin->detectGame();
+    ASSERT_EQ(m_plugin->documentsDirectory().absolutePath(), m_myGames);
+  }
+
+  QByteArray read(const QString& name) const
+  {
+    QFile file(m_profile + "/" + name);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray("<missing>");
+  }
+
+  void initializeConfiguration()
+  {
+    m_plugin->initializeProfile(QDir(m_profile), IPluginGame::CONFIGURATION);
+  }
+
+  const QByteArray m_userIni    = "[General]\r\nsLanguage=ENGLISH\r\n";
+  const QByteArray m_userPrefs  = "[Display]\r\niSize W=1920\r\niSize H=1080\r\n";
+  const QByteArray m_defaultIni = "[General]\r\nsLanguage=DEFAULT\r\n";
+  const QByteArray m_stub       = "[Launcher]\r\nbEnableFileSelection=1\r\n";
+
+  QString m_myGames;
+  QString m_profile;
+};
+
+TEST_F(SkyrimSEProfileInis, CopiesThePrefixInisIgnoringCase)
+{
+  ASSERT_TRUE(write(m_myGames + "/Skyrim.ini", m_userIni));
+  ASSERT_TRUE(write(m_myGames + "/SkyrimPrefs.ini", m_userPrefs));
+  // the user INI is chosen over the default one
+  ASSERT_TRUE(write(m_game + "/Skyrim_Default.ini", m_defaultIni));
+
+  initializeConfiguration();
+
+  EXPECT_EQ(read("skyrim.ini"), m_userIni);
+  EXPECT_EQ(read("skyrimprefs.ini"), m_userPrefs);
+  // no SkyrimCustom.ini in the prefix: created empty, as before
+  EXPECT_EQ(read("skyrimcustom.ini"), QByteArray());
+}
+
+TEST_F(SkyrimSEProfileInis, CopiesTheDefaultIniIgnoringCase)
+{
+  ASSERT_TRUE(write(m_game + "/Skyrim_Default.ini", m_defaultIni));
+
+  initializeConfiguration();
+
+  EXPECT_EQ(read("skyrim.ini"), m_defaultIni);
+}
+
+TEST_F(SkyrimSEProfileInis, RestoresAnEmptyProfileIni)
+{
+  ASSERT_TRUE(write(m_myGames + "/Skyrim.ini", m_userIni));
+  ASSERT_TRUE(write(m_myGames + "/SkyrimPrefs.ini", m_userPrefs));
+  ASSERT_TRUE(touch(m_profile + "/skyrim.ini"));
+  ASSERT_TRUE(touch(m_profile + "/skyrimprefs.ini"));
+  ASSERT_TRUE(touch(m_profile + "/skyrimcustom.ini"));
+
+  initializeConfiguration();
+
+  EXPECT_EQ(read("skyrim.ini"), m_userIni);
+  EXPECT_EQ(read("skyrimprefs.ini"), m_userPrefs);
+  // nothing to restore it from
+  EXPECT_EQ(read("skyrimcustom.ini"), QByteArray());
+}
+
+// the profile INI that only has what prepareIni() writes before a run
+TEST_F(SkyrimSEProfileInis, RestoresTheLauncherStubAndKeepsFileSelection)
+{
+  ASSERT_TRUE(write(m_myGames + "/Skyrim.ini", m_userIni));
+  ASSERT_TRUE(write(m_profile + "/skyrim.ini", m_stub));
+
+  initializeConfiguration();
+
+  const QByteArray ini = read("skyrim.ini");
+  EXPECT_TRUE(ini.startsWith(m_userIni)) << ini.toStdString();
+  EXPECT_TRUE(ini.contains("[Launcher]")) << ini.toStdString();
+  EXPECT_TRUE(ini.contains("bEnableFileSelection=1")) << ini.toStdString();
+}
+
+TEST_F(SkyrimSEProfileInis, RestoresTheLauncherStubWrittenDifferently)
+{
+  ASSERT_TRUE(write(m_myGames + "/SkyrimPrefs.ini", m_userPrefs));
+  ASSERT_TRUE(write(m_profile + "/skyrimprefs.ini",
+                    "\n  [Launcher] \n bEnableFileSelection = 1\n\n"));
+
+  initializeConfiguration();
+
+  const QByteArray ini = read("skyrimprefs.ini");
+  EXPECT_TRUE(ini.startsWith(m_userPrefs)) << ini.toStdString();
+  EXPECT_TRUE(ini.contains("bEnableFileSelection=1")) << ini.toStdString();
+}
+
+TEST_F(SkyrimSEProfileInis, KeepsAProfileIniWithContent)
+{
+  ASSERT_TRUE(write(m_myGames + "/Skyrim.ini", m_userIni));
+  ASSERT_TRUE(write(m_myGames + "/SkyrimPrefs.ini", m_userPrefs));
+  const QByteArray own         = "[Display]\r\nbFull Screen=0\r\n";
+  const QByteArray stubAndMore = m_stub + "[General]\r\nsLanguage=FRENCH\r\n";
+  ASSERT_TRUE(write(m_profile + "/skyrimprefs.ini", own));
+  ASSERT_TRUE(write(m_profile + "/skyrim.ini", stubAndMore));
+
+  initializeConfiguration();
+
+  EXPECT_EQ(read("skyrimprefs.ini"), own);
+  EXPECT_EQ(read("skyrim.ini"), stubAndMore);
+}
+
+TEST_F(SkyrimSEProfileInis, KeepsAnEmptyProfileIniWhenTheSourceIsEmpty)
+{
+  ASSERT_TRUE(touch(m_myGames + "/SkyrimPrefs.ini"));
+  ASSERT_TRUE(write(m_profile + "/skyrimprefs.ini", m_stub));
+
+  initializeConfiguration();
+
+  EXPECT_EQ(read("skyrimprefs.ini"), m_stub);
+}
+
+// only INIs: an empty plugins.txt is a profile without plugins
+TEST_F(SkyrimSEProfileInis, KeepsAnEmptyPluginsTxt)
+{
+  const QString local = m_library + "/steamapps/compatdata/489830/pfx/drive_c/users/"
+                                    "steamuser/AppData/Local/Skyrim Special Edition";
+  ASSERT_TRUE(write(local + "/plugins.txt", "*Unofficial Patch.esp\r\n"));
+  ASSERT_TRUE(touch(m_profile + "/plugins.txt"));
+
+  m_plugin->initializeProfile(QDir(m_profile), IPluginGame::MODS);
+
+  EXPECT_EQ(read("plugins.txt"), QByteArray());
 }
 
 int main(int argc, char** argv)

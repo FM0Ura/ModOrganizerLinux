@@ -112,7 +112,7 @@ void GameFallout4VR::initializeProfile(const QDir& path, ProfileSettings setting
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/fallout4.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/fallout4.ini")).exists()) {
       copyToProfile(gameDirectory().absolutePath(), path, "fallout4.ini");
     } else {
       copyToProfile(myGamesPath(), path, "fallout4.ini");

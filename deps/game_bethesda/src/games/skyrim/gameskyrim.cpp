@@ -125,7 +125,7 @@ void GameSkyrim::initializeProfile(const QDir& path, ProfileSettings settings) c
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/skyrim.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/skyrim.ini")).exists()) {
       copyToProfile(gameDirectory().absolutePath(), path, "skyrim_default.ini",
                     "skyrim.ini");
     } else {

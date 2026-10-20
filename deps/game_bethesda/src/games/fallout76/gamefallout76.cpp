@@ -100,7 +100,7 @@ void GameFallout76::initializeProfile(const QDir& path, ProfileSettings settings
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/Fallout76.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/Fallout76.ini")).exists()) {
       copyToProfile(gameDirectory().absolutePath(), path, "Fallout76_default.ini",
                     "Fallout76.ini");
     } else {

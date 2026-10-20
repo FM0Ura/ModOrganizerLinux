@@ -126,7 +126,7 @@ void GameEnderal::initializeProfile(const QDir& path, ProfileSettings settings) 
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/enderal.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/enderal.ini")).exists()) {
 
       // there is no default ini, actually they are going to put them in for us!
       copyToProfile(gameDirectory().absolutePath(), path, "enderal_default.ini",

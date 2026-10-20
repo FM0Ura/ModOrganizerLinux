@@ -137,7 +137,7 @@ void GameFallout4::initializeProfile(const QDir& path, ProfileSettings settings)
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/fallout4.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/fallout4.ini")).exists()) {
       copyToProfile(gameDirectory().absolutePath(), path, "fallout4_default.ini",
                     "fallout4.ini");
     } else {
