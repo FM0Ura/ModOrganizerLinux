@@ -25,6 +25,8 @@
 #    plugin is not installed). While it runs, a second `ModOrganizer nxm://...` must exit
 #    with 0 and the running one must log `download requested: nxm://...` (the nxm://
 #    handler, spec of Phase 4a).
+#    Every plugin of bin/plugins/*.so must be logged as loaded by the application
+#    ("loaded plugin '...' from '<file>.so'") and none may log a load/initialisation failure.
 set -euo pipefail
 
 INSTALL="${1:?usage: $0 <install prefix>}"
@@ -77,7 +79,8 @@ start() {
 # main_window: see 3. above
 main_window() {
     # work and pid are global: the EXIT trap uses them after fail() left the function
-    local here home instance game marker out rc=0 i found=0 f app_env link second rc2 got
+    local here home instance game marker out rc=0 i found=0 f app_env link second rc2 got so
+    local -a missing=()
     here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     echo "--- ModOrganizer -i smoke (ready instance, up to the main window)"
     pid=""
@@ -174,6 +177,20 @@ main_window() {
         fail "the application crashed"
     f="$(find "$work" -type f \( -name '*.dmp' -o -name 'core' -o -name 'core.*' \) | head -n 5)"
     [[ -z $f ]] || fail "crash dump(s) written: $f"
+
+    # every plugin of bin/plugins was loaded by the application (PluginContainer logs
+    # "loaded plugin '<name>@<version>' from '<file>' - [...]"), and none failed: a
+    # plugin can load in QPluginLoader (tests/plugin-load) and still fail its init()
+    for so in "$INSTALL"/bin/plugins/*.so; do
+        grep -qF "from '$(basename "$so")'" "$instance"/logs/mo_interface.log ||
+            missing+=("$(basename "$so")")
+    done
+    ((${#missing[@]} == 0)) || fail "plugins not loaded by the application: ${missing[*]}"
+    if grep -E "failed to load plugin|failed to initialize|failed to load \(may be outdated\)" \
+        "$instance"/logs/mo_interface.log; then
+        fail "a plugin failed to load (see above)"
+    fi
+    echo "all $(ls "$INSTALL"/bin/plugins/*.so | wc -l) plugins loaded"
 
     # hermetic: nothing written in the real HOME. In CI (container HOME) the whole of
     # .config, .local and .cache is checked; elsewhere only the paths of the application
