@@ -103,10 +103,16 @@ void IniEditor::display() const
   if (m_MOInfo->pluginSetting(name(), "external").toBool()) {
     for (QString const& file : iniFiles) {
       QString fileName = m_MOInfo->profile()->absoluteIniFilePath(file);
+#ifdef _WIN32
       ::ShellExecuteW(nullptr,
                       m_MOInfo->pluginSetting(name(), "associated").toBool() ? L"open"
                                                                              : L"edit",
                       ToWString(fileName).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+      // the desktop's handler of the file (xdg-open; in the mo2-run box it opens on the
+      // host); Linux has no separate "edit" verb, so "associated" has no effect here
+      MOBase::shell::Open(fileName);
+#endif
     }
   } else {
     TextViewer* viewer = new TextViewer("INI Files", parentWidget());
