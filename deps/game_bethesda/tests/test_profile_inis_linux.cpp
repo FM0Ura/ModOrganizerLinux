@@ -217,6 +217,20 @@ TEST_F(LocalSaves, CreateTheIniWhenThereIsNone)
   EXPECT_TRUE(ini.contains("sLocalSavePath=__MO_Saves\\")) << ini.toStdString();
 }
 
+// the game reads sLocalSavePath (__MO_Saves\) as a Windows path: the saves of the
+// profile are mapped to the __MO_Saves folder of the documents of the game
+TEST_F(LocalSaves, MapTheSavesToTheFolderTheGameUses)
+{
+  FakeGame game(m_myGames);
+  GamebryoLocalSavegames saves(&game, "Skyrimcustom.ini");
+
+  const auto mappings = saves.mappings(QDir(m_profile + "/saves"));
+
+  ASSERT_EQ(mappings.size(), 1u);
+  EXPECT_EQ(mappings[0].source, m_profile + "/saves");
+  EXPECT_EQ(mappings[0].destination, m_myGames + "/__MO_Saves");
+}
+
 // when a profile is opened (and before a run), the configuration of a profile with
 // profile-specific INIs is initialized again, which restores its empty INIs
 TEST(RepairProfileInis, InitializesTheConfigurationOfAProfileWithLocalInis)

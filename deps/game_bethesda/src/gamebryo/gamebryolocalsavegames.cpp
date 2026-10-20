@@ -46,7 +46,13 @@ QString GamebryoLocalSavegames::localSavesDummy() const
 
 QDir GamebryoLocalSavegames::localSavesDirectory() const
 {
+#ifdef _WIN32
   return QDir(m_Game->myGamesPath()).absoluteFilePath(localSavesDummy());
+#else
+  // the dummy is the Windows path the game reads (__MO_Saves\)
+  return QDir(m_Game->myGamesPath())
+      .absoluteFilePath(QString(localSavesDummy()).replace('\\', '/'));
+#endif
 }
 
 QDir GamebryoLocalSavegames::localGameDirectory() const
