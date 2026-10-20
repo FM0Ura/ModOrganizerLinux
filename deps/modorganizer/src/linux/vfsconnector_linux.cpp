@@ -25,6 +25,7 @@
 #include "exitcodes_linux.h"
 #include "vfsbridge_linux.h"
 #include "vfsclient_linux.h"
+#include "vfstimeouts_linux.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -106,14 +107,6 @@ QStringList cleanupStaleMounts()
   }
 
   return stale;
-}
-
-// the timeout of mount and update requests; MO2_VFS_TIMEOUT_MS replaces it (tests)
-std::chrono::milliseconds mountTimeout()
-{
-  bool ok         = false;
-  const auto test = qEnvironmentVariable("MO2_VFS_TIMEOUT_MS").toInt(&ok);
-  return ok && test > 0 ? std::chrono::milliseconds(test) : 30s;
 }
 
 QString logLevelName(log::Levels level)
@@ -214,7 +207,7 @@ public:
       // the mounted file system follows the mappings (also called from the refresh
       // and profile code, which don't expect an exception)
       try {
-        send(mappingRequest("update"), mountTimeout());
+        send(mappingRequest("update"), vfsMountTimeout());
         m_mappingSent = true;
       } catch (const std::exception& e) {
         m_mappingSent = false;
@@ -475,7 +468,7 @@ private:
     if (m_active) {
       // one update per run: updateMapping() already sent these mappings
       if (!std::exchange(m_mappingSent, false)) {
-        send(mappingRequest("update"), mountTimeout());
+        send(mappingRequest("update"), vfsMountTimeout());
       }
       return;
     }
@@ -484,7 +477,7 @@ private:
     // delivered while the mount request waits
     ++m_generation;
 
-    const auto reply = send(mappingRequest("mount"), mountTimeout());
+    const auto reply = send(mappingRequest("mount"), vfsMountTimeout());
 
     m_roots.clear();
     for (const auto& r : reply.value("roots").toArray()) {

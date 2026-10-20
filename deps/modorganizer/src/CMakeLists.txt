@@ -136,7 +136,8 @@ set(_organizer_launch_sources
 	linux/spawn_linux.cpp
 	linux/vfsbridge_linux.cpp
 	linux/vfsclient_linux.cpp
-	linux/vfsconnector_linux.cpp)
+	linux/vfsconnector_linux.cpp
+	linux/vfstimeouts_linux.cpp)
 
 # the desktop integration of the Linux build: logins in the Secret Service
 # (secretstore_linux.cpp, over secretservice_linux.cpp) and the nxm:// handler

@@ -21,6 +21,7 @@
 #include "spawn.h"
 #include "tempdir.h"
 #include "vfsconnector.h"
+#include "linux/vfstimeouts_linux.h"
 
 namespace fs = std::filesystem;
 
@@ -1293,4 +1294,45 @@ TEST_F(VfsConnectorTest, AcceptsForcedLibraries)
 TEST(VfsConnector, NoUsvfsOnLinux)
 {
   EXPECT_EQ(MOShared::getUsvfsVersionString(), "none");
+}
+
+// the variables of the tests can only shorten the timeouts; an empty, zero, negative or
+// invalid value is the default
+TEST(VfsTimeouts, VariablesOnlyShortenThem)
+{
+  using namespace std::chrono_literals;
+
+  const auto oldTimeout = qgetenv("MO2_VFS_TIMEOUT_MS");
+  const auto oldRecheck = qgetenv("MO2_VFS_RECHECK_MS");
+
+  qunsetenv("MO2_VFS_TIMEOUT_MS");
+  qunsetenv("MO2_VFS_RECHECK_MS");
+  EXPECT_EQ(vfsMountTimeout(), 30s);
+  EXPECT_EQ(vfsRecheckInterval(), 5s);
+
+  qputenv("MO2_VFS_TIMEOUT_MS", "200");
+  qputenv("MO2_VFS_RECHECK_MS", "100");
+  EXPECT_EQ(vfsMountTimeout(), 200ms);
+  EXPECT_EQ(vfsRecheckInterval(), 100ms);
+
+  qputenv("MO2_VFS_TIMEOUT_MS", "999999");
+  qputenv("MO2_VFS_RECHECK_MS", "999999");
+  EXPECT_EQ(vfsMountTimeout(), 30s);
+  EXPECT_EQ(vfsRecheckInterval(), 5s);
+
+  for (const char* bad : {"0", "-5", "abc"}) {
+    qputenv("MO2_VFS_TIMEOUT_MS", bad);
+    qputenv("MO2_VFS_RECHECK_MS", bad);
+    EXPECT_EQ(vfsMountTimeout(), 30s) << bad;
+    EXPECT_EQ(vfsRecheckInterval(), 5s) << bad;
+  }
+
+  for (const auto& [name, old] : {std::pair{"MO2_VFS_TIMEOUT_MS", oldTimeout},
+                                  std::pair{"MO2_VFS_RECHECK_MS", oldRecheck}}) {
+    if (old.isNull()) {
+      qunsetenv(name);
+    } else {
+      qputenv(name, old);
+    }
+  }
 }
