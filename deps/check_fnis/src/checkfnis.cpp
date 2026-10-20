@@ -18,7 +18,9 @@
 #include <Qt>       // for Qt::CaseInsensitive
 #include <QtDebug>  // for qCritical, qDebug
 
+#ifdef _WIN32
 #include <Windows.h>  // for DWORD, HANDLE, INVALID_HANDLE_VALUE
+#endif
 
 #include <functional>
 
