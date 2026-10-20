@@ -24,6 +24,8 @@ BUILD_OUT="$ROOT/build-out"
 ALL_TARGETS=(
     7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
+    installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
+    check_fnis tool_inieditor tool_inibakery
 )
 
 ONLY=()
@@ -133,11 +135,12 @@ build_dds_header() {
 
 # bsatk reads/extracts BSA archives; with --tests its GoogleTest suite runs against a
 # synthetic Skyrim SE archive. It needs find_package(lz4 CONFIG), which distribution
-# packages do not provide: install a small config for the system lz4 first.
+# packages do not provide: install a small config for the system lz4 first. It is a static
+# library that the preview_bsa and bsa_extractor plugins link into shared objects, hence PIC.
 build_bsatk() {
     mkdir -p "$INSTALL/lib/cmake/lz4"
     install -m 0644 "$ROOT/build/lz4/lz4Config.cmake" "$INSTALL/lib/cmake/lz4/"
-    cmake_build bsatk "$ROOT/deps/bsatk"
+    cmake_build bsatk "$ROOT/deps/bsatk" -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 }
 
 # esptk reads plugin headers; with --tests its GoogleTest suite runs against synthetic plugins.
@@ -298,7 +301,7 @@ pre_modorganizer() {
     ctest --test-dir "$BUILD_OUT/modorganizer" --output-on-failure
 }
 
-# check_plugins <game|installer> <plugin>...: with --tests, the plugin load check
+# check_plugins <kind> <plugin>...: kind is a type of tests/plugin-load (game, installer, preview, tool, diagnose, filemapper or plugin); with --tests, the plugin load check
 # (tests/plugin-load) loads the installed plugins with QPluginLoader, like the
 # application's PluginContainer, and checks the interface each one implements.
 check_plugins() {
@@ -337,6 +340,72 @@ build_installer_fomod() {
     cmake_build installer_fomod "$ROOT/deps/installer_fomod" \
         -DFOMOD_SAMPLE_DIR="$ROOT/tests/fixtures/fomod-sample"
     check_plugins installer "$INSTALL/bin/plugins/libinstaller_fomod.so"
+}
+
+# the other installer plugins of upstream (Phase 4c.1): BAIN packages and archives
+# that contain other archives
+build_installer_bain() {
+    cmake_build installer_bain "$ROOT/deps/installer_bain"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_bain.so"
+}
+
+build_installer_bundle() {
+    cmake_build installer_bundle "$ROOT/deps/installer_bundle"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_bundle.so"
+}
+
+# the preview plugins (Phase 4c.1): text, images and INI files, and the contents of
+# BSA/BA2 archives (bsatk)
+build_preview_base() {
+    cmake_build preview_base "$ROOT/deps/preview_base"
+    check_plugins preview "$INSTALL/bin/plugins/libpreview_base.so"
+}
+
+build_preview_bsa() {
+    cmake_build preview_bsa "$ROOT/deps/preview_bsa"
+    check_plugins preview "$INSTALL/bin/plugins/libpreview_bsa.so"
+}
+
+# bsa_extractor (Phase 4c.1): offers to extract the BSA archives of a mod when it is
+# installed (bsatk)
+build_bsa_extractor() {
+    cmake_build bsa_extractor "$ROOT/deps/bsa_extractor"
+    check_plugins plugin "$INSTALL/bin/plugins/libbsa_extractor.so"
+}
+
+# diagnose_basic (Phase 4c.1): the basic checks of Mod Organizer (overwrite, error log,
+# fonts, missing masters, ...); its check of NTFS file attributes is Windows-only (spec
+# of Phase 4c.1, section 1.2), so its setting must not be offered on Linux
+build_diagnose_basic() {
+    cmake_build diagnose_basic "$ROOT/deps/diagnose_basic"
+    check_plugins diagnose "$INSTALL/bin/plugins/libdiagnose_basic.so"
+    if [[ $TESTS == 1 ]]; then
+        local out
+        out="$("$BUILD_OUT/plugin-load/plugin_load" diagnose \
+            "$INSTALL/bin/plugins/libdiagnose_basic.so")"
+        [[ $out != *check_fileattributes* ]] ||
+            die "diagnose_basic offers check_fileattributes on Linux"
+    fi
+}
+
+# check_fnis (Phase 4c.1): before the game runs, offers to run FNIS when its data changed;
+# FNIS (a Windows program) runs through IOrganizer::startApplication() like Run
+build_check_fnis() {
+    cmake_build check_fnis "$ROOT/deps/check_fnis"
+    check_plugins plugin "$INSTALL/bin/plugins/libcheck_fnis.so"
+}
+
+# the INI tools (Phase 4c.1): the INI Editor (Tools menu; its external mode opens the
+# INI files with the desktop's handler on Linux) and the INI Bakery, which maps the
+# INI files of the profile into the virtual file system
+build_tool_inieditor() {
+    cmake_build tool_inieditor "$ROOT/deps/tool_inieditor"
+    check_plugins tool "$INSTALL/bin/plugins/libinieditor.so"
+}
+
+build_tool_inibakery() {
+    cmake_build tool_inibakery "$ROOT/deps/tool_inibakery"
+    check_plugins filemapper "$INSTALL/bin/plugins/libinibakery.so"
 }
 
 # --- driver -----------------------------------------------------------------

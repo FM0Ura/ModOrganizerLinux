@@ -46,7 +46,13 @@ QString GamebryoLocalSavegames::localSavesDummy() const
 
 QDir GamebryoLocalSavegames::localSavesDirectory() const
 {
+#ifdef _WIN32
   return QDir(m_Game->myGamesPath()).absoluteFilePath(localSavesDummy());
+#else
+  // the dummy is the Windows path the game reads (__MO_Saves\)
+  return QDir(m_Game->myGamesPath())
+      .absoluteFilePath(QString(localSavesDummy()).replace('\\', '/'));
+#endif
 }
 
 QDir GamebryoLocalSavegames::localGameDirectory() const
@@ -61,7 +67,13 @@ bool GamebryoLocalSavegames::prepareProfile(MOBase::IProfile* profile)
   QString basePath    = profile->localSettingsEnabled()
                             ? profile->absolutePath()
                             : localGameDirectory().absolutePath();
+#ifdef _WIN32
   QString iniFilePath = basePath + "/" + m_IniFileName;
+#else
+  // Skyrim SE names Skyrimcustom.ini, the profile has skyrimcustom.ini (iniFiles())
+  QString iniFilePath =
+      GameGamebryo::resolveIgnoringCase(basePath + "/" + m_IniFileName);
+#endif
   QString saveIni     = profile->absolutePath() + "/" + "savepath.ini";
 
   // Get the current sLocalSavePath

@@ -53,6 +53,11 @@ bool GameGamebryo::init(MOBase::IOrganizer* moInfo)
   m_Organizer->onAboutToRun([this](const auto& binary) {
     return prepareIni(binary);
   });
+#ifndef _WIN32
+  m_Organizer->onProfileChanged([this](MOBase::IProfile*, MOBase::IProfile* profile) {
+    repairProfileInis(profile);
+  });
+#endif
   return true;
 }
 
@@ -232,6 +237,9 @@ QString GameGamebryo::identifyGamePath() const
 bool GameGamebryo::prepareIni(const QString&)
 {
   auto profile = m_Organizer->profile();
+#ifndef _WIN32
+  repairProfileInis(profile.get());
+#endif
 
   QString basePath = profile->localSettingsEnabled()
                          ? profile->absolutePath()
@@ -239,7 +247,12 @@ bool GameGamebryo::prepareIni(const QString&)
 
   if (!iniFiles().isEmpty()) {
 
+#ifdef _WIN32
     QString profileIni = basePath + "/" + iniFiles()[0];
+#else
+    // the INI of the prefix is Skyrim.ini, not skyrim.ini
+    QString profileIni = resolveIgnoringCase(basePath + "/" + iniFiles()[0]);
+#endif
 
     WCHAR setting[512];
     if (!GetPrivateProfileStringW(L"Launcher", L"bEnableFileSelection", L"0", setting,
@@ -262,6 +275,14 @@ QString GameGamebryo::myGamesPath() const
 {
   return m_MyGamesPath;
 }
+
+#ifdef _WIN32
+QString GameGamebryo::resolveIgnoringCase(const QString& filePath)
+{
+  // the file names ignore case
+  return filePath;
+}
+#endif
 
 /*static*/ QString GameGamebryo::getLootPath()
 {
@@ -310,12 +331,26 @@ void GameGamebryo::copyToProfile(QString const& sourcePath,
                                  QString const& destinationFileName)
 {
   QString filePath = destinationDirectory.absoluteFilePath(destinationFileName);
+#ifdef _WIN32
   if (!QFileInfo(filePath).exists()) {
     if (!MOBase::shellCopy(sourcePath + "/" + sourceFileName, filePath)) {
       // if copy file fails, create the file empty
       QFile(filePath).open(QIODevice::WriteOnly);
     }
   }
+#else
+  // Skyrim.ini for skyrim.ini; a profile INI that an earlier version created empty,
+  // because it missed the source, is restored from it
+  const QString source = resolveIgnoringCase(sourcePath + "/" + sourceFileName);
+  if (!QFileInfo(filePath).exists()) {
+    if (!MOBase::shellCopy(source, filePath)) {
+      // if copy file fails, create the file empty
+      QFile(filePath).open(QIODevice::WriteOnly);
+    }
+  } else {
+    repairProfileIni(source, filePath);
+  }
+#endif
 }
 
 MappingType GameGamebryo::mappings() const

@@ -112,7 +112,7 @@ void GameOblivion::initializeProfile(const QDir& path, ProfileSettings settings)
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/oblivion.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/oblivion.ini")).exists()) {
       copyToProfile(gameDirectory().absolutePath(), path, "oblivion_default.ini",
                     "oblivion.ini");
     } else {

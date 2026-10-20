@@ -91,6 +91,11 @@ public:  // IPluginFileMapper interface
 public:  // Other (e.g. for game features)
   QString myGamesPath() const;
 
+  // the path of the existing file that matches filePath when the case of its file name
+  // is ignored, or filePath when there is none: on Linux, the Proton prefix has
+  // Skyrim.ini where iniFiles() names skyrim.ini; filePath itself on Windows
+  static QString resolveIgnoringCase(const QString& filePath);
+
 protected:
   // Retrieve the saves extension for the game.
   virtual QString savegameExtension() const   = 0;
@@ -144,6 +149,17 @@ protected:
   // <compatdata>/pfx/drive_c/users/steamuser of the Proton prefix of this game, or
   // empty when the game has no prefix (never run with Proton)
   QString protonUserFolder() const;
+
+  // initializes the configuration of the profile again when it has profile-specific
+  // INIs, which restores the profile INIs that earlier versions created empty (they
+  // looked for the INIs of the prefix with the case of iniFiles()); runs when a profile
+  // is opened and before a program runs
+  void repairProfileInis(const MOBase::IProfile* profile) const;
+
+  // replaces the existing profileIni by a copy of source when profileIni is empty or
+  // only has the [Launcher] bEnableFileSelection=1 of prepareIni() (kept), and source
+  // is not empty; copyToProfile() calls it for the files that already exist
+  static void repairProfileIni(const QString& source, const QString& profileIni);
 #endif
 
 protected:

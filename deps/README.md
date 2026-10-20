@@ -27,6 +27,15 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `installer_quick` | https://github.com/ModOrganizer2/modorganizer-installer_quick | `master` (`1773580d2ecad6f4c857f0a39564883f4b268d49`) | 2026-10-06 |
 | `installer_manual` | https://github.com/ModOrganizer2/modorganizer-installer_manual | `master` (`3ff03327656662a5ce3a7e9fb6b44952d1bb379f`) | 2025-05-29 |
 | `installer_fomod` | https://github.com/ModOrganizer2/modorganizer-installer_fomod | `master` (`7c3995682134a63b5040b7865b88a3749b056d68`) | 2026-10-06 |
+| `installer_bain` | https://github.com/ModOrganizer2/modorganizer-installer_bain | `master` (`0e60c19b2d64eef37d299754ff3c29497eccc478`) | 2026-10-06 |
+| `installer_bundle` | https://github.com/ModOrganizer2/modorganizer-installer_bundle | `master` (`1d7f9dc09a3283f8d59b7d8669a7018ed7840fe0`) | 2025-05-29 |
+| `preview_base` | https://github.com/ModOrganizer2/modorganizer-preview_base | `master` (`a8b2c5137d6b011275ea6f113a930b3481331cde`) | 2026-10-06 |
+| `preview_bsa` | https://github.com/ModOrganizer2/modorganizer-preview_bsa | `master` (`fb477c0850de24cebfb2922c437a97fbd014e1e3`) | 2026-10-06 |
+| `bsa_extractor` | https://github.com/ModOrganizer2/modorganizer-bsa_extractor | `master` (`d6b32b9d9d894bb71734843d62528748b4f06f03`) | 2026-10-06 |
+| `diagnose_basic` | https://github.com/ModOrganizer2/modorganizer-diagnose_basic | `master` (`558e3583bd97905126c88bb1a3b3219def3bd394`) | 2026-10-06 |
+| `check_fnis` | https://github.com/ModOrganizer2/modorganizer-check_fnis | `master` (`53522c3157607bd1c8d6a9639b3bbda9795f27fe`) | 2026-10-06 |
+| `tool_inieditor` | https://github.com/ModOrganizer2/modorganizer-tool_inieditor | `master` (`18b0e1c5869c1f6b6c129b7a3758142b582fea8c`) | 2026-10-06 |
+| `tool_inibakery` | https://github.com/ModOrganizer2/modorganizer-tool_inibakery | `master` (`355cac9619175016d9cee45589ecb01bba408a07`) | 2026-10-06 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`
@@ -56,6 +65,12 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
 - **`cmake_common`** has no `CMakeLists.txt`: it only ships CMake modules
   (`mo2.cmake`, `mo2-cmake-config.cmake`, ...) that are consumed through
   `find_package(mo2-cmake)` / `include()`.
+- **`check_fnis`** and **`game_bethesda`** carry fixes that are not upstream, besides
+  their Linux patches: `check_fnis` passes the exit code pointer to
+  `waitForApplication` (`9ec0e72`; upstream passes it as `refresh`); `game_bethesda`
+  finds the INIs of the Proton prefix ignoring case, restores empty profile INIs and
+  maps the local saves to `__MO_Saves` (`62fe2cf`, `9d6b312`). A `git subtree pull`
+  of either must keep them (check the conflicts and the tests of `game_bethesda`).
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 

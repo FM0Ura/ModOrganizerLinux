@@ -2,13 +2,31 @@
 
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
-**Última atualização:** 2026-10-18
-**Fase atual:** 4b — LOOT · **Status:** 🟡 implementação concluída; revisão final, CI e teste manual pendentes · **Anterior:** 4a — Nexus, `nxm://` e keyring ✅ (merge no `main` em 2026-10-18, PR #2)
-**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; ainda não enviado ao GitHub)
+**Última atualização:** 2026-10-20
+**Fase atual:** 4c.1 — Plugins C++ restantes · **Status:** 🟡 implementação e correções da revisão final concluídas; push, CI e teste manual pendentes · **Anterior:** 4b — LOOT (🟡 PR #3: CI Linux e Windows verdes em 2026-10-20; teste manual pendente)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4c.1 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md`](docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md) · Plano: [`docs/superpowers/plans/2026-10-20-phase4c1-cpp-plugins.md`](docs/superpowers/plans/2026-10-20-phase4c1-cpp-plugins.md) · Checklist manual: [`docs/testing/phase4c1-manual-checklist.md`](docs/testing/phase4c1-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | `tests/plugin-load`: tipos de plugin `preview`, `tool`, `diagnose` e `plugin`; configurações | ✅ | `3ce2c41` |
+| 2 | `installer_bain` e `installer_bundle` (subtrees + alvos no `build.sh`) | ✅ | `3bdecfa` |
+| 3 | `preview_base` e `preview_bsa` | ✅ | `9f2d3d4`, `b4c7567` (`bsatk` com código independente de posição, necessário para ligá-lo aos plugins), `778402f` |
+| 4 | `bsa_extractor` | ✅ | `e992baa`, `32fcbe9` |
+| 5 | `diagnose_basic` (sem a checagem de atributos NTFS no Linux) | ✅ | `819f84e`, `64fd32a` |
+| 6 | `check_fnis` | ✅ | `2241fd5`, `6ca8659`, `9ec0e72` (correção de um bug do upstream: `waitForApplication` recebia o ponteiro do código de saída como `refresh`) |
+| 7 | `tool_inieditor` e `tool_inibakery` | ✅ | `ce3c4b4`, `fb7b1a2` (o `tool_inibakery` não precisou de patch) |
+| 8 | Smoke: todo plugin instalado é carregado pelo aplicativo | ✅ | `136e471` |
+| 9 | Documentação e checklist | ✅ docs e checklist; o push e o PR dependem da revisão final e da autorização do usuário | este commit |
+| 10 | Correções da revisão final: INIs do perfil ignorando maiúsculas e reparo dos INIs vazios (`game_bethesda`), pasta `__MO_Saves` dos saves locais, `Profile::absoluteIniFilePath()` ignorando maiúsculas (app), separadores nos padrões do `check_fnis` e na árvore do `preview_bsa`, docs e checklist (itens 8 a 10) | ✅ | `62fe2cf`, `9d6b312`, `36c9bc5`, `0ecbf34`, `0d45c7e` |
+| 11 | Teste manual no Bazzite ([`docs/testing/phase4c1-manual-checklist.md`](docs/testing/phase4c1-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4b — progresso
 
@@ -146,6 +164,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 4c.1: o branch `fase-4c1-plugins` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c1-manual-checklist.md`.
+
 Fase 4b: o branch `fase-4b-loot` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4b-manual-checklist.md`.
 
 (Fase 4a, já no `main`: checklist em `docs/testing/phase4a-manual-checklist.md`.)
@@ -158,10 +178,21 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Com a autorização do usuário: push do branch `fase-4b-loot` e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`); no log do Linux, conferir `loot end-to-end test passed` e `vfs end-to-end test passed` (não `SKIPPED`), `100% tests passed` do `lootcli` e o cache `libloot` salvo no fim; rodar o Linux uma segunda vez e conferir que o build do libloot veio do cache.
-2. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
-3. As 6 pendências restantes da Fase 2 (do teste manual e da revisão final) continuam para depois, em "Pendências por fase".
-4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
+2. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
+3. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
+4. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). Depois, a Fase 4c.2: as 6 pendências restantes da Fase 2 (do teste manual e da revisão final), em "Pendências por fase".
+5. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4c.1
+
+- A checagem de atributos de arquivo NTFS (oculto, sistema, comprimido, esparso) do `diagnose_basic` não existe no Linux: a opção `check_fileattributes` não é registrada.
+- O modo externo do `tool_inieditor` abre o INI com o `xdg-open` e ignora a opção "associated" (abrir × editar); sem `xdg-open` a falha só é registrada no log.
+- A pré-visualização de DDS fica indisponível até o plugin de pré-visualização DDS (Python, Fase 4d): o `preview_base` sempre pula `dds`.
+- O `check_fnis` só vale para o Skyrim (LE) (`gameDependency("Skyrim")`, como no upstream) e fica inativo no Skyrim SE; só foi exercitado pelo teste de carga, e a execução do FNIS pelo Proton depende de o usuário usar o FNIS no Skyrim LE (item 7 do checklist, opcional).
+- Na primeira abertura do perfil com esta versão, os INIs do perfil que as versões anteriores criaram vazios (ou só com `[Launcher] bEnableFileSelection=1`) são substituídos por cópias dos INIs do prefixo (ou do INI padrão do jogo); um INI do perfil deixado vazio de propósito também é substituído.
+- `installer_omod` e `installer_fomod_csharp` (C++/CLI e .NET) e o `bsapacker` (Fase 4e) ficam de fora.
+- Valem as limitações das Fases 1 a 4b.
 
 ## Limitações conhecidas da Fase 4b
 
@@ -258,6 +289,12 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-18 | Fase 4b: libloot 0.29.5 compilado do código-fonte (tag, commit fixado); o `lootcli` enxerga os mods pelo `mo2-vfs` (`VfsConnector::spawn()`), no host quando o MO2 está na distrobox; pasta de dados do LOOT em Flatpak (`~/.var/app/io.github.loot.loot/data/LOOT`) se existir, senão `$XDG_DATA_HOME/LOOT` / `~/.local/share/LOOT`; masterlist baixada com libcurl (arquivo temporário, só substitui com HTTP 200); cancelar pelo novo pedido `kill` do `mo2-vfs`; Windows sem mudanças (`#ifdef _WIN32` / `#else`). Spec §1.1 |
 | 2026-10-18 | Fase 4b: corrigido em `loot.cpp` (compartilhado com o Windows) um laço infinito do upstream em `Loot::processStdout`: uma linha do `lootcli` não reconhecida nunca era consumida e travava a thread do LOOT |
 | 2026-10-18 | Fase 4b: o `lootcli` é ligado com `-Wl,--as-needed` e usa o toml++ só de cabeçalhos, então precisa apenas de bibliotecas do host (o `build.sh` confere a lista) |
+| 2026-10-20 | Fase 4c dividida em 4c.1 (plugins C++), 4c.2 (pendências da Fase 2) e 4c.3 (ferramentas pelo VFS), um PR cada, em sequência: `fase-4c1-plugins` parte de `fase-4b-loot` e o PR mira o branch anterior até o anterior entrar no `main` |
+| 2026-10-20 | Fase 4c.1 (spec §1.2): plugins importados com `git subtree add --squash` no `master` do upstream, patches no superprojeto (`deps/<plugin>: Linux: …`); a lógica dos plugins não muda, só chamadas Win32 vão para `#ifdef _WIN32` / `#else`; `diagnose_basic` sem a checagem de atributos NTFS no Linux (opção `check_fileattributes` não registrada); `tool_inieditor` externo por `shell::Open` (`xdg-open`), sem efeito da opção "associated"; `installer_omod`, `installer_fomod_csharp`, `bsapacker` e plugins Python fora desta subfase |
+| 2026-10-20 | Fase 4c.1: o `bsatk` passa a ser compilado com código independente de posição (PIC), para ser ligado aos plugins `preview_bsa` e `bsa_extractor` (bibliotecas compartilhadas) |
+| 2026-10-20 | Fase 4c.1: corrigido no `check_fnis` um bug do upstream: `waitForApplication` recebia o ponteiro do código de saída no lugar do parâmetro `refresh` |
+| 2026-10-20 | Fase 4c.1, revisão final (decisão do usuário, opção A): corrigir nesta fase os INIs do perfil no Linux. O `game_bethesda` acha os INIs do prefixo e o INI padrão ignorando maiúsculas (`GameGamebryo::resolveIgnoringCase()`, identidade no Windows) e restaura os INIs do perfil vazios ou só com `[Launcher] bEnableFileSelection=1` (nunca outro conteúdo) ao abrir o perfil (`onProfileChanged`, dentro do plugin, sem gancho novo no app) e antes de executar; o INI dos saves locais e a pasta `__MO_Saves` também; no app, `Profile::absoluteIniFilePath()` ignora maiúsculas no Linux |
+| 2026-10-20 | Fase 4c.1 desenvolvida em um worktree separado (`../ModOrganizerLinux-4c1`), para não tocar o `install/` do checkout principal, de onde o MO2 do usuário está rodando |
 
 ## Pendências por fase
 

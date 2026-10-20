@@ -16,7 +16,9 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | ✅ Concluída (2026-10-18) |
 | 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | ✅ Concluída (2026-10-18) |
 | 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | 🟡 Em andamento |
-| 4c | Ferramentas pelo VFS e plugins C++ | BodySlide, Nemesis/Pandora, xEdit de outros jogos; BAIN, previews, checagens; pendências adiadas da Fase 2 | Ferramentas pelo VFS (critério 6) | ⚪ Não iniciada |
+| 4c.1 | Plugins C++ restantes | installer_bain, installer_bundle, preview_base, preview_bsa, bsa_extractor, diagnose_basic, check_fnis, tool_inieditor, tool_inibakery | Todas as funcionalidades | 🟡 Em andamento |
+| 4c.2 | Pendências da Fase 2 | as 6 pendências adiadas do teste manual e da revisão final da Fase 2 | — | ⚪ Não iniciada |
+| 4c.3 | Ferramentas pelo VFS | BodySlide, Nemesis/Pandora, xEdit de outros jogos | Ferramentas pelo VFS (critério 6) | ⚪ Não iniciada |
 | 4d | Plugins Python | `plugin_python` (pybind11 + Python + PyQt6) e plugins Python (incl. `basic_games`) | Todas as funcionalidades | ⚪ Não iniciada |
 | 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ⚪ Não iniciada |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
@@ -73,10 +75,12 @@ Fase 4a — Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-
 
 Fase 4b — Spec: [`docs/superpowers/specs/2026-10-18-phase4b-loot-design.md`](docs/superpowers/specs/2026-10-18-phase4b-loot-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4b-loot.md`](docs/superpowers/plans/2026-10-18-phase4b-loot.md) · Checklist manual: [`docs/testing/phase4b-manual-checklist.md`](docs/testing/phase4b-manual-checklist.md)
 
+Fase 4c.1 — Spec: [`docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md`](docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md) · Plano: [`docs/superpowers/plans/2026-10-20-phase4c1-cpp-plugins.md`](docs/superpowers/plans/2026-10-20-phase4c1-cpp-plugins.md) · Checklist manual: [`docs/testing/phase4c1-manual-checklist.md`](docs/testing/phase4c1-manual-checklist.md)
+
 - (4d) `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
 - (4b) `lootcli` nativo (libloot) → ordenação com LOOT.
 - (4a) Handler `nxm://` (`.desktop` + `xdg-mime`) → downloads pelo site do Nexus.
-- (4c) Demais plugins (BAIN, previews, ferramentas); detecção completa de jogos via `steam/`.
+- (4c.1) Demais plugins C++ (BAIN, bundle, previews, extração de BSA, diagnósticos, FNIS, INI); (4c.3) ferramentas pelo VFS; detecção completa de jogos via `steam/`.
 - (4e) Criação de BSA/BA2 com alternativa nativa ao `libbsarch`.
 - (4a) Armazenamento seguro de credenciais (Nexus/Steam) via Secret Service/keyring.
 

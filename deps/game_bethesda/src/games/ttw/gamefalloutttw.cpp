@@ -217,7 +217,7 @@ void GameFalloutTTW::initializeProfile(const QDir& path, ProfileSettings setting
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
     if (settings.testFlag(IPluginGame::PREFER_DEFAULTS) ||
-        !QFileInfo(myGamesPath() + "/fallout.ini").exists()) {
+        !QFileInfo(resolveIgnoringCase(myGamesPath() + "/fallout.ini")).exists()) {
       copyToProfile(gameDirectory().absolutePath(), path, "fallout_default.ini",
                     "fallout.ini");
     } else {

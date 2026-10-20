@@ -24,6 +24,15 @@ declare -A DEP_URLS=(
     [installer_quick]="https://github.com/ModOrganizer2/modorganizer-installer_quick"
     [installer_manual]="https://github.com/ModOrganizer2/modorganizer-installer_manual"
     [installer_fomod]="https://github.com/ModOrganizer2/modorganizer-installer_fomod"
+    [installer_bain]="https://github.com/ModOrganizer2/modorganizer-installer_bain"
+    [installer_bundle]="https://github.com/ModOrganizer2/modorganizer-installer_bundle"
+    [preview_base]="https://github.com/ModOrganizer2/modorganizer-preview_base"
+    [preview_bsa]="https://github.com/ModOrganizer2/modorganizer-preview_bsa"
+    [bsa_extractor]="https://github.com/ModOrganizer2/modorganizer-bsa_extractor"
+    [diagnose_basic]="https://github.com/ModOrganizer2/modorganizer-diagnose_basic"
+    [check_fnis]="https://github.com/ModOrganizer2/modorganizer-check_fnis"
+    [tool_inieditor]="https://github.com/ModOrganizer2/modorganizer-tool_inieditor"
+    [tool_inibakery]="https://github.com/ModOrganizer2/modorganizer-tool_inibakery"
     [modorganizer]="https://github.com/ModOrganizer2/modorganizer"
 )
 
