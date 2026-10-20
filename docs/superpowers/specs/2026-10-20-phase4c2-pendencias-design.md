@@ -53,20 +53,20 @@ Em `helperLost()`, o ramo "helper ainda vivo e `m_watched > 0`" deixa de chamar 
 
 ### 2.3 Helper perdido ainda vivo
 
-Um helper cuja perda foi tratada (`m_lossHandled`) e que ainda roda (travado) é morto e descartado (`dropLostHelper()`):
+Um helper perdido (o `VfsClient` não está mais utilizável depois de um timeout) que ainda roda é morto e descartado (`dropLostHelper()`) só quando o mount dele já não existe:
 - na reconferência do §2.2, quando as raízes não estão mais montadas;
-- em `doActivate()`, depois de `cleanupLeftMounts()` não deixar raízes montadas, antes de `start()`: hoje o `mount` seguinte iria para o helper travado e expiraria;
-- em `spawn()` sem VFS, pelo mesmo motivo (o pedido `spawn` iria para o helper travado).
+- em `doActivate()`: o helper perdido e ainda vivo deixa de ser descartado logo no início (hoje o destrutor do `VfsClient` fecha a entrada, espera até 5 s e o deixa rodando); ele fica guardado até `cleanupLeftMounts()` confirmar que não há raízes montadas, e então é morto antes do `start()`. Com raízes ainda montadas, o erro "still mounted" de hoje continua, e a reconferência o mata depois.
+- `spawn()` sem VFS não muda: ele precisa de um helper na hora e continua descartando o perdido como hoje (sem matá-lo, porque o mount dele pode estar em uso).
 
 Matar o helper é seguro nesses pontos porque seu mount já não existe; o `SIGKILL` vai só para o pid do helper, e os programas que ele iniciou estão em grupos de processos próprios (`process_group(0)` no `spawn` do `mo2-vfs`), então não são afetados.
 
 ### 2.4 R2: limite do timeout
 
-`mountTimeout()` passa a `min(MO2_VFS_TIMEOUT_MS, 30 s)`: a variável (de testes) só encurta o timeout de `mount`/`update`.
+`mountTimeout()` vira `vfsMountTimeout()` = `min(MO2_VFS_TIMEOUT_MS, 30 s)`, ao lado de `vfsRecheckInterval()` (§2.2), num arquivo pequeno testável (`linux/vfstimeouts_linux.{h,cpp}`, biblioteca `organizer_launch`): as variáveis (de testes) só encurtam os valores; vazias, zero, negativas ou inválidas valem o padrão.
 
 ## 3. Sem tela (P1)
 
-- Função pura `missingDisplayMessage(env, argv)` em `deps/modorganizer/src/linux/displaycheck.{h,cpp}` (compilada só no Linux): a plataforma é a de `-platform <x>` ou `-platform=<x>` nos argumentos, senão `QT_QPA_PLATFORM`. Se a plataforma é vazia ou começa por `wayland` ou `xcb` (também listas como `wayland;xcb`), e `WAYLAND_DISPLAY` e `DISPLAY` estão vazios, devolve a mensagem; senão, nada. `offscreen`, `minimal`, `vnc` e outras sempre passam.
+- Função pura `missingDisplayMessage(args, env)` em `deps/modorganizer/src/linux/displaycheck_linux.{h,cpp}` (biblioteca `organizer_desktop`, só no Linux): a plataforma é a de `-platform <x>` ou `--platform <x>` nos argumentos (as formas que a Qt aceita), senão `QT_QPA_PLATFORM`. Se a plataforma é vazia ou começa por `wayland` ou `xcb` (também listas como `wayland;xcb`), e `WAYLAND_DISPLAY` e `DISPLAY` estão vazios, devolve a mensagem; senão, nada. `offscreen`, `minimal`, `vnc` e outras sempre passam.
 - Em `run()` (`main.cpp`, `#ifndef _WIN32`): depois de `cl.process()` (que trata `--help` e os comandos sem interface) e de `initLogging()`, antes de `MOApplication`. Com mensagem: grava no log (`log::error`) e na saída de erro, e `return 1`. Sem backtrace, sem `crash.log` preenchido.
 - Mensagem (inglês, como as demais do código-fonte): *"Mod Organizer needs a graphical session, but neither WAYLAND_DISPLAY nor DISPLAY is set. Run it from the desktop, or set WAYLAND_DISPLAY, XDG_RUNTIME_DIR, DISPLAY and XAUTHORITY to those of the desktop session."*
 
@@ -94,9 +94,9 @@ Matar o helper é seguro nesses pontos porque seu mount já não existe; o `SIGK
 |---|---|
 | P7 | `test_vfsconnector.cpp`, com os helpers falsos existentes: helper que para de responder a um `update` com programa observado → `isActive()` continua verdadeiro e o callback não dispara; a raiz aparece em `m_leftMounted`/`staleMounts()`. |
 | R1 | Helper falso cujo `--list-mounts` lê a lista de um arquivo do teste: com a raiz listada, nada dispara; ao esvaziar a lista, o callback dispara em poucos intervalos (`MO2_VFS_RECHECK_MS` curto); `--list-mounts` com falha mantém o estado. |
-| §2.3 | Depois da reconferência, o helper travado foi morto (pid ausente) e o `activate()` seguinte monta com um helper novo; `spawn()` sem VFS também usa um helper novo. |
-| R2 | `MO2_VFS_TIMEOUT_MS=999999` → 30 s (função exposta para teste ou efeito observável); `MO2_VFS_TIMEOUT_MS=200` → 200 ms. |
-| P1 | gtest de `missingDisplayMessage()`: sem variáveis → mensagem; `WAYLAND_DISPLAY` ou `DISPLAY` → nada; `QT_QPA_PLATFORM=offscreen` → nada; `-platform offscreen`/`-platform=offscreen` vencem a variável; `wayland;xcb` → mensagem. Smoke test (`tests/smoke/modorganizer-smoke.sh`): `env -u WAYLAND_DISPLAY -u DISPLAY -u QT_QPA_PLATFORM` → código 1, mensagem na saída de erro, sem "has crashed" nem `crash.log` não vazio. |
+| §2.3 | Depois da reconferência, o helper travado foi morto (pid ausente) e o `activate()` seguinte monta com um helper novo; com a raiz ainda listada, `activate()` falha com "still mounted" e o helper travado continua vivo; com a raiz já fora da tabela (antes da reconferência), `activate()` mata o helper travado e monta com um novo. |
+| R2 | `vfsMountTimeout()`/`vfsRecheckInterval()`: sem variável → 30 s/5 s; `200`/`100` → 200 ms/100 ms; `999999` → 30 s/5 s; `0`, `-5`, `abc` → padrão. |
+| P1 | gtest de `missingDisplayMessage()`: sem variáveis → mensagem; `WAYLAND_DISPLAY` ou `DISPLAY` → nada; `QT_QPA_PLATFORM=offscreen` → nada; `-platform offscreen`/`--platform offscreen` vencem a variável; `wayland;xcb` → mensagem. Smoke test (`tests/smoke/modorganizer-smoke.sh`): `env -u WAYLAND_DISPLAY -u DISPLAY -u QT_QPA_PLATFORM` → código 1, mensagem na saída de erro, sem "has crashed" nem `crash.log` não vazio. |
 | I1, I2 | `deps/game_bethesda/tests/test_profile_inis_linux.cpp`: arquivos lidos e gravados no `Skyrim.ini` existente quando o código pede `skyrim.ini` (perfil com INIs locais e prefixo sem INIs locais); invalidação de BSA do Fallout 4 grava no `fallout4custom.ini` existente sem criar `Fallout4Custom.ini`; sem nenhum arquivo, cria com o nome pedido. |
 | Regressão | Toda a suíte (`--tests`), smoke, `plugin-load`, `vfs-e2e`, `loot-e2e` no CI Linux; CI Windows pelo `[windows-ci]`. |
 
