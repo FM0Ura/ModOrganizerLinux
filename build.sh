@@ -298,7 +298,7 @@ pre_modorganizer() {
     ctest --test-dir "$BUILD_OUT/modorganizer" --output-on-failure
 }
 
-# check_plugins <game|installer> <plugin>...: with --tests, the plugin load check
+# check_plugins <kind> <plugin>...: kind is a type of tests/plugin-load (game, installer, preview, tool, diagnose, filemapper or plugin); with --tests, the plugin load check
 # (tests/plugin-load) loads the installed plugins with QPluginLoader, like the
 # application's PluginContainer, and checks the interface each one implements.
 check_plugins() {
