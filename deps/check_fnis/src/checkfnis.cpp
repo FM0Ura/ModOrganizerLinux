@@ -241,7 +241,7 @@ bool CheckFNIS::fnisCheck(const QString& application)
       reportError(tr("Failed to start %1").arg(fnisApp));
     } else {
       DWORD exitCodeU;
-      if (m_MOInfo->waitForApplication(process, &exitCodeU)) {
+      if (m_MOInfo->waitForApplication(process, true, &exitCodeU)) {
         int exitCode = static_cast<int>(exitCodeU);
         if (exitCode != 0) {
           cont = QMessageBox::question(
