@@ -366,6 +366,13 @@ build_preview_bsa() {
     check_plugins preview "$INSTALL/bin/plugins/libpreview_bsa.so"
 }
 
+# bsa_extractor (Phase 4c.1): offers to extract the BSA archives of a mod when it is
+# installed (bsatk)
+build_bsa_extractor() {
+    cmake_build bsa_extractor "$ROOT/deps/bsa_extractor"
+    check_plugins plugin "$INSTALL/bin/plugins/libbsa_extractor.so"
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
