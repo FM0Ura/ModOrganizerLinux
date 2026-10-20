@@ -135,11 +135,12 @@ build_dds_header() {
 
 # bsatk reads/extracts BSA archives; with --tests its GoogleTest suite runs against a
 # synthetic Skyrim SE archive. It needs find_package(lz4 CONFIG), which distribution
-# packages do not provide: install a small config for the system lz4 first.
+# packages do not provide: install a small config for the system lz4 first. It is a static
+# library that the preview_bsa and bsa_extractor plugins link into shared objects, hence PIC.
 build_bsatk() {
     mkdir -p "$INSTALL/lib/cmake/lz4"
     install -m 0644 "$ROOT/build/lz4/lz4Config.cmake" "$INSTALL/lib/cmake/lz4/"
-    cmake_build bsatk "$ROOT/deps/bsatk"
+    cmake_build bsatk "$ROOT/deps/bsatk" -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 }
 
 # esptk reads plugin headers; with --tests its GoogleTest suite runs against synthetic plugins.
