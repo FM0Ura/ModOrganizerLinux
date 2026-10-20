@@ -24,6 +24,8 @@ BUILD_OUT="$ROOT/build-out"
 ALL_TARGETS=(
     7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
+    installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
+    check_fnis tool_inieditor tool_inibakery
 )
 
 ONLY=()
@@ -337,6 +339,18 @@ build_installer_fomod() {
     cmake_build installer_fomod "$ROOT/deps/installer_fomod" \
         -DFOMOD_SAMPLE_DIR="$ROOT/tests/fixtures/fomod-sample"
     check_plugins installer "$INSTALL/bin/plugins/libinstaller_fomod.so"
+}
+
+# the other installer plugins of upstream (Phase 4c.1): BAIN packages and archives
+# that contain other archives
+build_installer_bain() {
+    cmake_build installer_bain "$ROOT/deps/installer_bain"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_bain.so"
+}
+
+build_installer_bundle() {
+    cmake_build installer_bundle "$ROOT/deps/installer_bundle"
+    check_plugins installer "$INSTALL/bin/plugins/libinstaller_bundle.so"
 }
 
 # --- driver -----------------------------------------------------------------
