@@ -1,0 +1,36 @@
+{
+  "dependencies": [
+    "mo2-dds-header",
+    "boost-thread",
+    "boost-interprocess",
+    "zlib",
+    "lz4"
+  ],
+  "features": {
+    "standalone": {
+      "description": "Build Standalone.",
+      "dependencies": ["mo2-cmake"]
+    }
+  },
+  "vcpkg-configuration": {
+    "default-registry": {
+      "kind": "git",
+      "repository": "https://github.com/Microsoft/vcpkg",
+      "baseline": "74e6536215718009aae747d86d84b78376bf9e09"
+    },
+    "registries": [
+      {
+        "kind": "git",
+        "repository": "https://github.com/Microsoft/vcpkg",
+        "baseline": "74e6536215718009aae747d86d84b78376bf9e09",
+        "packages": ["boost*", "boost-*"]
+      },
+      {
+        "kind": "git",
+        "repository": "https://github.com/ModOrganizer2/vcpkg-registry",
+        "baseline": "92f063c71cebea1926c7eb183fbe719145395985",
+        "packages": ["mo2-*"]
+      }
+    ]
+  }
+}
