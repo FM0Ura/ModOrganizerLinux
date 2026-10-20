@@ -63,6 +63,32 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace MOBase;
 using namespace MOShared;
+#ifndef _WIN32
+
+namespace
+{
+
+// the existing file of the folder of path whose name matches the one of path when the
+// case is ignored, or path when there is none: the INIs of the Proton prefix have their
+// own case (Skyrim.ini), iniFiles() of the game plugins are often lowercase
+QString resolveIgnoringCase(const QFileInfo& path)
+{
+  if (path.exists()) {
+    return path.absoluteFilePath();
+  }
+
+  const QDir dir = path.absoluteDir();
+  for (const QString& name : dir.entryList(QDir::Files | QDir::Hidden)) {
+    if (name.compare(path.fileName(), Qt::CaseInsensitive) == 0) {
+      return dir.absoluteFilePath(name);
+    }
+  }
+
+  return path.absoluteFilePath();
+}
+
+}  // namespace
+#endif
 
 void Profile::touchFile(QString fileName)
 {
@@ -986,7 +1012,16 @@ QString Profile::absoluteIniFilePath(QString iniFile) const
   bool isGameIni = false;
   for (auto gameIni : m_GamePlugin->iniFiles()) {
     // We compare the target file, not the actual ones:
+#ifdef _WIN32
     if (QFileInfo(m_GamePlugin->documentsDirectory(), gameIni) == targetIniFile) {
+#else
+    // ignoring case, as on Windows (Fallout4Custom.ini is fallout4custom.ini); the
+    // profile INI has the name of iniFiles()
+    const QFileInfo gameIniFile(m_GamePlugin->documentsDirectory(), gameIni);
+    if (gameIniFile.absoluteFilePath().compare(targetIniFile.absoluteFilePath(),
+                                               Qt::CaseInsensitive) == 0) {
+      targetIniFile = gameIniFile;
+#endif
       isGameIni = true;
       break;
     }
@@ -995,7 +1030,11 @@ QString Profile::absoluteIniFilePath(QString iniFile) const
   // Local-settings are not enabled, or the iniFile is not in the list of INI
   // files for the current game.
   if (!localSettingsEnabled() || !isGameIni) {
+#ifdef _WIN32
     return targetIniFile.absoluteFilePath();
+#else
+    return resolveIgnoringCase(targetIniFile);
+#endif
   }
 
   // If we reach here, the file is in the profile:
