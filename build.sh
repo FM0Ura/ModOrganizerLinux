@@ -373,6 +373,21 @@ build_bsa_extractor() {
     check_plugins plugin "$INSTALL/bin/plugins/libbsa_extractor.so"
 }
 
+# diagnose_basic (Phase 4c.1): the basic checks of Mod Organizer (overwrite, error log,
+# fonts, missing masters, ...); its check of NTFS file attributes is Windows-only (spec
+# of Phase 4c.1, section 1.2), so its setting must not be offered on Linux
+build_diagnose_basic() {
+    cmake_build diagnose_basic "$ROOT/deps/diagnose_basic"
+    check_plugins diagnose "$INSTALL/bin/plugins/libdiagnose_basic.so"
+    if [[ $TESTS == 1 ]]; then
+        local out
+        out="$("$BUILD_OUT/plugin-load/plugin_load" diagnose \
+            "$INSTALL/bin/plugins/libdiagnose_basic.so")"
+        [[ $out != *check_fileattributes* ]] ||
+            die "diagnose_basic offers check_fileattributes on Linux"
+    fi
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
