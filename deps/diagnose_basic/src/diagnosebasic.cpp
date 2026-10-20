@@ -129,8 +129,10 @@ QList<PluginSetting> DiagnoseBasic::settings() const
                 "check_alternategames",
                 tr("Warn when an installed mod came from an alternative game source"),
                 false)
+#ifdef _WIN32
          << PluginSetting("check_fileattributes",
                           tr("Warn when files have unwanted attributes"), false)
+#endif
          << PluginSetting(
                 "ow_ignore_empty",
                 tr("Ignore empty directories when checking overwrite directory"), false)
@@ -356,6 +358,7 @@ bool DiagnoseBasic::invalidFontConfig() const
   return false;
 }
 
+#ifdef _WIN32
 static bool checkFileAttributes(const QString& path)
 {
   WCHAR w_path[32767];
@@ -503,9 +506,16 @@ static bool fixFileAttributes(const QString& path)
 
   return success;
 }
+#endif
 
 bool DiagnoseBasic::fileAttributes(const QString& executable) const
 {
+#ifndef _WIN32
+  // NTFS file attributes don't exist on Linux file systems and Wine doesn't write them
+  // (spec of Phase 4c.1, section 1.2): nothing to check
+  Q_UNUSED(executable);
+  return true;
+#else
   if (!m_MOInfo->pluginSetting(name(), "check_fileattributes").toBool())
     return true;
 
@@ -608,6 +618,7 @@ bool DiagnoseBasic::fileAttributes(const QString& executable) const
   }
 
   return true;
+#endif
 }
 
 std::vector<unsigned int> DiagnoseBasic::activeProblems() const
