@@ -65,6 +65,12 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
 - **`cmake_common`** has no `CMakeLists.txt`: it only ships CMake modules
   (`mo2.cmake`, `mo2-cmake-config.cmake`, ...) that are consumed through
   `find_package(mo2-cmake)` / `include()`.
+- **`check_fnis`** and **`game_bethesda`** carry fixes that are not upstream, besides
+  their Linux patches: `check_fnis` passes the exit code pointer to
+  `waitForApplication` (`9ec0e72`; upstream passes it as `refresh`); `game_bethesda`
+  finds the INIs of the Proton prefix ignoring case, restores empty profile INIs and
+  maps the local saves to `__MO_Saves` (`62fe2cf`, `9d6b312`). A `git subtree pull`
+  of either must keep them (check the conflicts and the tests of `game_bethesda`).
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 

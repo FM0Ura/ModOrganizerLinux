@@ -40,7 +40,7 @@ Limitations of Phase 1:
 
 - Virtual file system (Phases 2 and 3): the `mo2-vfs` helper mounts the merged view while a program runs and unmounts when it ends. Windows programs (`.exe`, `.bat`) run through `umu-run` in the Proton prefix of their Steam game (Phase 3); `umu-launcher` must be installed on the host, and a game never run from Steam has no prefix yet. When Mod Organizer runs in a distrobox, the helper and the programs run on the host (through `distrobox-host-exec`), so programs that exist only inside the container cannot be run from Mod Organizer. A game and a tool cannot run at the same time in the same prefix.
 - LOOT sorts the plugins (lootcli with libloot 0.29.5, started through mo2-vfs; its data folder is the Flatpak LOOT's if there is one, else `~/.local/share/LOOT`). Creating BSA archives is unavailable, there is no auto-update.
-- `diagnose_basic` has no NTFS file-attribute check on Linux, and DDS previews need a Qt image plugin for DDS.
+- `diagnose_basic` has no NTFS file-attribute check on Linux. DDS previews are unavailable until the DDS preview plugin (Python, Phase 4d): `preview_base` leaves `.dds` to it. The FNIS check (`check_fnis`) works for Skyrim (LE) only, as upstream; it is inactive for Skyrim SE.
 - Nexus and Steam logins are kept in the Secret Service (KWallet, GNOME Keyring); without one, only until Mod Organizer closes.
 - "My Games" and AppData point into the Proton prefix of the Steam game (`compatdata/<appid>/pfx`); a game without a prefix falls back to XDG folders.
 - Steam auto-detection covers `~/.local/share/Steam`, `~/.steam/steam`, Flatpak Steam and the

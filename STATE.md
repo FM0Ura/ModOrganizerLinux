@@ -3,7 +3,7 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-20
-**Fase atual:** 4c.1 — Plugins C++ restantes · **Status:** 🟡 implementação concluída; revisão final, CI e teste manual pendentes · **Anterior:** 4b — LOOT (🟡 PR #3: CI Linux e Windows verdes em 2026-10-20; teste manual pendente)
+**Fase atual:** 4c.1 — Plugins C++ restantes · **Status:** 🟡 implementação e correções da revisão final concluídas; push, CI e teste manual pendentes · **Anterior:** 4b — LOOT (🟡 PR #3: CI Linux e Windows verdes em 2026-10-20; teste manual pendente)
 **Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal)
 
 ## Repositório
@@ -25,7 +25,8 @@ Spec: [`docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-design.md`](docs/
 | 7 | `tool_inieditor` e `tool_inibakery` | ✅ | `ce3c4b4`, `fb7b1a2` (o `tool_inibakery` não precisou de patch) |
 | 8 | Smoke: todo plugin instalado é carregado pelo aplicativo | ✅ | `136e471` |
 | 9 | Documentação e checklist | ✅ docs e checklist; o push e o PR dependem da revisão final e da autorização do usuário | este commit |
-| 10 | Teste manual no Bazzite ([`docs/testing/phase4c1-manual-checklist.md`](docs/testing/phase4c1-manual-checklist.md)) | ⚪ pendente | — |
+| 10 | Correções da revisão final: INIs do perfil ignorando maiúsculas e reparo dos INIs vazios (`game_bethesda`), pasta `__MO_Saves` dos saves locais, `Profile::absoluteIniFilePath()` ignorando maiúsculas (app), separadores nos padrões do `check_fnis` e na árvore do `preview_bsa`, docs e checklist (itens 8 a 10) | ✅ | `62fe2cf`, `9d6b312`, `36c9bc5`, `0ecbf34`, `0d45c7e` |
+| 11 | Teste manual no Bazzite ([`docs/testing/phase4c1-manual-checklist.md`](docs/testing/phase4c1-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4b — progresso
 
@@ -187,8 +188,9 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 - A checagem de atributos de arquivo NTFS (oculto, sistema, comprimido, esparso) do `diagnose_basic` não existe no Linux: a opção `check_fileattributes` não é registrada.
 - O modo externo do `tool_inieditor` abre o INI com o `xdg-open` e ignora a opção "associated" (abrir × editar); sem `xdg-open` a falha só é registrada no log.
-- A pré-visualização de DDS só é oferecida se houver um plugin de imagem da Qt para DDS.
-- O `check_fnis` só foi exercitado pelo teste de carga; a execução do FNIS pelo Proton depende de o usuário usar o FNIS (item 7 do checklist, opcional).
+- A pré-visualização de DDS fica indisponível até o plugin de pré-visualização DDS (Python, Fase 4d): o `preview_base` sempre pula `dds`.
+- O `check_fnis` só vale para o Skyrim (LE) (`gameDependency("Skyrim")`, como no upstream) e fica inativo no Skyrim SE; só foi exercitado pelo teste de carga, e a execução do FNIS pelo Proton depende de o usuário usar o FNIS no Skyrim LE (item 7 do checklist, opcional).
+- Na primeira abertura do perfil com esta versão, os INIs do perfil que as versões anteriores criaram vazios (ou só com `[Launcher] bEnableFileSelection=1`) são substituídos por cópias dos INIs do prefixo (ou do INI padrão do jogo); um INI do perfil deixado vazio de propósito também é substituído.
 - `installer_omod` e `installer_fomod_csharp` (C++/CLI e .NET) e o `bsapacker` (Fase 4e) ficam de fora.
 - Valem as limitações das Fases 1 a 4b.
 
@@ -291,6 +293,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-20 | Fase 4c.1 (spec §1.2): plugins importados com `git subtree add --squash` no `master` do upstream, patches no superprojeto (`deps/<plugin>: Linux: …`); a lógica dos plugins não muda, só chamadas Win32 vão para `#ifdef _WIN32` / `#else`; `diagnose_basic` sem a checagem de atributos NTFS no Linux (opção `check_fileattributes` não registrada); `tool_inieditor` externo por `shell::Open` (`xdg-open`), sem efeito da opção "associated"; `installer_omod`, `installer_fomod_csharp`, `bsapacker` e plugins Python fora desta subfase |
 | 2026-10-20 | Fase 4c.1: o `bsatk` passa a ser compilado com código independente de posição (PIC), para ser ligado aos plugins `preview_bsa` e `bsa_extractor` (bibliotecas compartilhadas) |
 | 2026-10-20 | Fase 4c.1: corrigido no `check_fnis` um bug do upstream: `waitForApplication` recebia o ponteiro do código de saída no lugar do parâmetro `refresh` |
+| 2026-10-20 | Fase 4c.1, revisão final (decisão do usuário, opção A): corrigir nesta fase os INIs do perfil no Linux. O `game_bethesda` acha os INIs do prefixo e o INI padrão ignorando maiúsculas (`GameGamebryo::resolveIgnoringCase()`, identidade no Windows) e restaura os INIs do perfil vazios ou só com `[Launcher] bEnableFileSelection=1` (nunca outro conteúdo) ao abrir o perfil (`onProfileChanged`, dentro do plugin, sem gancho novo no app) e antes de executar; o INI dos saves locais e a pasta `__MO_Saves` também; no app, `Profile::absoluteIniFilePath()` ignora maiúsculas no Linux |
 | 2026-10-20 | Fase 4c.1 desenvolvida em um worktree separado (`../ModOrganizerLinux-4c1`), para não tocar o `install/` do checkout principal, de onde o MO2 do usuário está rodando |
 
 ## Pendências por fase
