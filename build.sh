@@ -395,6 +395,19 @@ build_check_fnis() {
     check_plugins plugin "$INSTALL/bin/plugins/libcheck_fnis.so"
 }
 
+# the INI tools (Phase 4c.1): the INI Editor (Tools menu; its external mode opens the
+# INI files with the desktop's handler on Linux) and the INI Bakery, which maps the
+# INI files of the profile into the virtual file system
+build_tool_inieditor() {
+    cmake_build tool_inieditor "$ROOT/deps/tool_inieditor"
+    check_plugins tool "$INSTALL/bin/plugins/libinieditor.so"
+}
+
+build_tool_inibakery() {
+    cmake_build tool_inibakery "$ROOT/deps/tool_inibakery"
+    check_plugins filemapper "$INSTALL/bin/plugins/libinibakery.so"
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
