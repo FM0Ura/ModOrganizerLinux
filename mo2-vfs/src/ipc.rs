@@ -8,6 +8,10 @@ use crate::state::{self, StateFile};
 use crate::watch::group_alive;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+/// How long a program gets to end after the SIGTERM of a `kill` request, before SIGKILL.
+const KILL_GRACE: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -40,6 +44,9 @@ pub enum Request {
         wineprefix: Option<PathBuf>,
         #[serde(default)]
         output: Option<PathBuf>,
+    },
+    Kill {
+        pid: i32,
     },
 }
 
@@ -118,6 +125,8 @@ pub struct Server {
     /// mount lasts until their wineserver ends.
     prefixes: Vec<PathBuf>,
     children: Vec<std::process::Child>,
+    /// Groups of `kill` requests, with the time after which they get SIGKILL.
+    kills: Vec<(i32, Instant)>,
     /// Roots whose automatic unmount failed, retried lazily, with the directory of the
     /// state file that still lists them.
     stale: Vec<PathBuf>,
@@ -221,6 +230,22 @@ impl Server {
                     Err(e) => e.into(),
                 }
             }
+            Request::Kill { pid } => {
+                if !self.children.iter().any(|c| c.id() as i32 == pid) {
+                    return Event::Error {
+                        code: ErrorCode::NotSpawned,
+                        message: format!("{pid} is not a running program started by spawn"),
+                        path: None,
+                        spontaneous: false,
+                    };
+                }
+                tracing::info!(pid, "ending the program (SIGTERM to its group)");
+                crate::spawn::signal_group(pid, rustix::process::Signal::TERM);
+                if !self.kills.iter().any(|&(p, _)| p == pid) {
+                    self.kills.push((pid, Instant::now() + KILL_GRACE));
+                }
+                Event::Ok
+            }
             Request::Unmount => match self.unmount() {
                 Ok(()) => Event::Unmounted,
                 Err(e) => e.into(),
@@ -271,6 +296,26 @@ impl Server {
             }
         });
         events
+    }
+
+    /// Sends SIGKILL to the groups of `kill` requests that are still alive after the grace
+    /// period; forgets the ones that ended.
+    pub fn poll_kills(&mut self) {
+        let now = Instant::now();
+        self.kills.retain(|&(pid, deadline)| {
+            if !group_alive(pid) {
+                return false;
+            }
+            if now < deadline {
+                return true;
+            }
+            tracing::warn!(
+                pid,
+                "the program did not end after SIGTERM; sending SIGKILL"
+            );
+            crate::spawn::signal_group(pid, rustix::process::Signal::KILL);
+            false
+        });
     }
 
     /// Unmounts (if mounted) and forgets the watched groups; the roots of a failed
@@ -399,10 +444,21 @@ mod tests {
                 if argv == &["x"] && env.is_empty() && wineprefix.is_none() && output.is_none()
         ));
         assert!(matches!(
+            parse_request(r#"{"op":"kill","pid":12}"#),
+            Ok(Request::Kill { pid: 12 })
+        ));
+        assert!(matches!(
             parse_request(r#"{"op":"unmount"}"#),
             Ok(Request::Unmount)
         ));
-        for bad in ["", "nope", r#"{"op":"x"}"#, r#"{"op":"watch"}"#, "[]"] {
+        for bad in [
+            "",
+            "nope",
+            r#"{"op":"x"}"#,
+            r#"{"op":"watch"}"#,
+            r#"{"op":"kill"}"#,
+            "[]",
+        ] {
             let Err(Event::Error { code, .. }) = parse_request(bad) else {
                 panic!("{bad:?} should be rejected");
             };

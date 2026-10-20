@@ -173,9 +173,8 @@ TEST(Loot, UnavailableWithoutLootcli)
   TempDir tmp;
   const auto bin = QString::fromStdString(tmp.path().string());
 
-  EXPECT_EQ(
-      lootUnavailableReason(bin),
-      QString::fromUtf8("LOOT ainda não está disponível nesta versão para Linux."));
+  EXPECT_EQ(lootUnavailableReason(bin),
+            QString("lootcli was not found in %1/loot.").arg(bin));
 
   // not executable
   const auto lootcli = tmp.createFile("loot/lootcli");

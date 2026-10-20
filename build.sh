@@ -22,7 +22,7 @@ BUILD_OUT="$ROOT/build-out"
 # underscores). A target without such a function is "not implemented yet". An optional
 # function pre_<t> runs first, outside --allow-fail.
 ALL_TARGETS=(
-    7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk lootcli
+    7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
 )
 
@@ -145,11 +145,38 @@ build_esptk() {
     cmake_build esptk "$ROOT/deps/esptk"
 }
 
-# lootcli: only the header package mo2-lootcli-header (mo2::lootcli-header) is built, like
-# the vcpkg port. The lootcli executable needs Windows-only libloot and is skipped by
-# making Qt6 invisible to the project (its CMake builds the executable only if Qt6 is found).
+# libloot is LOOT's library (Rust, with a C++ wrapper), needed by the lootcli executable;
+# the logic lives in build/libloot/build-libloot.sh (source pinned to 0.29.5).
+build_libloot() {
+    INSTALL="$INSTALL" BUILD_OUT="$BUILD_OUT" "$ROOT/build/libloot/build-libloot.sh"
+}
+
+# lootcli: the executable (deps/lootcli on libloot, installed in bin/loot with the
+# libloot.so.0 it needs, run path $ORIGIN) and the header package mo2-lootcli-header
+# (mo2::lootcli-header). Mod Organizer starts it through mo2-vfs, which runs on the
+# host when Mod Organizer runs in the mo2-run box (spec of Phase 4b, section 1.2): it
+# must need nothing but libloot and libraries the host (Bazzite, Fedora 44) has,
+# checked here against LOOTCLI_HOST_LIBS. With --tests, its tests run (ctest) and it
+# must reject a missing argument.
+LOOTCLI_HOST_LIBS="libloot.so.0 libQt6Core.so.6 libboost_locale.so.1.90.0 libcurl.so.4 libstdc++.so.6 libm.so.6 libgcc_s.so.1 libc.so.6"
 build_lootcli() {
-    cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON
+    # -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=OFF: a build-out/lootcli left by an earlier phase
+    # keeps Qt6 disabled in its cache, and the executable would not be configured
+    cmake_build lootcli "$ROOT/deps/lootcli" -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=OFF
+    local exe="$INSTALL/bin/loot/lootcli" lib out
+    [[ -x $exe ]] || die "lootcli was not installed in $INSTALL/bin/loot"
+    [[ -e $INSTALL/bin/loot/libloot.so.0 ]] || die "libloot.so.0 is not next to lootcli"
+    readelf -d "$exe" | grep -Eq '\((RUNPATH|RPATH)\).*\[\$ORIGIN\]' ||
+        die "lootcli does not have the run path \$ORIGIN"
+    for lib in $(readelf -d "$exe" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+        [[ " $LOOTCLI_HOST_LIBS " == *" $lib "* ]] ||
+            die "lootcli needs $lib, which is not in LOOTCLI_HOST_LIBS (the host may not have it)"
+    done
+    if [[ $TESTS == 1 ]]; then
+        out="$("$exe" --game SkyrimSE 2>&1)" && die "lootcli without --gamePath exited with 0"
+        [[ $out == *"argument missing gamePath"* ]] || die "lootcli printed '$out'"
+        log "lootcli: rejects a missing argument"
+    fi
 }
 
 # mo2-vfs is the FUSE virtual file system (Rust, ./mo2-vfs), a program of its own
@@ -231,6 +258,27 @@ vfs_e2e() {
     log "vfs end-to-end test"
     "$ROOT/tests/vfs-e2e/run.sh" "$INSTALL" || die "vfs end-to-end test failed"
     log "vfs end-to-end test passed"
+}
+
+# With --tests, after every target: the end-to-end test of LOOT (tests/loot-e2e/run.sh,
+# see there): lootcli, started by mo2-vfs with the virtual file system mounted, sorts
+# the plugins of the mods of a fake Skyrim SE. It needs mo2-vfs and lootcli: always in
+# a full build, and with --only when libloot, lootcli or mo2-vfs was built and both are
+# installed.
+loot_e2e() {
+    [[ $TESTS == 1 ]] || return 0
+    if ((${#ONLY[@]})); then
+        [[ " ${ONLY[*]} " == *" libloot "* || " ${ONLY[*]} " == *" lootcli "* ||
+            " ${ONLY[*]} " == *" mo2-vfs "* ]] || return 0
+        if [[ ! -x $INSTALL/bin/mo2-vfs || ! -x $INSTALL/bin/loot/lootcli ]]; then
+            log "loot end-to-end test skipped: build mo2-vfs and lootcli first"
+            return 0
+        fi
+    fi
+    log "loot end-to-end test"
+    "$ROOT/tests/loot-e2e/run.sh" "$INSTALL" "$BUILD_OUT/testing-plugins" ||
+        die "loot end-to-end test failed"
+    log "loot end-to-end test passed"
 }
 
 # With --tests, the unit tests of the application (organizer_tests: the data tree and
@@ -358,6 +406,12 @@ if [[ " ${failed[*]} " == *" mo2-vfs "* || " ${failed[*]} " == *" modorganizer "
     log "vfs end-to-end test skipped: a target it needs failed"
 else
     vfs_e2e
+fi
+if [[ " ${failed[*]} " == *" mo2-vfs "* || " ${failed[*]} " == *" libloot "* ||
+    " ${failed[*]} " == *" lootcli "* ]]; then
+    log "loot end-to-end test skipped: a target it needs failed"
+else
+    loot_e2e
 fi
 ((${#skipped[@]})) && log "skipped (not implemented yet): ${skipped[*]}"
 ((${#failed[@]})) && log "failed (allowed): ${failed[*]}"

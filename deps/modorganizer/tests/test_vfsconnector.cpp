@@ -351,6 +351,47 @@ TEST_F(VfsConnectorTest, SpawnFailureIsException)
   }
 }
 
+TEST_F(VfsConnectorTest, KillEndsASpawnedProgram)
+{
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  TempDir t;
+
+  VfsSpawnRequest r;
+  r.argv             = {"sleep", "60"};
+  r.workingDirectory = q(t.path());
+  const auto pid     = vfs->spawn(r);
+  ASSERT_GT(pid, 0);
+
+  vfs->kill(pid);
+
+  const auto code = exitcodes::take(pid, std::chrono::seconds(5));
+  ASSERT_TRUE(code);
+  EXPECT_EQ(*code, 143);  // 128 + SIGTERM
+}
+
+TEST_F(VfsConnectorTest, KillOfAnEndedProgramThrows)
+{
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  TempDir t;
+
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = q(t.path());
+  const auto pid     = vfs->spawn(r);
+  ASSERT_TRUE(exitcodes::take(pid, std::chrono::seconds(5)));
+
+  EXPECT_THROW(vfs->kill(pid), std::runtime_error);
+}
+
+TEST_F(VfsConnectorTest, KillWithoutHelperThrows)
+{
+  qputenv("MO2_VFS_BINARY", vfsBinary().toUtf8());
+  const auto vfs = createVfsConnector();
+  EXPECT_THROW(vfs->kill(12345), std::runtime_error);
+}
+
 TEST_F(VfsConnectorTest, SpawnedProgramKeepsTheMountAndIsListed)
 {
   if (!requireVfs())

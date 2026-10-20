@@ -104,6 +104,12 @@ public:
                              "not supported on this platform");
   }
 
+  // ends a program started by spawn() and its process group: the helper sends SIGTERM,
+  // then SIGKILL after 3 s (a program on the host may not be signalled from a
+  // container); its exit code comes as usual; throws std::runtime_error with the reason
+  // when the helper refuses (not one of its running programs) or is not running
+  virtual void kill(qint64 pid) { Q_UNUSED(pid); }
+
   // the pids the virtual file system waits for: programs started by spawn() that still
   // run, and the Wine servers that keep it mounted (empty without a helper)
   virtual std::vector<qint64> runningPrograms() { return {}; }

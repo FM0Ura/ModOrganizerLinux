@@ -1,13 +1,19 @@
+#ifdef _WIN32
 #pragma comment(lib, "winhttp.lib")
+#endif
 
 #include "lootthread.h"
 #include "game_settings.h"
 #include "version.h"
 #include <codecvt>
 #include <fstream>
+#ifdef _WIN32
 #include <strsafe.h>
 #include <windows.h>
 #include <winhttp.h>
+#else
+#include "posix_support.h"
+#endif
 
 // using namespace loot;
 namespace fs = std::filesystem;
@@ -118,6 +124,7 @@ void LOOTWorker::setLogLevel(loot::LogLevel level)
 
 fs::path GetLOOTAppData()
 {
+#ifdef _WIN32
   TCHAR path[MAX_PATH];
 
   HRESULT res = ::SHGetFolderPath(nullptr, CSIDL_LOCAL_APPDATA, nullptr,
@@ -128,6 +135,10 @@ fs::path GetLOOTAppData()
   } else {
     return fs::path("");
   }
+#else
+  // the Flatpak LOOT's folder, or the XDG one (posix_support.h)
+  return posix::lootDataPath();
+#endif
 }
 
 fs::path LOOTWorker::gamePath() const
@@ -542,6 +553,7 @@ std::string LOOTWorker::migrateMasterlistSource(const std::string& source)
   return source;
 }
 
+#ifdef _WIN32
 DWORD LOOTWorker::GetFile(const WCHAR* szUrl,      // Full URL
                           const CHAR* szFileName)  // Local file name
 {
@@ -665,6 +677,7 @@ DWORD LOOTWorker::GetFile(const WCHAR* szUrl,      // Full URL
   }
   return result;
 }
+#endif
 
 std::string escape(const std::string& s)
 {
@@ -759,13 +772,19 @@ int LOOTWorker::run()
       if (!m_UpdateMasterlist) {
         log(loot::LogLevel::error,
             "Masterlist not found at: " + masterlistPath().string());
+#ifdef _WIN32
         return FALSE;
+#else
+        // FALSE is 0, success; nothing was sorted
+        return 1;
+#endif
       }
       fs::create_directories(masterlistPath().parent_path());
     }
 
     if (m_UpdateMasterlist) {
       progress(Progress::UpdatingMasterlist);
+#ifdef _WIN32
       std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
       std::wstring masterlistSource =
           converter.from_bytes(m_GameSettings.MasterlistSource());
@@ -800,6 +819,16 @@ int LOOTWorker::run()
             "Error downloading masterlist: " + converter.to_bytes(errorMessage));
         return FALSE;
       }
+#else
+      log(loot::LogLevel::info, "Downloading latest masterlist file from " +
+                                    m_GameSettings.MasterlistSource() + " to " +
+                                    masterlistPath().string());
+      if (const auto error = posix::downloadFile(m_GameSettings.MasterlistSource(),
+                                                 masterlistPath())) {
+        log(loot::LogLevel::error, "Error downloading masterlist: " + *error);
+        return 1;
+      }
+#endif
     }
 
     progress(Progress::LoadingLists);
@@ -881,9 +910,10 @@ LOOTWorker::createJsonReport(loot::GameInterface& game,
   const auto end = std::chrono::high_resolution_clock::now();
 
   set(root, "stats",
-      QJsonObject{{"time", std::chrono::duration_cast<std::chrono::milliseconds>(
-                               end - m_startTime)
-                               .count()},
+      QJsonObject{{"time", static_cast<qint64>(
+                               std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   end - m_startTime)
+                                   .count())},
                   {"lootcliVersion", LOOTCLI_VERSION_STRING},
                   {"lootVersion", QString::fromStdString(loot::GetLiblootVersion())}});
 

@@ -21,6 +21,15 @@ jobs:
       - name: Build container image
         run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
 
+      # libloot (Rust, several minutes): its source, cargo home and build tree
+      # (build/libloot/build-libloot.sh), keyed by the script (which pins the commit)
+      # and the image
+      - name: Cache libloot
+        uses: actions/cache@v4
+        with:
+          path: ModOrganizerLinux/build-out/libloot
+          key: libloot-${{ hashFiles('ModOrganizerLinux/build/libloot/build-libloot.sh', 'ModOrganizerLinux/build/Containerfile') }}
+
       # --tests also runs the unit tests of every target, the smoke test of the
       # application, once per run, up to the main window (build.sh smoke_modorganizer,
       # tests/smoke) and the end-to-end test of the

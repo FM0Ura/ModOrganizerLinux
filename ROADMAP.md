@@ -15,7 +15,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 2 | VFS FUSE | Processo auxiliar Rust `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; "Executar" de um programa Linux nativo mostra a visão virtual montada | ✅ Concluída (2026-10-17) |
 | 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | ✅ Concluída (2026-10-18) |
 | 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | ✅ Concluída (2026-10-18) |
-| 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | ⚪ Não iniciada |
+| 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | 🟡 Em andamento |
 | 4c | Ferramentas pelo VFS e plugins C++ | BodySlide, Nemesis/Pandora, xEdit de outros jogos; BAIN, previews, checagens; pendências adiadas da Fase 2 | Ferramentas pelo VFS (critério 6) | ⚪ Não iniciada |
 | 4d | Plugins Python | `plugin_python` (pybind11 + Python + PyQt6) e plugins Python (incl. `basic_games`) | Todas as funcionalidades | ⚪ Não iniciada |
 | 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ⚪ Não iniciada |
@@ -70,6 +70,8 @@ Inicia jogos e ferramentas Windows com os mods ativos, via Proton.
 Dividida em subfases (spec da 4a, §1.1).
 
 Fase 4a — Spec: [`docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md`](docs/superpowers/specs/2026-10-18-phase4a-nexus-nxm-keyring-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md`](docs/superpowers/plans/2026-10-18-phase4a-nexus-nxm-keyring.md) · Checklist manual: [`docs/testing/phase4a-manual-checklist.md`](docs/testing/phase4a-manual-checklist.md)
+
+Fase 4b — Spec: [`docs/superpowers/specs/2026-10-18-phase4b-loot-design.md`](docs/superpowers/specs/2026-10-18-phase4b-loot-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4b-loot.md`](docs/superpowers/plans/2026-10-18-phase4b-loot.md) · Checklist manual: [`docs/testing/phase4b-manual-checklist.md`](docs/testing/phase4b-manual-checklist.md)
 
 - (4d) `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
 - (4b) `lootcli` nativo (libloot) → ordenação com LOOT.

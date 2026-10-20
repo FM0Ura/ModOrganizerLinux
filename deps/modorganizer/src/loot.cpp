@@ -12,9 +12,16 @@
 using namespace MOBase;
 using namespace json;
 
+#ifdef _WIN32
 static QString LootReportPath       = QDir::temp().absoluteFilePath("lootreport.json");
 static QString SortedPluginListPath = QDir::temp().absoluteFilePath("loadorder.txt");
-static const DWORD PipeTimeout      = 500;
+#else
+// in the logs of the instance (lootFilesDirectory(), loot_linux.h), set by the
+// constructor of Loot: the data path is not known yet when these are initialised
+static QString LootReportPath;
+static QString SortedPluginListPath;
+#endif
+static const DWORD PipeTimeout = 500;
 
 #ifdef _WIN32
 class AsyncPipe
@@ -420,7 +427,12 @@ QString Loot::Message::toMarkdown() const
 
 Loot::Loot(OrganizerCore& core)
     : m_core(core), m_thread(nullptr), m_cancel(false), m_result(false)
-{}
+{
+#ifndef _WIN32
+  LootReportPath       = lootFilesDirectory() + "/lootreport.json";
+  SortedPluginListPath = lootFilesDirectory() + "/loot-loadorder.txt";
+#endif
+}
 
 Loot::~Loot()
 {
@@ -464,6 +476,7 @@ bool Loot::start(QWidget* parent, bool didUpdateMasterList)
   return true;
 }
 
+#ifdef _WIN32
 bool Loot::spawnLootcli(QWidget* parent, bool didUpdateMasterList,
                         env::HandlePtr stdoutHandle)
 {
@@ -498,10 +511,6 @@ bool Loot::spawnLootcli(QWidget* parent, bool didUpdateMasterList,
   sp.currentDirectory.setPath(qApp->applicationDirPath() + "/loot");
   sp.hooked = true;
   sp.stdOut = stdoutHandle.get();
-#ifndef _WIN32
-  // not an .exe on Linux
-  sp.binary = QFileInfo(lootcliPath());
-#endif
 
   HANDLE lootHandle = spawn::startBinary(parent, sp);
 
@@ -514,6 +523,7 @@ bool Loot::spawnLootcli(QWidget* parent, bool didUpdateMasterList,
 
   return true;
 }
+#endif  // _WIN32
 
 void Loot::cancel()
 {
@@ -654,6 +664,7 @@ void Loot::processStdout(const std::string& lootOut)
 
     if (m.type == lootcli::MessageType::None) {
       log::error("unrecognised loot output: '{}'", line);
+      start = newline + 1;
       continue;
     }
 

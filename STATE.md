@@ -3,12 +3,29 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-18
-**Fase atual:** 4a — Nexus, `nxm://` e keyring · **Status:** ✅ concluída em 2026-10-18 (teste manual aprovado no Bazzite; CI Linux e Windows verdes; merge no `main` pelo PR #2) · **Próxima:** 4b — LOOT · **Anterior:** Fase 3 — Steam/Proton ✅ (merge no `main` em 2026-10-18)
-**Branch principal:** `main` (Fases 1 a 3; `fase-2-vfs-fuse` e `fase-3-steam-proton` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4a:** `fase-4a-nexus` (a partir de `main`; ainda não enviado ao GitHub)
+**Fase atual:** 4b — LOOT · **Status:** 🟡 implementação concluída; revisão final, CI e teste manual pendentes · **Anterior:** 4a — Nexus, `nxm://` e keyring ✅ (merge no `main` em 2026-10-18, PR #2)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; ainda não enviado ao GitHub)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4b — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-18-phase4b-loot-design.md`](docs/superpowers/specs/2026-10-18-phase4b-loot-design.md) · Plano: [`docs/superpowers/plans/2026-10-18-phase4b-loot.md`](docs/superpowers/plans/2026-10-18-phase4b-loot.md) · Checklist manual: [`docs/testing/phase4b-manual-checklist.md`](docs/testing/phase4b-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | `mo2-vfs`: pedido `kill` | ✅ | `9b6e8c3` |
+| 2 | Build do libloot 0.29.5 | ✅ | `a91371c`, `8a14c1d` |
+| 3 | `lootcli`: pasta de dados e download com libcurl | ✅ | `d371e8e`, `3a7a7fe` |
+| 4 | `lootcli`: executável no Linux | ✅ | `2c44af7`, `81a5292` |
+| 5 | `tests/loot-e2e` | ✅ | `cce9fb2`, `8b09add` |
+| 6 | `VfsConnector::kill` | ✅ | `31c0d76` |
+| 7 | Helpers `loot_linux` | ✅ | `310d9b0` |
+| 8 | LOOT roda o `lootcli` pelo `mo2-vfs` | ✅ | `928be58`, `37804a3` (o segundo corrige um bug do upstream em `Loot::processStdout`: uma linha não reconhecida repetia para sempre) |
+| 9 | Documentação, checklist e ponto de controle de CI | ✅ docs e checklist; o push e o CI dependem da autorização do usuário | `6aade61` |
+| 10 | Teste manual no Bazzite ([`docs/testing/phase4b-manual-checklist.md`](docs/testing/phase4b-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4a — progresso
 
@@ -129,7 +146,9 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
-Fase 4a: o branch `fase-4a-nexus` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` ao lado), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4a-manual-checklist.md`.
+Fase 4b: o branch `fase-4b-loot` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4b-manual-checklist.md`.
+
+(Fase 4a, já no `main`: checklist em `docs/testing/phase4a-manual-checklist.md`.)
 
 (Fase 3, já no `main`: checklist em `docs/testing/phase3-manual-checklist.md`.)
 
@@ -139,10 +158,18 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Com a autorização do usuário: push do branch `fase-4a-nexus` e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`); no log do Linux, conferir que `secret_service_integration` está **Passed** (não `Skipped`).
-2. Teste manual do usuário com `docs/testing/phase4a-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
+1. Com a autorização do usuário: push do branch `fase-4b-loot` e conferência dos dois CIs (Linux e Windows, pelo `[windows-ci]`); no log do Linux, conferir `loot end-to-end test passed` e `vfs end-to-end test passed` (não `SKIPPED`), `100% tests passed` do `lootcli` e o cache `libloot` salvo no fim; rodar o Linux uma segunda vez e conferir que o build do libloot veio do cache.
+2. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
 3. As 6 pendências restantes da Fase 2 (do teste manual e da revisão final) continuam para depois, em "Pendências por fase".
 4. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4b
+
+- As listas de plugins dos INIs (`sTestFile`, Oblivion/Fallout 3/NV) não são lidas fora do Windows (spec §1.3).
+- Na distrobox o `lootcli` roda no host e usa as bibliotecas Qt6Core, Boost.Locale 1.90 e libcurl de lá (o `build.sh` confere a lista).
+- Só o Skyrim SE foi testado.
+- O portão do `build.sh` confere só os nomes das bibliotecas (`NEEDED`) do `lootcli`, não as versões dos símbolos: o `lootcli` compilado na distrobox exige `Qt_6.11` e `GLIBCXX_3.4.32` (versões do box hoje). Se o Qt ou o GCC do box passarem à frente dos do host Bazzite, o `lootcli` falha no host (o erro aparece no diálogo do LOOT); a Fase 5 (AppImage) elimina isso.
+- Valem as limitações das Fases 1 a 4a, menos "Sem LOOT".
 
 ## Limitações conhecidas da Fase 4a
 
@@ -186,7 +213,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 - (Fase 1) Sem VFS: resolvido na Fase 2 para programas nativos e na Fase 3 para jogos Proton.
 - ~~"Executar" mostra aviso; jogos e ferramentas não iniciam~~ (resolvido na Fase 3; teste manual aprovado em 2026-10-18).
-- Sem LOOT, sem criação de BSA, sem atualização automática, sem plugins Python, ~~sem `nxm://`~~ (resolvido na Fase 4a, pendente do teste manual) (Fase 4/5).
+- ~~Sem LOOT~~ (resolvido na Fase 4b), sem criação de BSA, sem atualização automática, sem plugins Python, ~~sem `nxm://`~~ (resolvido na Fase 4a, pendente do teste manual) (Fase 4/5).
 - ~~Logins do Nexus/Steam ficam só em memória (perdidos ao fechar)~~ (resolvido na Fase 4a: Secret Service; sem ele, só em memória).
 - ~~"My Games"/"AppData" apontam para pastas XDG~~ (Fase 3 leva para o prefixo do Proton; sem prefixo, volta às XDG).
 - Lixeira só funciona no mesmo sistema de arquivos da home; em outro disco a remoção falha sem apagar nada.
@@ -228,6 +255,9 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-18 | Fase 3: teste manual aprovado pelo usuário no Bazzite (MO2 no box `mo2-run` com a ponte `distrobox-host-exec`): Skyrim SE + SKSE e SSEEdit rodando com mods. Merge no `main` depois do checkpoint de CI (Linux + Windows) |
 | 2026-10-18 | Fase 4a: teste manual aprovado pelo usuário no Bazzite (MO2 no box `mo2-run`, Firefox Flatpak, KWallet): itens 1–7 do checklist sem correções. Merge no `main` depois do checkpoint de CI (Linux + Windows) |
 | 2026-10-18 | Fase 4a (checkpoint de CI): como root num container sem `CAP_IPC_LOCK` (o docker do CI), o `gnome-keyring-daemon` aborta ("error dropping process capabilities"); o `secret-service.sh` o inicia por `setpriv --inh-caps=-all --bounding-set=-all` quando roda como root. CI Linux (com `secret_service_integration` passando de fato) e Windows verdes; merge no `main` (PR #2) |
+| 2026-10-18 | Fase 4b: libloot 0.29.5 compilado do código-fonte (tag, commit fixado); o `lootcli` enxerga os mods pelo `mo2-vfs` (`VfsConnector::spawn()`), no host quando o MO2 está na distrobox; pasta de dados do LOOT em Flatpak (`~/.var/app/io.github.loot.loot/data/LOOT`) se existir, senão `$XDG_DATA_HOME/LOOT` / `~/.local/share/LOOT`; masterlist baixada com libcurl (arquivo temporário, só substitui com HTTP 200); cancelar pelo novo pedido `kill` do `mo2-vfs`; Windows sem mudanças (`#ifdef _WIN32` / `#else`). Spec §1.1 |
+| 2026-10-18 | Fase 4b: corrigido em `loot.cpp` (compartilhado com o Windows) um laço infinito do upstream em `Loot::processStdout`: uma linha do `lootcli` não reconhecida nunca era consumida e travava a thread do LOOT |
+| 2026-10-18 | Fase 4b: o `lootcli` é ligado com `-Wl,--as-needed` e usa o toml++ só de cabeçalhos, então precisa apenas de bibliotecas do host (o `build.sh` confere a lista) |
 
 ## Pendências por fase
 
