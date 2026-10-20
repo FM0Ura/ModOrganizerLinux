@@ -29,6 +29,8 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `installer_fomod` | https://github.com/ModOrganizer2/modorganizer-installer_fomod | `master` (`7c3995682134a63b5040b7865b88a3749b056d68`) | 2026-10-06 |
 | `installer_bain` | https://github.com/ModOrganizer2/modorganizer-installer_bain | `master` (`0e60c19b2d64eef37d299754ff3c29497eccc478`) | 2026-10-06 |
 | `installer_bundle` | https://github.com/ModOrganizer2/modorganizer-installer_bundle | `master` (`1d7f9dc09a3283f8d59b7d8669a7018ed7840fe0`) | 2025-05-29 |
+| `preview_base` | https://github.com/ModOrganizer2/modorganizer-preview_base | `master` (`a8b2c5137d6b011275ea6f113a930b3481331cde`) | 2026-10-06 |
+| `preview_bsa` | https://github.com/ModOrganizer2/modorganizer-preview_bsa | `master` (`fb477c0850de24cebfb2922c437a97fbd014e1e3`) | 2026-10-06 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`

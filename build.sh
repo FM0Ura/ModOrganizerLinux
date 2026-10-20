@@ -354,6 +354,18 @@ build_installer_bundle() {
     check_plugins installer "$INSTALL/bin/plugins/libinstaller_bundle.so"
 }
 
+# the preview plugins (Phase 4c.1): text, images and INI files, and the contents of
+# BSA/BA2 archives (bsatk)
+build_preview_base() {
+    cmake_build preview_base "$ROOT/deps/preview_base"
+    check_plugins preview "$INSTALL/bin/plugins/libpreview_base.so"
+}
+
+build_preview_bsa() {
+    cmake_build preview_bsa "$ROOT/deps/preview_bsa"
+    check_plugins preview "$INSTALL/bin/plugins/libpreview_bsa.so"
+}
+
 # --- driver -----------------------------------------------------------------
 
 while (($#)); do
