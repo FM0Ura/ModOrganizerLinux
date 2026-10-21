@@ -117,6 +117,14 @@ distrobox enter mo2-run -- ./build.sh        # gera install/bin/ModOrganizer
 
 Depois siga o [checklist manual](docs/testing/phase1-manual-checklist.md).
 
+### Ferramentas (BodySlide, Nemesis, Pandora, xEdit)
+
+Instale a ferramenta como mod (pelo MO2, a partir do arquivo baixado) e configure o executável pelo `.exe` **dentro da pasta do mod** (botão de executáveis → binário em `mods/<mod>/...`). Como no Windows, o MO2 roda um programa de dentro de `mods/` a partir do lugar correspondente no `Data` virtual (`mods/Nemesis/Nemesis_Engine/x.exe` → `<jogo>/Data/Nemesis_Engine/x.exe`), então ferramentas que precisam estar no `Data`, como o Nemesis, funcionam. Isso vale só para execuções com o sistema de arquivos virtual (o padrão do "Executar"), e o mod precisa estar ativo no perfil; desativado, o programa roda da pasta do mod (aviso no log).
+
+- **Nemesis e BodySlide:** sem argumentos. O que eles geram vai para o `overwrite` (mova para um mod depois, como no Windows).
+- **Pandora:** use o build do Nexus (no GitHub, o `..._win-x64_net.zip`), que traz o .NET; o zip que depende do .NET instalado não abre num prefixo sem o .NET 10. Na 5.0.0-beta o argumento `-o` é ignorado pelo próprio Pandora: a saída vai para o `overwrite`.
+- **xEdit de outros jogos** (FO4Edit, TES5Edit, FNVEdit...): o executável roda no prefixo do jogo da instância (ou no do campo "Steam AppID" do executável). O jogo precisa ter rodado uma vez pela Steam, para o prefixo existir e o registro `Installed Path`, onde o xEdit procura o jogo, ser gravado.
+
 ## Building
 
 The build environment is defined once, in [`build/Containerfile`](build/Containerfile)

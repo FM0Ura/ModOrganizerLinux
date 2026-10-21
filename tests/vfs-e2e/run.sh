@@ -31,6 +31,12 @@
 # STEAM_COMPAT_LIBRARY_PATHS, MO2_E2E_VAR) and the working directory, which must be
 # the ones of the Steam game and of the executable, and then runs probe.sh: the same
 # checks as above hold.
+# Then the executable "tool-exe", a tool installed as a mod (mods/ModTool/Tool/tool.exe,
+# no working directory configured), with the fake umu-run in tool mode: with ModTool
+# active it must run from the data directory (argv and working directory in
+# <game>/Data/Tool, sibling.txt read through the mount, tool-created.txt in
+# overwrite/Tool, the real data directory unchanged); with ModTool inactive from the
+# mods directory, with the warning "'ModTool' is not active" in the log.
 # Then the same run with MO2_VFS_BINARY pointing to a fake helper whose mount fails:
 # beforeRun must return promptly (no dialog waits for an answer without a user
 # interface): the run command logs "Failed to run" within MO2_E2E_FAIL_TIMEOUT seconds
@@ -265,6 +271,50 @@ expect_line "cwd $GAME"
 echo "ok umu-run: argv, environment and working directory"
 [[ $(grep -c '^arg ' "$WORK/umu.out") == 3 ]] || die "umu-run: not exactly 3 arguments"
 check_probe_run
+
+# --- a tool inside the mods directory ----------------------------------------------
+
+# set_tool_mod +|-: enables or disables ModTool (the application writes modlist.txt
+# with CRLF line ends)
+set_tool_mod() {
+    sed -i -E "s/^[+-]ModTool(\r?)$/$1ModTool\1/" "$INSTANCE/profiles/Default/modlist.txt"
+}
+
+# run_tool: runs tool-exe with the fake umu-run in tool mode, output in $WORK/umu.out
+run_tool() {
+    rm -f "$WORK/umu.out"
+    local rc=0
+    run_app tool-exe PATH="$WORK/umu-bin:$PATH" UMU_OUT="$WORK/umu.out" UMU_TOOL=1 ||
+        rc=$?
+    ((rc == 0)) || die "the application exited with $rc (124: timeout)"
+    [[ -s $WORK/umu.out ]] || die "umu-run was not started"
+    cat "$WORK/umu.out"
+}
+
+echo "--- ModOrganizer -i vfs-e2e run -e tool-exe, ModTool active (${TIMEOUT}s)"
+set_tool_mod +
+run_tool
+expect_line "arg $GAME/Data/Tool/tool.exe"
+expect_line "cwd $GAME/Data/Tool"
+expect_line "sibling from ModTool"
+expect_line "created"
+[[ $(grep -c '^arg ' "$WORK/umu.out") == 1 ]] || die "umu-run: not exactly 1 argument"
+[[ $(cat "$INSTANCE/overwrite/Tool/tool-created.txt" 2>/dev/null) == "created by the tool" ]] ||
+    die "overwrite/Tool/tool-created.txt is missing or wrong"
+after="$(cd "$GAME/Data" && LC_ALL=C find . -type f -exec md5sum {} + | sort)"
+[[ $after == "$original" ]] || die "the real data directory changed"
+[[ -z $(mounts_under "$WORK") ]] || die "still mounted after the run: $(mounts_under "$WORK")"
+echo "ok tool-exe ran from the data directory"
+
+echo "--- ModOrganizer -i vfs-e2e run -e tool-exe, ModTool inactive (${TIMEOUT}s)"
+set_tool_mod -
+run_tool
+expect_line "arg $INSTANCE/mods/ModTool/Tool/tool.exe"
+expect_line "cwd $INSTANCE/mods/ModTool/Tool"
+expect_line "sibling from ModTool"
+grep -qF "'ModTool' is not active" "$APP_OUT" || die "no warning about the inactive ModTool"
+[[ -z $(mounts_under "$WORK") ]] || die "still mounted after the run: $(mounts_under "$WORK")"
+echo "ok tool-exe ran from the mods directory with ModTool inactive"
 
 # --- a helper whose mount fails --------------------------------------------------
 

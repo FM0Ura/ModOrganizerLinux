@@ -33,6 +33,8 @@
 #include <winver.h>
 #else
 #include "steamutility.h"
+
+#include <uibase/linux/steam.h>
 #endif
 
 #include <optional>
@@ -515,6 +517,15 @@ QString GameGamebryo::parseEpicGamesLocation(const QStringList& manifests)
 QString GameGamebryo::parseSteamLocation(const QString& appid,
                                          const QString& directoryName)
 {
+#ifndef _WIN32
+  // no registry: the Steam libraries have the game with this app ID
+  if (const auto app = MOBase::steam::findApp(appid)) {
+    const QDir gameDir(app->library + "/steamapps/common/" + directoryName);
+    if (gameDir.exists())
+      return gameDir.absolutePath();
+  }
+  return "";
+#endif
   QString path = "Software\\Valve\\Steam";
   QString steamLocation =
       findInRegistry(HKEY_CURRENT_USER, path.toStdWString().c_str(), L"SteamPath");

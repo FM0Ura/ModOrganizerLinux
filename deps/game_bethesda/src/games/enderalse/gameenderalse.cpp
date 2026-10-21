@@ -60,6 +60,10 @@ void GameEnderalSE::detectGame()
 
 QString GameEnderalSE::identifyGamePath() const
 {
+#ifndef _WIN32
+  // no registry: the Steam libraries
+  return MOBase::findSteamGame(gameName(), binaryName());
+#endif
   QMap<QString, QString> paths = {
       {"Software\\Bethesda Softworks\\" + gameName(), "Installed Path"},
       {"Software\\GOG.com\\Games\\1708684988", "path"},
@@ -208,7 +212,13 @@ QList<PluginSetting> GameEnderalSE::settings() const
 void GameEnderalSE::initializeProfile(const QDir& path, ProfileSettings settings) const
 {
   if (settings.testFlag(IPluginGame::MODS)) {
+#ifdef _WIN32
+    // the Windows join keeps the upstream behavior (no separator)
     copyToProfile(localAppFolder() + gameDirectoryName(), path, "plugins.txt");
+#else
+    // Linux needs the separator to find plugins.txt in the prefix
+    copyToProfile(localAppFolder() + "/" + gameDirectoryName(), path, "plugins.txt");
+#endif
   }
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {

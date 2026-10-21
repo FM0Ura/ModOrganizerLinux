@@ -2,6 +2,9 @@
 # Fake umu-run of the end-to-end test: records how Mod Organizer (through mo2-vfs)
 # started it, then runs probe.sh on the data directory given as the first argument of
 # the "Windows program", like the game would see it.
+# With UMU_TOOL=1 it stands for a tool installed as a mod (the executable tool-exe):
+# after recording, it reads sibling.txt and creates tool-created.txt in its working
+# directory, the folder of the tool, and exits.
 set -u
 OUT="${UMU_OUT:?UMU_OUT is not set}"
 {
@@ -13,5 +16,10 @@ OUT="${UMU_OUT:?UMU_OUT is not set}"
     done
     printf 'cwd %s\n' "$PWD"
 } > "$OUT"
+if [[ ${UMU_TOOL:-} == 1 ]]; then
+    printf 'sibling %s\n' "$(cat sibling.txt 2>&1)" >> "$OUT"
+    echo "created by the tool" > tool-created.txt && echo "created" >> "$OUT"
+    exit 0
+fi
 # $1 is the .exe, $2 the data directory, $3 "two words"
 exec "$PROBE" "$2"

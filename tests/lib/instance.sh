@@ -7,7 +7,7 @@
 # and the instance in <instance dir> (a global instance when that is under
 # $XDG_DATA_HOME/ModOrganizer), with the placeholders of its ModOrganizer.ini filled in
 # (@GAME_PATH@, @PROBE@ = the configured executable "probe", @PROBE_EXE@ = probe.exe
-# of the game directory, @WORK@ = <work dir>).
+# of the game directory, @WORK@ = <work dir>, @INSTANCE@ = <instance dir>).
 #
 # With <steam root> (a fake Steam installation) <game dir> must be
 # <steam root>/steamapps/common/Skyrim Special Edition; besides, it creates the
@@ -23,6 +23,7 @@ mo2_make_instance() {
     mkdir -p "$instance/overwrite"
     sed -i -e "s|@GAME_PATH@|$game|g" -e "s|@PROBE@|$probe|g" \
         -e "s|@PROBE_EXE@|$game/probe.exe|g" -e "s|@WORK@|$work|g" \
+        -e "s|@INSTANCE@|$instance|g" \
         "$instance/ModOrganizer.ini"
     [[ -n $steam ]] || return 0
 

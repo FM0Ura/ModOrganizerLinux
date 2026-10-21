@@ -14,6 +14,7 @@
 #include <gamebryolocalsavegames.h>
 #include <gamebryosavegameinfo.h>
 #include <gamebryounmanagedmods.h>
+#include <steamutility.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -74,6 +75,14 @@ QDir GameFalloutNV::documentsDirectory() const
 
 QString GameFalloutNV::identifyGamePath() const
 {
+#ifndef _WIN32
+  // the Steam folders are not the name of the game; the second one is the edition of
+  // steamAPPId()
+  for (const QString& folder : {"Fallout New Vegas", "Fallout New Vegas enplczru"}) {
+    if (auto steam = MOBase::findSteamGame(folder, binaryName()); !steam.isEmpty())
+      return steam;
+  }
+#endif
   auto result = GameGamebryo::identifyGamePath();  // Default registry path
   // EPIC Game Store
   if (result.isEmpty()) {

@@ -111,6 +111,61 @@ TEST(VfsBridge, HostCanonicalPathThroughRunHost)
             "/home/u/missing");
 }
 
+TEST(VfsBridge, VirtualizedPathsOnHostFindsTheOtherSpelling)
+{
+  // the mods directory is spelled /var/home, the binary was picked under /home
+  TempDir root;
+  fs::create_directories(root.path() / "run/host/var/home/u/mods/Tool");
+  fs::create_symlink("var/home", root.path() / "run/host/home");
+  std::ofstream(root.path() / "run/host/var/home/u/mods/Tool/tool.exe").put('x');
+
+  Env e("host");
+  const auto p = vfsbridge::virtualizedPathsOnHost(
+      "/var/home/u/mods", "/game/Data", "/home/u/mods/Tool/tool.exe",
+      "/home/u/mods/Tool", q(root.path()));
+  ASSERT_TRUE(p.has_value());
+  EXPECT_EQ(p->binary, "/game/Data/tool.exe");
+  EXPECT_EQ(p->workingDirectory, "/game/Data");
+  EXPECT_EQ(p->mod, "Tool");
+
+  // and the other way around, with no working directory
+  const auto q2 = vfsbridge::virtualizedPathsOnHost(
+      "/home/u/mods", "/game/Data", "/var/home/u/mods/Tool/tool.exe", "",
+      q(root.path()));
+  ASSERT_TRUE(q2.has_value());
+  EXPECT_EQ(q2->binary, "/game/Data/tool.exe");
+  EXPECT_EQ(q2->workingDirectory, "");
+  EXPECT_EQ(q2->mod, "Tool");
+}
+
+TEST(VfsBridge, VirtualizedPathsOnHostPlainMatchWins)
+{
+  // nothing exists under the root: the plain match must not need the disk
+  TempDir root;
+
+  Env e("host");
+  const auto p = vfsbridge::virtualizedPathsOnHost(
+      "/home/u/mods", "/game/Data", "/home/u/mods/Tool/tool.exe", "/home/u/mods/Tool",
+      q(root.path()));
+  ASSERT_TRUE(p.has_value());
+  EXPECT_EQ(p->binary, "/game/Data/tool.exe");
+  EXPECT_EQ(p->mod, "Tool");
+}
+
+TEST(VfsBridge, VirtualizedPathsOnHostOutsideTheModsDirectory)
+{
+  TempDir root;
+  fs::create_directories(root.path() / "run/host/var/home/u/mods/Tool");
+  fs::create_directories(root.path() / "run/host/var/home/u/other");
+  fs::create_symlink("var/home", root.path() / "run/host/home");
+  std::ofstream(root.path() / "run/host/var/home/u/other/tool.exe").put('x');
+
+  Env e("host");
+  EXPECT_FALSE(vfsbridge::virtualizedPathsOnHost(
+      "/var/home/u/mods", "/game/Data", "/home/u/other/tool.exe", "/home/u/other",
+      q(root.path())));
+}
+
 TEST(VfsBridge, HostCanonicalPathDirectMode)
 {
   TempDir root;

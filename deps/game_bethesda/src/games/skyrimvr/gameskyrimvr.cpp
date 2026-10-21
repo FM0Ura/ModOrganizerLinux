@@ -13,6 +13,7 @@
 #include <gamebryolocalsavegames.h>
 #include <gamebryosavegameinfo.h>
 #include <pluginsetting.h>
+#include <steamutility.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -41,6 +42,11 @@ QDir GameSkyrimVR::documentsDirectory() const
 
 QString GameSkyrimVR::identifyGamePath() const
 {
+#ifndef _WIN32
+  // the Steam folder is SkyrimVR, not the name of the game
+  if (auto steam = MOBase::findSteamGame("SkyrimVR", binaryName()); !steam.isEmpty())
+    return steam;
+#endif
   QString path = "Software\\Bethesda Softworks\\" + gameName();
   return findInRegistry(HKEY_LOCAL_MACHINE, path.toStdWString().c_str(),
                         L"Installed Path");

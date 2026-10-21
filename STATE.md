@@ -2,13 +2,25 @@
 
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
-**Última atualização:** 2026-10-20
-**Fase atual:** 4c.2 — Pendências da Fase 2 e INIs · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4c.1 — Plugins C++ restantes (🟡 PR #4; teste manual pendente)
-**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`)
+**Última atualização:** 2026-10-21
+**Fase atual:** 4c.3 — Ferramentas pelo VFS · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4c.2 (🟡 PR #5; teste manual pendente)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4c.3 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-21-phase4c3-ferramentas-design.md`](docs/superpowers/specs/2026-10-21-phase4c3-ferramentas-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4c3-ferramentas.md`](docs/superpowers/plans/2026-10-21-phase4c3-ferramentas.md) · Checklist manual: [`docs/testing/phase4c3-manual-checklist.md`](docs/testing/phase4c3-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | Regra dos caminhos comum (`virtualizedPaths`, em `virtualizedpaths.h`), com o Windows usando-a | ✅ | `fbd20ae` |
+| 2 | O Linux roda programas de `mods/` pelo `Data` virtual (só com VFS e com o mod do binário ativo); vfs-e2e `tool-exe` | ✅ | `8b61d10`, `6133e77`, `1902980` (a revisão pediu que o perfil aberto, em memória, decida se o mod está ativo, por causa da gravação adiada da `modlist.txt`) |
+| 3 | xEdit de outros jogos: fixtures `SteamGames` e correções de detecção no `game_bethesda` | ✅ | `4269a8e`, `b2f2635`, `035164d`, `7ca99ea`, `b62fb03`, `73d2486`, `7151e0a`, `926ae89`, `1b45f04` (os testes falharam primeiro, 7 de 30: no Linux o `GameGamebryo::parseSteamLocation()` não olhava nas bibliotecas da Steam e agora usa o módulo de descoberta (`steam::findApp`), o que corrigiu o Starfield e tornou detectáveis o Fallout 3 GOTY e o Fallout 76; Skyrim VR, Fallout 4 VR, Enderal, Fallout New Vegas (inclusive a edição `enplczru`) e Enderal SE tinham um `identifyGamePath()` que só lia o registro do Windows e agora também olham nas bibliotecas da Steam no Linux; no Enderal SE o `initializeProfile()` junta as pastas do AppData e do jogo com "/" no Linux, onde o upstream as concatenava sem separador; a tabela dos testes não precisou de mudança, o My Games já estava no prefixo certo nos dez jogos) |
+| 4 | Documentação, checklist e ponto de controle de CI | ✅ README (seção "Ferramentas"), checklist, ROADMAP e STATE; o push e o PR dependem da revisão final e da autorização do usuário | este commit |
+| 5 | Teste manual no Bazzite ([`docs/testing/phase4c3-manual-checklist.md`](docs/testing/phase4c3-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4c.2 — progresso
 
@@ -178,6 +190,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 4c.3: o branch `fase-4c3-ferramentas` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c3` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c3-manual-checklist.md`.
+
 Fase 4c.2: o branch `fase-4c2-pendencias` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c2-manual-checklist.md`.
 
 Fase 4c.1: o branch `fase-4c1-plugins` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c1-manual-checklist.md`.
@@ -194,11 +208,23 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
-2. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
-3. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
-4. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
-5. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. Fase 4c.3: revisão final, push de `fase-4c3-ferramentas` e PR contra `fase-4c2-pendencias` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c3-manual-checklist.md`.
+2. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
+3. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
+4. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
+5. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
+6. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4c.3
+
+- Com o mod do binário desativado, o programa roda da pasta do mod, com um aviso no log (o Nemesis então mostra o erro 1008).
+- Execuções sem o sistema de arquivos virtual rodam o programa da pasta do mod, sem a reescrita dos caminhos.
+- O Pandora 5.0.0-beta ignora o argumento `-o`: a saída vai para o `overwrite`.
+- O xEdit de outros jogos só tem cobertura por fixtures (`SteamGames`): nenhum outro jogo Bethesda foi testado de verdade.
+- O jogo precisa ter rodado uma vez pela Steam para o prefixo e o registro `Installed Path` existirem.
+- No Linux, Enderal e Enderal SE só são detectados com o loader do SKSE na pasta do jogo (é o `binaryName()` do plugin).
+- O Fallout 3 GOTY (22370) é detectável, mas não está na tabela dos testes.
+- Valem as limitações das Fases 1 a 4c.2.
 
 ## Limitações conhecidas da Fase 4c.2
 
@@ -320,6 +346,9 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-20 | Fase 4c.1, revisão final (decisão do usuário, opção A): corrigir nesta fase os INIs do perfil no Linux. O `game_bethesda` acha os INIs do prefixo e o INI padrão ignorando maiúsculas (`GameGamebryo::resolveIgnoringCase()`, identidade no Windows) e restaura os INIs do perfil vazios ou só com `[Launcher] bEnableFileSelection=1` (nunca outro conteúdo) ao abrir o perfil (`onProfileChanged`, dentro do plugin, sem gancho novo no app) e antes de executar; o INI dos saves locais e a pasta `__MO_Saves` também; no app, `Profile::absoluteIniFilePath()` ignora maiúsculas no Linux |
 | 2026-10-20 | Fase 4c.1 desenvolvida em um worktree separado (`../ModOrganizerLinux-4c1`), para não tocar o `install/` do checkout principal, de onde o MO2 do usuário está rodando |
 | 2026-10-20 | Fase 4c.2: escopo (decisão do usuário): pendências 1–5 e 7 da Fase 2, follow-ups de INI da 4c.1 e as vizinhas R1/R2; raízes deixadas montadas reconferidas a cada 5 s por `--cleanup` + `--list-mounts` assíncronos (nunca desmonta mount de helper vivo); helper travado com programa observado deixa a raiz como montada e só é morto quando o mount some; sem tela, mensagem e código 1 antes da `QApplication`; INIs de arquivos e da invalidação de BSA resolvidos ignorando maiúsculas no ponto central. Desenvolvida no worktree `../ModOrganizerLinux-4c2` |
+| 2026-10-21 | Fase 4c.3: escopo (decisão do usuário): ferramentas reais testadas no Skyrim SE; xEdit de outros jogos só com fixtures; spike antes da spec |
+| 2026-10-21 | Fase 4c.3 (abordagem A): programa com binário ou pasta de trabalho em mods/ roda do Data virtual também no Linux, por reescrita dos caminhos antes do spawn (sem relançar o MO2), só com VFS e com o mod do binário ativo; regra comum ao Windows em virtualizedpaths.h |
+| 2026-10-21 | Fase 4c.3 (testes da Task 3, falharam 7 de 30): no Linux o `GameGamebryo::parseSteamLocation()` passa a usar a descoberta da Steam (`steam::findApp`, sob `#ifndef _WIN32`), o que corrige a detecção do Starfield e torna detectáveis o Fallout 3 GOTY e o Fallout 76; Skyrim VR, Fallout 4 VR, Enderal, Fallout New Vegas e Enderal SE ganham um `identifyGamePath()` que também olha nas bibliotecas da Steam no Linux; no Enderal SE o `initializeProfile()` junta o AppData e a pasta do jogo com "/" no Linux (o Windows mantém a linha do upstream) |
 
 ## Pendências por fase
 
@@ -371,6 +400,9 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 - Escrita de INI atômica e respeitando a codificação do arquivo; leitor de INI tratando seções repetidas como o Windows (o `#` não é comentário, como no Windows).
 - Texto do aviso da Fase 3 em inglês no código-fonte (traduções).
 - Reportar ao upstream os bugs do `bsatk` (extração duplicada, `writeData` invertido, `%s` com path).
+
+**Fase 4c.3 (Ferramentas pelo VFS)**
+- O comando `run` às vezes para de esperar o programa antes de ele terminar: visto duas vezes com o log em nível normal no spike de 2026-10-21, nunca em debug. O MO2 sai com "mo2-vfs is still running, left to end by itself" e o mount fica até o programa sair.
 
 **Fase 5 (Distribuição)**
 - Nota de proveniência/licença do `dxgiformat.h`; `7z.so` com libstdc++ dinâmica; separar símbolos de depuração (binário de ~345 MB).

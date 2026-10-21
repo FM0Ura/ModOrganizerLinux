@@ -15,11 +15,16 @@
 //   Unhooked, it is started without the virtual file system. The errors are shown in
 //   a dialog only when there is a user interface (not in the run command line, where
 //   they are only logged). There is no Steam check and no executable blacklist
-//   (no-ops on Linux, see spawn_linux.cpp), and a program inside the mods directory is
-//   not redirected to its place in the data directory through the "launch" command of
-//   another instance (adjustForVirtualized(), which the Linux "launch" doesn't
-//   support): it runs from where it is. Documents (setFromFile() with a file that is
-//   not a program) are opened by their application, unhooked.
+//   (no-ops on Linux, see spawn_linux.cpp). A program whose binary or working
+//   directory is inside the mods directory runs from its place in the data directory
+//   (virtualizedpaths.h), like on Windows, but without the "launch" command of another
+//   instance (adjustForVirtualized()): every process sees the mount, so the paths of
+//   the launch are changed directly; only with the virtual file system, and only when
+//   the mod of the binary is active in the profile of the run (otherwise the file
+//   isn't in the data directory and the program runs from the mods directory, with a
+//   warning). Plugins (beforeRun()) see the paths of the executable, as on Windows.
+//   Documents (setFromFile() with a file that is not a program) are opened by their
+//   application, unhooked.
 // - waitForAllUSVFSProcessesWithLock() waits for the programs mo2-vfs started
 //   (VfsConnector::runningPrograms(): the programs and the Wine servers that keep the
 //   mount) instead of the processes usvfs knows,
@@ -31,13 +36,17 @@
 //   (exitcodes::take()).
 
 #include "../iuserinterface.h"
+#include "../modinfo.h"
 #include "../organizercore.h"
 #include "../processrunner.h"
 #include "../profile.h"
+#include "../settings.h"
 #include "../shared/appconfig.h"
 #include "../spawn.h"
+#include "../virtualizedpaths.h"
 #include "exitcodes_linux.h"
 #include "protonlauncher_linux.h"
+#include "vfsbridge_linux.h"
 
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -50,6 +59,7 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <climits>
 #include <cstdint>
 #include <cstring>
 #include <signal.h>
@@ -68,6 +78,28 @@ namespace
 pid_t toPid(HANDLE h)
 {
   return static_cast<pid_t>(reinterpret_cast<std::intptr_t>(h));
+}
+
+// whether the mod is active in the profile of a run; false for a mod that doesn't
+// exist. The open profile is read from memory: its modlist.txt may still have a
+// deferred write pending (beforeRun() flushes it before fileMapping() reads the file),
+// so the disk could disagree with what is going to be mounted. Another profile has no
+// pending writes and is read like fileMapping() does
+bool modActive(OrganizerCore& core, const QString& profileName, const QString& mod)
+{
+  const unsigned int index = ModInfo::getIndex(mod);
+  if (index == UINT_MAX) {
+    return false;
+  }
+
+  if (const auto current = core.currentProfile();
+      current && current->name() == profileName) {
+    return current->modEnabled(index);
+  }
+
+  const Profile profile(QDir(core.settings().paths().profiles() + "/" + profileName),
+                        core.managedGame(), core.gameFeatures());
+  return profile.modEnabled(index);
 }
 
 }  // namespace
@@ -202,23 +234,10 @@ ProcessRunner::Results ProcessRunner::run()
     return Error;
   }
 
-  // the output of the program, next to the logs of Mod Organizer (none in the tests)
-  QString output;
-  if (const auto dp = qApp->property("dataPath"); !dp.isNull()) {
-    output = dp.toString() + "/" + QString::fromStdWString(AppConfig::logPath()) +
-             "/run-" + m_sp.binary.completeBaseName() + ".log";
-  }
-
-  VfsSpawnRequest request;
-  try {
-    const auto* game = m_core.managedGame();
-    request          = proton::makeLaunch(
-        {m_sp.binary, m_sp.arguments, m_sp.currentDirectory.path(), m_sp.steamAppID,
-         game ? game->steamAPPId() : QString(), m_sp.proton, m_sp.environment, output});
-  } catch (const proton::LaunchError& e) {
-    showError(QString::fromStdString(e.what()));
-    return Error;
-  }
+  // the binary and the working directory of the launch; plugins (beforeRun()) get
+  // those of the executable, as on Windows
+  QFileInfo launchBinary  = m_sp.binary;
+  QString launchDirectory = m_sp.currentDirectory.path();
 
   if (m_sp.hooked) {
     if (m_profileName.isEmpty()) {
@@ -231,6 +250,51 @@ ProcessRunner::Results ProcessRunner::run()
       m_profileName = profile->name();
     }
 
+    // a program inside the mods directory runs from its place in the data directory,
+    // where the virtual file system shows it (see the top of this file)
+    const auto* game = m_core.managedGame();
+    if (const auto paths = vfsbridge::virtualizedPathsOnHost(
+            m_core.settings().paths().mods(), game->dataDirectory().absolutePath(),
+            m_sp.binary.absoluteFilePath(), m_sp.currentDirectory.path())) {
+      if (paths->mod.isEmpty()) {
+        // only the working directory is in a mod
+        launchDirectory = paths->workingDirectory;
+      } else if (modActive(m_core, m_profileName, paths->mod)) {
+        launchBinary    = QFileInfo(paths->binary);
+        launchDirectory = paths->workingDirectory;
+      } else {
+        log::warn("'{}' is not active; '{}' runs from the mods directory", paths->mod,
+                  m_sp.binary.absoluteFilePath());
+      }
+
+      if (launchBinary != m_sp.binary ||
+          launchDirectory != m_sp.currentDirectory.path()) {
+        log::debug("virtualized: '{}' runs as '{}' in '{}'",
+                   m_sp.binary.absoluteFilePath(), launchBinary.absoluteFilePath(),
+                   launchDirectory);
+      }
+    }
+  }
+
+  // the output of the program, next to the logs of Mod Organizer (none in the tests)
+  QString output;
+  if (const auto dp = qApp->property("dataPath"); !dp.isNull()) {
+    output = dp.toString() + "/" + QString::fromStdWString(AppConfig::logPath()) +
+             "/run-" + m_sp.binary.completeBaseName() + ".log";
+  }
+
+  VfsSpawnRequest request;
+  try {
+    const auto* game = m_core.managedGame();
+    request          = proton::makeLaunch(
+        {launchBinary, m_sp.arguments, launchDirectory, m_sp.steamAppID,
+         game ? game->steamAPPId() : QString(), m_sp.proton, m_sp.environment, output});
+  } catch (const proton::LaunchError& e) {
+    showError(QString::fromStdString(e.what()));
+    return Error;
+  }
+
+  if (m_sp.hooked) {
     // saves the profile, mounts the virtual file system, notifies the plugins, etc.;
     // false if a plugin doesn't want the program to run or the file system can't be
     // mounted (the user has been told)
@@ -246,7 +310,7 @@ ProcessRunner::Results ProcessRunner::run()
   } catch (const std::exception& e) {
     auto text =
         QObject::tr("Cannot start \"%1\": %2")
-            .arg(m_sp.binary.absoluteFilePath(), QString::fromStdString(e.what()));
+            .arg(launchBinary.absoluteFilePath(), QString::fromStdString(e.what()));
     if (request.argv.value(0) == "umu-run" &&
         QString::fromStdString(e.what()).contains("umu-run")) {
       // spawn_failed for argv[0]: umu-run is not in the PATH of the host
