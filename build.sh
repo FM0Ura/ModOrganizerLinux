@@ -27,7 +27,7 @@ ALL_TARGETS=(
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
     check_fnis tool_inieditor tool_inibakery plugin_python
     preview_dds form43_checker script_extender_plugin_checker tool_configurator
-    installer_wizard fnistool
+    installer_wizard fnistool basic_games
 )
 
 ONLY=()
@@ -472,6 +472,18 @@ build_installer_wizard() {
         die "installer_wizard: the pip package bain-wizard-interpreter is not installed in lib/"
 }
 build_fnistool() { python_plugin fnistool FNISTool.py FNISPatches.py FNISToolReset.py; }
+# basic_games (Phase 4d.2): the meta-plugin of the games that are not Bethesda's, with
+# its pip dependencies; with --tests its pytest suite (tests/basic-games) imports the
+# installed package with the installed mobase, in a HOME with a fake Steam
+build_basic_games() {
+    python_plugin basic_games basic_games
+    [[ $TESTS == 1 ]] || return 0
+    [[ -d $INSTALL/bin/plugins/basic_games/lib/vdf ]] ||
+        die "basic_games: the pip package vdf is not installed in lib/"
+    PYTHONPATH="$INSTALL/bin/plugins/plugin_python/libs:$INSTALL/bin/plugins" \
+        python3 -m pytest -p no:cacheprovider "$ROOT/tests/basic-games" -q ||
+        die "basic_games tests failed"
+}
 
 # --- driver -----------------------------------------------------------------
 
