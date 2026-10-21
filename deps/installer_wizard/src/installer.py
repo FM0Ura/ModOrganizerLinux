@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Union, cast
 
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication
 
 from wizard.runner import WizardRunnerState
@@ -16,7 +18,17 @@ import mobase
 
 from .dialog import WizardInstallerDialog
 from .runner import make_interpreter
-from .utils import make_ini_tweaks, merge_ini_tweaks
+from .utils import make_ini_tweaks, merge_ini_tweaks, native_path
+
+
+def _open_script(script: str):
+    """
+    Opens the wizard script with the program the system associates to it.
+    """
+    if sys.platform == "win32":
+        os.startfile(script)
+    else:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(script))
 
 
 class WizardInstaller(mobase.IPluginInstallerSimple):
@@ -297,7 +309,7 @@ class WizardInstaller(mobase.IPluginInstallerSimple):
         )
 
         dialog.scriptButtonClicked.connect(  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-            lambda: os.startfile(script)
+            lambda: _open_script(script)
         )
 
         # unlike the official installer, we do not have a "silent" setting, but it is
@@ -356,7 +368,7 @@ class WizardInstaller(mobase.IPluginInstallerSimple):
                     o_filename = paths[index + 1]
 
                 # if the file existed before, we keep the new one at the same place
-                if o_entry or Path(filename).parts[0].lower() == "ini tweaks":
+                if o_entry or Path(native_path(filename)).parts[0].lower() == "ini tweaks":
                     entry = new_tree.addFile(filename, replace_if_exists=True)
 
                 # otherwise we create it in INI Tweaks

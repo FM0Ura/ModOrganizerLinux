@@ -12,6 +12,8 @@ from wizard.value import SubPackage, SubPackages
 
 import mobase
 
+from .utils import native_path
+
 
 class MO2SubPackage(SubPackage):
     _tree: mobase.IFileTree
@@ -130,6 +132,7 @@ class MO2ManagerModInterface(ManagerModInterface):
         # TODO: This does not handle weird path that go back (..) and then in data
         # again, e.g. ../data/xxx.esp.
         path: Optional[Path]
+        filepath = native_path(filepath)
         if filepath.startswith(".."):
             path = Path(self._game.dataDirectory().absoluteFilePath(filepath))
             if not path.exists():

@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 import re
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
 from wizard.tweaks import WizardINISetting, WizardINISettingEdit
+
+
+def native_path(path: str) -> str:
+    """
+    The path of a wizard script (Windows style) in the separators of the platform.
+    """
+    if sys.platform == "win32":
+        return path
+    else:
+        return path.replace("\\", "/")
 
 
 def make_obscript_ini_tweaks(tweaks: Sequence[WizardINISetting]) -> str:
