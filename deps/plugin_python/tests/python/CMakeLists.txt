@@ -25,23 +25,40 @@ target_sources(python-tests
 		test_shared_cpp_owner.py
 )
 
-add_test(NAME pytest
-	COMMAND ${CMAKE_CURRENT_BINARY_DIR}/pylibs/bin/pytest.exe ${CMAKE_CURRENT_SOURCE_DIR} -s
-)
+if (WIN32)
+	add_test(NAME pytest
+		COMMAND ${CMAKE_CURRENT_BINARY_DIR}/pylibs/bin/pytest.exe ${CMAKE_CURRENT_SOURCE_DIR} -s
+	)
 
-set_tests_properties(pytest
-	PROPERTIES
-	DEPENDS python-tests
-	ENVIRONMENT_MODIFICATION
-	"PYTHONPATH=set:${PYLIB_DIR}\\;$<TARGET_FILE_DIR:mobase>;\
+	set_tests_properties(pytest
+		PROPERTIES
+		DEPENDS python-tests
+		ENVIRONMENT_MODIFICATION
+		"PYTHONPATH=set:${PYLIB_DIR}\\;$<TARGET_FILE_DIR:mobase>;\
 UIBASE_PATH=set:${UIBASE_PATH}"
-)
+	)
 
-mo2_python_pip_install(python-tests
-	DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pylibs
-	PACKAGES pytest
-		PyQt${MO2_QT_VERSION_MAJOR}==${MO2_PYQT_VERSION}
-		PyQt${MO2_QT_VERSION_MAJOR}-Qt${MO2_QT_VERSION_MAJOR}==${MO2_QT_VERSION})
+	mo2_python_pip_install(python-tests
+		DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pylibs
+		PACKAGES pytest
+			PyQt${MO2_QT_VERSION_MAJOR}==${MO2_PYQT_VERSION}
+			PyQt${MO2_QT_VERSION_MAJOR}-Qt${MO2_QT_VERSION_MAJOR}==${MO2_QT_VERSION})
+else()
+	# Linux: the system's pytest and PyQt6 (spec of Phase 4d.1, section 1.2); the
+	# support modules (mobase_tests) are in pylibs; no pytest cache in the sources
+	add_test(NAME pytest
+		COMMAND ${Python_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} -s
+			-p no:cacheprovider
+	)
+
+	set_tests_properties(pytest
+		PROPERTIES
+		DEPENDS python-tests
+		ENVIRONMENT_MODIFICATION
+		"PYTHONPATH=set:$<TARGET_FILE_DIR:mobase>:${PYLIB_DIR};\
+UIBASE_PATH=set:${UIBASE_PATH}"
+	)
+endif()
 add_dependencies(python-tests mobase)
 set_target_properties(python-tests PROPERTIES FOLDER tests/python)
 

@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "MockOrganizer.h"
+#include "TestPythonPaths.h"
 #include "pythonrunner.h"
 
 #include <QCoreApplication>
@@ -10,7 +11,7 @@ TEST(Lifetime, Plugins)
     const auto plugins_folder = QString(std::getenv("PLUGIN_DIR"));
 
     auto runner = mo2::python::createPythonRunner();
-    runner->initialize();
+    runner->initialize(testPythonPaths());
 
     {
         const auto objects = runner->load(plugins_folder + "/dummy-iplugin.py");

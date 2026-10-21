@@ -1,6 +1,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
+#include "TestPythonPaths.h"
 #include "pythonrunner.h"
 
 #include <QCoreApplication>
@@ -16,7 +17,7 @@ TEST(IPluginGame, Simple)
     const auto plugins_folder = QString(std::getenv("PLUGIN_DIR"));
 
     auto runner = mo2::python::createPythonRunner();
-    runner->initialize();
+    runner->initialize(testPythonPaths());
 
     // load objects
     const auto objects = runner->load(plugins_folder + "/dummy-game.py");
