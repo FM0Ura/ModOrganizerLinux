@@ -43,6 +43,7 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `tool_configurator` | https://github.com/ModOrganizer2/modorganizer-tool_configurator | `master` (`22b6243ea47b4e28ee788d3b184db42489c7d4dc`) | 2026-05-21 |
 | `installer_wizard` | https://github.com/ModOrganizer2/modorganizer-installer_wizard | `master` (`d38019a994a42609376975227201531007cba9ae`) | 2025-05-29 |
 | `fnistool` | https://github.com/ModOrganizer2/modorganizer-fnistool | `master` (`6cd125da7494450f77dfbafb61a8294088f9a8fb`) | 2026-06-03 |
+| `basic_games` | https://github.com/ModOrganizer2/modorganizer-basic_games | `master` (`f1207d6398fbb4adda281f2bd5c563105391baaf`) | 2026-10-05 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`
@@ -96,6 +97,19 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   the success file of the pip requirements (`mo2_python.cmake`) is touched with
   `cmake -E touch` on Linux. A `git subtree pull` of any of them must keep these (see the
   `deps/<name>: Linux:` commits).
+- **`basic_games`** (Python meta-plugin of about 80 games that are not Bethesda's, with
+  its pip requirements installed in `lib/`) carries Linux fixes that are not upstream:
+  the stores are only asked for what Linux has. `steam_utils.find_games()` returns a lazy
+  mapping of app ID to game folder whose queries call `mobase.utils.steamApp` (it cannot
+  be listed, so `items()` is empty), `find_steam_path()` returns `None`; `gog_utils`,
+  `epic_utils`, `origin_utils` and `eadesktop_utils` return `{}` and log once that only
+  Steam games are detected; `winreg` is imported only on Windows (also in
+  `games/game_oblivion_remaster.py`, whose `getLootPath()` returns `None`); and
+  `createPlugins()` skips a game module that failed to import instead of registering
+  the classes of the previous one again. Each is in
+  `if sys.platform == "win32": ... else: ...`. A `git subtree pull` must keep them (see
+  the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games --tests` runs
+  `tests/basic-games` against the installed package.
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 
