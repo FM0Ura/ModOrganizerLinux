@@ -46,6 +46,13 @@ O `mo2-vfs` precisa ficar na mesma pasta que o `ModOrganizer` (`bin/`); alternat
 aponte `MO2_VFS_BINARY=/caminho/mo2-vfs`. Se a janela não abrir no Wayland, use
 `env QT_QPA_PLATFORM=xcb` (ver checklist da Fase 1). **Nunca rode o MO2 como root.**
 
+**Rodando por SSH** (em vez do Konsole da área de trabalho): sem a sessão gráfica o MO2
+não abre. Exporte as variáveis da sessão da área de trabalho antes do comando:
+`WAYLAND_DISPLAY` (ex.: `wayland-0`), `XDG_SESSION_TYPE=wayland`,
+`XDG_RUNTIME_DIR=/run/user/$UID`, `DISPLAY` (ex.: `:0`) e `XAUTHORITY` (o arquivo
+`xauth_*` em `$XDG_RUNTIME_DIR`). Sem `XAUTHORITY`, programas X11 como o `xterm` falham
+com "Authorization required". Mais simples: rodar do Konsole da área de trabalho.
+
 Para o teste você precisa de: Skyrim Special Edition instalado no Steam (ou apenas a pasta
 do jogo) e **dois mods pequenos que tenham pelo menos um arquivo em comum** (mesmo caminho
 em `Data`, conteúdo diferente; por exemplo um `Textures/teste/a.txt` em cada, com texto
@@ -104,8 +111,10 @@ Shell VFS (ou fechar a janela do Dolphin).
   (`/usr/bin/xterm` ou `/usr/bin/konsole`). Dê o título **Shell VFS** e, no campo de
   argumentos, o caminho completo do script e a pasta `Data` do jogo:
   xterm: `-e /home/<usuário>/bin/vfs-shell.sh "<pasta do jogo>/Data"`;
-  konsole: `--nofork -e /home/<usuário>/bin/vfs-shell.sh "<pasta do jogo>/Data"` (sem
-  `--nofork` o Konsole pode entregar a janela a uma instância já aberta). Confirme com **"OK"**.
+  konsole: `--separate --nofork -e /home/<usuário>/bin/vfs-shell.sh "<pasta do jogo>/Data"`
+  (sem `--separate` o Konsole entrega a janela ao Konsole já aberto do host, pela sessão
+  D-Bus, e sai na hora, e o VFS desmonta; sem `--nofork` ele se desliga do processo que o
+  MO2 observa). Confirme com **"OK"**.
   Esperado: o executável aparece na caixa ao lado do botão **"Run"**.
 - [ ] (Alternativa) Da mesma forma, `/usr/bin/dolphin` com o título **Dolphin VFS** e os
   argumentos `--new-window "<pasta do jogo>/Data"`. Antes de cada execução, feche todas as
@@ -154,8 +163,10 @@ Shell VFS (ou fechar a janela do Dolphin).
 - [ ] Repetir com o MO2 aberto pelo terminal: com o programa de teste aberto, apertar
   **Ctrl+C** no terminal do MO2 (ou fechar esse terminal).
   Esperado: o mount **continua** (`findmnt` dentro do box) e o programa de teste continua
-  vendo os arquivos dos mods, feche o MO2 ou não: o `mo2-vfs` roda numa sessão própria e
-  não recebe o Ctrl+C nem o fechamento do terminal.
+  vendo os arquivos dos mods: o `mo2-vfs` roda numa sessão própria e não recebe o Ctrl+C
+  nem o fechamento do terminal. Com o MO2 aberto por `distrobox enter ... | tee` (passo 3
+  da preparação), o Ctrl+C (ou fechar o terminal) encerra só o cliente do podman: o MO2
+  **continua aberto**, e o mount também. Feche o MO2 pela janela (**File -> "Exit"**).
 - [ ] Fechar o programa de teste.
   Esperado: a `Data` é desmontada sozinha (`findmnt` vazio) pouco depois.
 
@@ -175,7 +186,7 @@ Shell VFS (ou fechar a janela do Dolphin).
 
 ## 8. Encerramento
 
-- [ ] Fechar o MO2 (**File -> "Exit"**). `pgrep ModOrganizer` e `pgrep mo2-vfs` vazios; nenhum `crash.log` novo.
+- [ ] Fechar o MO2 (**File -> "Exit"**). `pgrep ModOrganizer` e `pgrep mo2-vfs` vazios; nenhum `crash.log` novo **não vazio** (o MO2 cria um `crash.log` vazio ao iniciar; só um com conteúdo indica queda).
 - [ ] No fim, dentro do box:
   `findmnt -n -o TARGET,FSTYPE,SOURCE | grep mo2-vfs` não imprime nada.
 
@@ -184,7 +195,7 @@ Shell VFS (ou fechar a janela do Dolphin).
 1. **Qual item** falhou e o que você viu (print ajuda).
 2. **Saída do terminal** (`~/mo2-terminal.log`, do `tee` do passo 3 da preparação).
 3. **Logs da instância**: `~/.local/share/ModOrganizer/<nome da instância>/logs/`
-   (`mo_interface.log` e, se existir, `crash.log`):
+   (`mo_interface.log` e, se não estiver vazio, `crash.log`):
    ```sh
    tar czf ~/mo2-logs.tar.gz -C ~/.local/share/ModOrganizer/<nome da instância> logs
    ```

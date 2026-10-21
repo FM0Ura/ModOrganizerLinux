@@ -98,6 +98,9 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
    `QT_QPA_PLATFORM` não é necessário em um desktop (só para execução sem tela). Se a janela
    não aparecer no Wayland, tente
    `distrobox enter mo2-run -- env QT_QPA_PLATFORM=xcb ~/mo2-phase1/bin/ModOrganizer`.
+   Por SSH, exporte antes as variáveis da sessão da área de trabalho (`WAYLAND_DISPLAY`,
+   `XDG_SESSION_TYPE`, `XDG_RUNTIME_DIR`, `DISPLAY`, `XAUTHORITY`); sem tela, o MO2 avisa
+   ("needs a graphical session") e sai.
 
 Problemas na abertura: nunca rode o MO2 como root/`sudo`; se ele travar logo depois de escolher
 a instância, use `env QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` antes do binário (e, em placa

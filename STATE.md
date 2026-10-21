@@ -3,12 +3,26 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-20
-**Fase atual:** 4c.1 — Plugins C++ restantes · **Status:** 🟡 implementação e correções da revisão final concluídas; push, CI e teste manual pendentes · **Anterior:** 4b — LOOT (🟡 PR #3: CI Linux e Windows verdes em 2026-10-20; teste manual pendente)
-**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal)
+**Fase atual:** 4c.2 — Pendências da Fase 2 e INIs · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4c.1 — Plugins C++ restantes (🟡 PR #4; teste manual pendente)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4c.2 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](docs/superpowers/specs/2026-10-20-phase4c2-pendencias-design.md) · Plano: [`docs/superpowers/plans/2026-10-20-phase4c2-pendencias.md`](docs/superpowers/plans/2026-10-20-phase4c2-pendencias.md) · Checklist manual: [`docs/testing/phase4c2-manual-checklist.md`](docs/testing/phase4c2-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | Timeouts do VFS testáveis: `MO2_VFS_TIMEOUT_MS` só encurta o timeout do mount (R2) | ✅ | `0060c51` |
+| 2 | Reconferência assíncrona das raízes deixadas montadas (R1) | ✅ | `5090625` |
+| 3 | Helper travado com programa observado: a raiz fica como montada e o helper só é morto quando o mount some (P7) | ✅ | `9460c09` |
+| 4 | Sem tela, mensagem clara e código de saída 1 antes da `QApplication` (P1) | ✅ | `54aa961`, `d129e7c` (smoke "without a display") |
+| 5 | INIs de arquivos e da invalidação de BSA ignorando maiúsculas (I1, I2) | ✅ | `d385b5a` |
+| 6 | Documentação, checklist e ponto de controle de CI | ✅ docs e checklist (pendências P2 a P5 da Fase 2, nota de SSH no README); o ponto de controle de CI, o push e o PR dependem da revisão final e da autorização do usuário | este commit |
+| 7 | Teste manual no Bazzite ([`docs/testing/phase4c2-manual-checklist.md`](docs/testing/phase4c2-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4c.1 — progresso
 
@@ -181,8 +195,15 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 1. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
 2. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
 3. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
-4. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). Depois, a Fase 4c.2: as 6 pendências restantes da Fase 2 (do teste manual e da revisão final), em "Pendências por fase".
+4. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
 5. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4c.2
+
+- Um `DISPLAY` definido mas inalcançável (ex.: `:0` sem servidor X) ainda aborta na Qt ("could not connect to display"); só a falta das variáveis é detectada.
+- Um helper que para de responder com programas rodando só é morto quando o mount dele some; se ele nunca desmontar, o mount fica até o usuário fechar os programas e usar `fusermount3 -uz` (ou "Unlock"), e o refresh fica adiado até lá.
+- "Executar" sem VFS com um helper travado ainda descarta o helper travado sem matá-lo (o destrutor espera até 5 s e o deixa rodando), como antes.
+- Valem as limitações das Fases 1 a 4c.1.
 
 ## Limitações conhecidas da Fase 4c.1
 
@@ -295,17 +316,18 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-20 | Fase 4c.1: corrigido no `check_fnis` um bug do upstream: `waitForApplication` recebia o ponteiro do código de saída no lugar do parâmetro `refresh` |
 | 2026-10-20 | Fase 4c.1, revisão final (decisão do usuário, opção A): corrigir nesta fase os INIs do perfil no Linux. O `game_bethesda` acha os INIs do prefixo e o INI padrão ignorando maiúsculas (`GameGamebryo::resolveIgnoringCase()`, identidade no Windows) e restaura os INIs do perfil vazios ou só com `[Launcher] bEnableFileSelection=1` (nunca outro conteúdo) ao abrir o perfil (`onProfileChanged`, dentro do plugin, sem gancho novo no app) e antes de executar; o INI dos saves locais e a pasta `__MO_Saves` também; no app, `Profile::absoluteIniFilePath()` ignora maiúsculas no Linux |
 | 2026-10-20 | Fase 4c.1 desenvolvida em um worktree separado (`../ModOrganizerLinux-4c1`), para não tocar o `install/` do checkout principal, de onde o MO2 do usuário está rodando |
+| 2026-10-20 | Fase 4c.2: escopo (decisão do usuário): pendências 1–5 e 7 da Fase 2, follow-ups de INI da 4c.1 e as vizinhas R1/R2; raízes deixadas montadas reconferidas a cada 5 s por `--cleanup` + `--list-mounts` assíncronos (nunca desmonta mount de helper vivo); helper travado com programa observado deixa a raiz como montada e só é morto quando o mount some; sem tela, mensagem e código 1 antes da `QApplication`; INIs de arquivos e da invalidação de BSA resolvidos ignorando maiúsculas no ponto central. Desenvolvida no worktree `../ModOrganizerLinux-4c2` |
 
 ## Pendências por fase
 
 **Fase 2 — encontradas no teste manual (2026-10-17), adiadas a pedido**
-1. Sem tela (`WAYLAND_DISPLAY`/`DISPLAY` vazios, ex. por SSH) o MO2 aborta com "has crashed" e backtrace; deveria dizer claramente que não há display e sair.
-2. Konsole como programa de teste precisa de `--separate --nofork`: sem `--separate` ele entrega a janela ao Konsole do host (D-Bus), sai na hora e o VFS desmonta. Corrigir o checklist e o exemplo de executável.
-3. Checklist: rodar o MO2 por SSH exige `WAYLAND_DISPLAY`, `XDG_SESSION_TYPE`, `XDG_RUNTIME_DIR`, `DISPLAY` e `XAUTHORITY` (sem `XAUTHORITY` programas X11 como o xterm não abrem: "Authorization required"); ou rodar do Konsole da área de trabalho.
-4. Checklist item 6b: pela distrobox com `| tee`, Ctrl+C/fechar o terminal derruba só o cliente do podman — o MO2 continua aberto (o mount também continua, como esperado). Ajustar o texto.
-5. Checklist item 8: o MO2 cria `logs/crash.log` vazio ao iniciar; checar "não vazio".
+1. ~~Sem tela (`WAYLAND_DISPLAY`/`DISPLAY` vazios, ex. por SSH) o MO2 aborta com "has crashed" e backtrace; deveria dizer claramente que não há display e sair.~~ Resolvido na Fase 4c.2 (Task 4: mensagem e código de saída 1 antes da `QApplication`).
+2. ~~Konsole como programa de teste precisa de `--separate --nofork`: sem `--separate` ele entrega a janela ao Konsole do host (D-Bus), sai na hora e o VFS desmonta. Corrigir o checklist e o exemplo de executável.~~ Resolvido na Fase 4c.2 (Task 6: checklist da Fase 2 com `--separate --nofork`).
+3. ~~Checklist: rodar o MO2 por SSH exige `WAYLAND_DISPLAY`, `XDG_SESSION_TYPE`, `XDG_RUNTIME_DIR`, `DISPLAY` e `XAUTHORITY` (sem `XAUTHORITY` programas X11 como o xterm não abrem: "Authorization required"); ou rodar do Konsole da área de trabalho.~~ Resolvido na Fase 4c.2 (Task 6: nota no checklist da Fase 2 e no README).
+4. ~~Checklist item 6b: pela distrobox com `| tee`, Ctrl+C/fechar o terminal derruba só o cliente do podman — o MO2 continua aberto (o mount também continua, como esperado). Ajustar o texto.~~ Resolvido na Fase 4c.2 (Task 6: texto do item ajustado no checklist da Fase 2).
+5. ~~Checklist item 8: o MO2 cria `logs/crash.log` vazio ao iniciar; checar "não vazio".~~ Resolvido na Fase 4c.2 (Task 6: checklist da Fase 2 pede `crash.log` não vazio).
 6. ~~`mo2-vfs`: aviso `cannot write to stdout (Broken pipe)` quando o MO2 já fechou — silenciar nesse caso.~~ Resolvido na Fase 3 (Task 1, `EPIPE` sem aviso).
-7. Da revisão final (adiado junto, decisão de 2026-10-17): helper travado com grupo observado → `helperLost()` chama `deactivated()` com a raiz ainda montada, e o refresh adiado pode varrer um mount vivo ou travado (só quando `update`/`watch` expira durante uma execução; correção sugerida: `keepLeftMounted()` + `m_cleanupNeeded`).
+7. ~~Da revisão final (adiado junto, decisão de 2026-10-17): helper travado com grupo observado → `helperLost()` chama `deactivated()` com a raiz ainda montada, e o refresh adiado pode varrer um mount vivo ou travado (só quando `update`/`watch` expira durante uma execução; correção sugerida: `keepLeftMounted()` + `m_cleanupNeeded`).~~ Resolvido na Fase 4c.2 (Task 3: o helper travado com programa observado mantém a raiz como montada e só é morto quando o mount some).
 
 Itens menores encontrados nas revisões e adiados (listas completas nos ledgers de cada fase). As pendências da Fase 1 marcadas para a Fase 2 (teste de `fileMapping()`, varredura de pastas, FILETIME/INI, guard de saves, smoke test) foram resolvidas.
 
@@ -324,7 +346,7 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 - Cache de diretórios do Wine após `update` a quente (não testado; a interface fica travada durante a execução).
 - `waitInactive` espera até 5 s após o Unlock; o destrutor do conector pode bloquear a GUI até 5 s com grupo vivo.
 - Aviso de VFS perdido só aparece no `afterRun` (execuções que o pulam avisam no próximo Run).
-- Estado "não foi possível desmontar" nunca reconfere o mountinfo (refresh fica adiado até o próximo Run); `reportError()` do `uibase` Linux abre modal mesmo offscreen (`run` pela linha de comando não termina após erro); no Windows, `run` sem UI perde o motivo no diálogo (mudança do `beforeRun` sem `#ifndef _WIN32`).
+- ~~Estado "não foi possível desmontar" nunca reconfere o mountinfo (refresh fica adiado até o próximo Run)~~ (resolvido na Fase 4c.2, Task 2: a cada 5 s); `reportError()` do `uibase` Linux abre modal mesmo offscreen (`run` pela linha de comando não termina após erro); no Windows, `run` sem UI perde o motivo no diálogo (mudança do `beforeRun` sem `#ifndef _WIN32`).
 - Passthrough (desligado por padrão): `O_RDWR` reaberto sem necessidade, janela create-vs-open, `ETXTBSY` espúrio após release tardio, contagem de `io_modes` vaza em open interrompido.
 - Whiteouts: o caminho antigo de um rename continua mascarado até desmontar (esconde mod instalado depois); whiteouts por origem superdisfarçam quando uma fonte tem dois destinos; nunca são coletados.
 - `AsyncPipe` (fds) na espera de processos.
@@ -339,7 +361,7 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 
 **Fase 4 (Ecossistema)**
 - Desenho `read64`/`readWinLong` + `static_assert` para substituir o guard de CI dos saves (o guard não vê `read(v)` deduzido nem grafias raras).
-- `MO2_VFS_TIMEOUT_MS` também pode alongar o timeout: limitar a 30 s; `mo2-vfs`: stdin não-UTF-8 tratado como EOF, ~~`println!` do modo de limpeza entra em pânico com EPIPE~~ (resolvido na Fase 3), validar destino "/" em mapeamento de arquivo (hoje `expect()`), mapeamento de arquivo ignora sufixos de skip.
+- ~~`MO2_VFS_TIMEOUT_MS` também pode alongar o timeout: limitar a 30 s~~ (resolvido na Fase 4c.2, Task 1); `mo2-vfs`: stdin não-UTF-8 tratado como EOF, ~~`println!` do modo de limpeza entra em pânico com EPIPE~~ (resolvido na Fase 3), validar destino "/" em mapeamento de arquivo (hoje `expect()`), mapeamento de arquivo ignora sufixos de skip.
 - `plugin_python`: `cmake_common` exige Python 3.13 exato; ramo `pylupdate6.exe`.
 - ~~Credenciais via keyring~~ (Fase 4a); mensagem amigável quando o MO2 foi aberto como root antes (`/tmp/qipc_*`).
 - Lixeira por ponto de montagem (`.Trash-$uid`).
