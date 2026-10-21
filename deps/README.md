@@ -82,8 +82,10 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   Fedora packages, never pip) and needs `sip-module` (package `sip6`) to generate
   `sip.h`. Besides its Linux branches, it carries fixes for pybind11 3 and for the
   imported configuration mapping of mo2-cmake (see the `deps/plugin_python:` commits);
-  a `git subtree pull` must keep them. Its upstream tests are not built yet (the build
-  turns `BUILD_TESTING` off for it).
+  a `git subtree pull` must keep them. On Linux the proxy is not linked to the runner:
+  it loads `libpython` and `plugin_python/dlls/librunner.so` with `dlopen` (the runner
+  exports `mo2_create_python_runner`), so that a missing Python is reported by the
+  plugin; `build.sh --tests` checks that neither is `NEEDED` by `plugin_python.so`.
 - **`fnistool`**, **`installer_wizard`**, **`script_extender_plugin_checker`** and
   **`tool_configurator`** (Python plugins) carry Linux fixes that are not upstream, each
   in `if sys.platform == "win32": ... else: ...`: `fnistool` passes `RedirectFiles` as a

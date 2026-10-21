@@ -10,6 +10,7 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d1-python-design.md`](../superpowe
 
 - [ ] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, o "Python Proxy" e os plugins Python ("DDS Preview Plugin", "Form 43 Plugin Checker", "Script Extender Plugin Load Checker", "Configurator", "BAIN Wizard Installer", "FNIS Integration Tool", "FNIS Patches Tool" e "FNIS Integration Tool Reset") aparecem habilitados.
 - [ ] No log (`logs/mo_interface.log`): nenhuma linha `failed to init python`.
+- [ ] Fechar o MO2 pelo menu (**File → Exit**; traduzido, **Arquivo → Sair**). Esperado: o MO2 fecha sem travar (`pgrep -x ModOrganizer` vazio) e o `logs/crash.log` da instância continua vazio (o MO2 cria um `crash.log` vazio ao iniciar; só um com conteúdo indica queda ao fechar com o Python carregado).
 
 ## 2. Pré-visualização de DDS
 
@@ -61,7 +62,7 @@ rm -f /tmp/mo2_isolation_probe.txt
 distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer
 ```
 
-  Depois de o MO2 abrir (pode fechá-lo): `head -1 /tmp/mo2_isolation_probe.txt`. **Esperado: `invisible`.** Se mostrar `visible`, o isolamento falhou (reprove o item). O resto do arquivo é o `sys.path` do MO2: só a biblioteca padrão e o `site-packages` do sistema (`/usr/lib64/python3.14`, `/usr/lib/python3.14`) e pastas do MO2, nada sob `$HOME` nem `/usr/local`. Se o arquivo não existir, o plugin de teste não foi carregado (confira o item 1).
+  Depois de o MO2 abrir (pode fechá-lo): `head -1 /tmp/mo2_isolation_probe.txt`. **Esperado: `invisible`.** Se mostrar `visible`, o isolamento falhou (reprove o item). O resto do arquivo é o `sys.path` do MO2: só a biblioteca padrão e o `site-packages` do sistema (`/usr/lib64/python3.14`, `/usr/lib/python3.14`) e as pastas do próprio build (`<pasta do build>/bin/plugins`, `<pasta do build>/bin/plugins/plugin_python/libs` e `<pasta do build>/bin/plugins/data`, e pastas dentro de `<pasta do build>/bin/plugins` que um plugin acrescente, como `installer_wizard/lib`), que podem estar sob o `$HOME` por causa do caminho do build. Nenhuma outra pasta sob o `$HOME` (`~/.local`, por exemplo) nem sob `/usr/local`. Se o arquivo não existir, o MO2 não chegou a iniciar ou o plugin de teste não foi carregado (confira o item 1).
 - [ ] Limpeza:
 
 ```sh
@@ -75,3 +76,22 @@ rm -rf "$SITE/mo2_isolation_probe" <pasta do build>/bin/plugins/isolation_probe.
 ## 8. Regressão
 
 - [ ] SKSE inicia o jogo com os mods (Fase 3); LOOT ordena (4b); pré-visualização de `.txt`/imagens (4c.1).
+
+## 9. Box sem o PyQt6 (opcional)
+
+Confirma o aviso para um box antigo sem os pacotes novos (spec §6). O caso do `libpython` ausente é coberto pela checagem automática do `build.sh` (o `plugin_python.so` não depende do `libpython`) e por uma verificação manual feita na revisão final. Com o MO2 fechado:
+
+- [ ] Criar um box descartável com os pacotes de execução, menos o `python3-pyqt6`, e abrir o MO2 do build por ele:
+
+```sh
+distrobox create --image fedora:44 --name mo2-nopyqt
+distrobox enter mo2-nopyqt -- sudo dnf -y install --setopt=install_weak_deps=False \
+    qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtwebsockets-devel \
+    qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
+    fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret python3
+distrobox enter mo2-nopyqt -- rpm -q python3-pyqt6
+distrobox enter mo2-nopyqt -- <pasta do build>/bin/ModOrganizer
+```
+
+  Esperado: o `rpm -q` diz que o `python3-pyqt6` não está instalado; o MO2 abre normalmente; o ícone de notificações mostra o aviso do "Python Proxy" ("Python could not be loaded") com o comando `sudo dnf install python3 python3-pyqt6`; os plugins Python não aparecem.
+- [ ] Fechar o MO2 e remover o box: `distrobox rm -f mo2-nopyqt`.

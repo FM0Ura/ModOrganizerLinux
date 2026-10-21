@@ -132,6 +132,8 @@ O MO2 usa o Python 3.14 e o PyQt6 do Fedora do box `mo2-run`. Num box criado ant
 
     distrobox enter mo2-run -- sudo dnf install -y python3 python3-pyqt6
 
+Sem esses pacotes (ou com outra versão do Python no box), o MO2 abre sem os plugins Python e o ícone de notificações mostra o aviso do "Python Proxy" com esse comando.
+
 O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*`, e não enxerga pacotes do `~/.local` nem de `/usr/local`; só a biblioteca padrão e os pacotes do sistema do box, mais as pastas do próprio MO2. Plugins Python incluídos: pré-visualização de DDS, verificador do formato 43, verificador de plugins do script extender, Configurator (INIs), instalador de BAIN com wizard e FNIS. O `basic_games` vem na Fase 4d.2.
 
 ## Building

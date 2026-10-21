@@ -84,7 +84,8 @@ Fase 4c.3 — Spec: [`docs/superpowers/specs/2026-10-21-phase4c3-ferramentas-des
 
 Fase 4d.1 — Spec: [`docs/superpowers/specs/2026-10-21-phase4d1-python-design.md`](docs/superpowers/specs/2026-10-21-phase4d1-python-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4d1-python.md`](docs/superpowers/plans/2026-10-21-phase4d1-python.md) · Checklist manual: [`docs/testing/phase4d1-manual-checklist.md`](docs/testing/phase4d1-manual-checklist.md)
 
-- (4d) `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
+- (4d.1) `plugin_python` (pybind11 + Python 3.14 e PyQt6 do sistema) e os seis plugins Python pequenos (DDS, formato 43, script extender, Configurator, BAIN com wizard, FNIS).
+- (4d.2) `basic_games` (os jogos definidos em Python), com a detecção pela Steam e pelo Proton.
 - (4b) `lootcli` nativo (libloot) → ordenação com LOOT.
 - (4a) Handler `nxm://` (`.desktop` + `xdg-mime`) → downloads pelo site do Nexus.
 - (4c.1) Demais plugins C++ (BAIN, bundle, previews, extração de BSA, diagnósticos, FNIS, INI); (4c.3) ferramentas pelo VFS; detecção completa de jogos via `steam/`.
