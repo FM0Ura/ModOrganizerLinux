@@ -114,4 +114,28 @@ if (NOT WIN32)
 	mo2_configure_tests(runner-failure-tests NO_SOURCES WARNINGS 4)
 	set_target_properties(runner-failure-tests PROPERTIES FOLDER tests/runner)
 	target_link_libraries(runner-failure-tests PUBLIC runner pybind11::embed)
+
+	# Linux: a single-file plugin imports its sibling modules, in its own executable
+	# because it relies on the sys.path of a fresh interpreter
+	add_executable(runner-sibling-tests EXCLUDE_FROM_ALL)
+	mo2_target_sources(runner-sibling-tests
+		FOLDER src
+		PRIVATE
+			test_sibling.cpp
+	)
+	mo2_target_sources(runner-sibling-tests
+		FOLDER src/mocks
+		PRIVATE
+			../mocks/TestPythonPaths.h
+	)
+	mo2_configure_tests(runner-sibling-tests NO_SOURCES WARNINGS 4)
+	set_target_properties(runner-sibling-tests PROPERTIES FOLDER tests/runner)
+	target_link_libraries(runner-sibling-tests PUBLIC runner pybind11::embed)
+	target_include_directories(runner-sibling-tests
+		PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../mocks)
+	add_dependencies(runner-sibling-tests mobase)
+	set_tests_properties(${runner-sibling-tests_gtests}
+		PROPERTIES
+		ENVIRONMENT "PYTHONPATH=${PYTHONPATH}"
+	)
 endif()

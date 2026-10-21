@@ -256,6 +256,17 @@ namespace mo2::python {
                 // createPlugins() function multiple time
                 py::dict moduleNamespace = mainModule.attr("__dict__").attr("copy")();
 
+#ifndef _WIN32
+                // a single-file plugin may import a sibling module (FNISPatches
+                // imports FNISTool) and the load order is the filesystem's, so the
+                // folder of the plugin must be in the path whatever was loaded before
+                {
+                    QStringList fileParts = identifier.split("/");
+                    fileParts.removeLast();
+                    ensureFolderInPath(fileParts.join("/"));
+                }
+#endif
+
                 std::string temp = ToString(identifier);
                 py::eval_file(temp, moduleNamespace).is_none();
                 moduleDict = moduleNamespace;
