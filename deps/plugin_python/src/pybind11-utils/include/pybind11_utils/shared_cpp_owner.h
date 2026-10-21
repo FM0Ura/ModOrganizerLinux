@@ -75,6 +75,7 @@ namespace mo2::python::detail {
 
 }  // namespace mo2::python::detail
 
+#ifdef _WIN32
 #define MO2_PYBIND11_SHARED_CPP_HOLDER(Type)                                           \
     namespace pybind11::detail {                                                       \
         template <>                                                                    \
@@ -86,5 +87,30 @@ namespace mo2::python::detail {
             : mo2::python::detail::shared_cpp_owner_caster<                            \
                   Type, std::shared_ptr<const Type>> {};                               \
     }
+#else
+// pybind11 3 has a caster of std::shared_ptr<> with its own storage, without the holder
+// member used above: the one of the holder_caster<> is selected back for the class
+#if PYBIND11_VERSION_MAJOR >= 3
+#define MO2_PYBIND11_SHARED_CPP_HOLDER_CLASSIC(Type)                                   \
+    template <>                                                                        \
+    struct copyable_holder_caster_shared_ptr_with_smart_holder_support_enabled<Type>   \
+        : std::false_type {};
+#else
+#define MO2_PYBIND11_SHARED_CPP_HOLDER_CLASSIC(Type)
+#endif
+
+#define MO2_PYBIND11_SHARED_CPP_HOLDER(Type)                                           \
+    namespace pybind11::detail {                                                       \
+        MO2_PYBIND11_SHARED_CPP_HOLDER_CLASSIC(Type)                                   \
+        template <>                                                                    \
+        struct type_caster<std::shared_ptr<Type>>                                      \
+            : mo2::python::detail::shared_cpp_owner_caster<Type,                       \
+                                                           std::shared_ptr<Type>> {};  \
+        template <>                                                                    \
+        struct type_caster<std::shared_ptr<const Type>>                                \
+            : mo2::python::detail::shared_cpp_owner_caster<                            \
+                  Type, std::shared_ptr<const Type>> {};                               \
+    }
+#endif
 
 #endif

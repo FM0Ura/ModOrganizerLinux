@@ -59,7 +59,11 @@ public:  // IPluginDiagnose
 
 private:
     MOBase::IOrganizer* m_MOInfo;
+#ifdef _WIN32
     HMODULE m_RunnerLib;
+#else
+    void* m_RunnerLib;
+#endif
     std::unique_ptr<mo2::python::IPythonRunner> m_Runner;
 
     enum class FailureType : unsigned int {

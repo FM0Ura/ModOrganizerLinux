@@ -36,3 +36,8 @@ mo2_target_sources(mobase
 		./wrappers/wrappers.h
 )
 target_link_libraries(mobase PRIVATE pybind11::qt pybind11::utils mo2::uibase Qt6::Core)
+
+if (NOT WIN32)
+	# Linux: installed in bin/plugins/plugin_python/libs, finds uibase in lib
+	set_target_properties(mobase PROPERTIES INSTALL_RPATH "$ORIGIN/../../../../lib")
+endif()

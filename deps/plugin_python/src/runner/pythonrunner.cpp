@@ -3,7 +3,9 @@
 #pragma warning(disable : 4100)
 #pragma warning(disable : 4996)
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include <algorithm>
 
@@ -114,8 +116,13 @@ namespace mo2::python {
             if (!paths.empty()) {
                 config.module_search_paths_set = 1;
                 for (auto const& path : paths) {
+#ifdef _WIN32
                     PyWideStringList_Append(&config.module_search_paths,
                                             absolute(path).native().c_str());
+#else
+                    PyWideStringList_Append(&config.module_search_paths,
+                                            absolute(path).wstring().c_str());
+#endif
                 }
             }
 

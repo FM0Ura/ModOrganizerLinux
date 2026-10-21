@@ -21,6 +21,11 @@ target_link_libraries(runner PUBLIC mo2::uibase PRIVATE pybind11::embed pybind11
 target_include_directories(runner PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(runner PRIVATE RUNNER_BUILD)
 
+if (NOT WIN32)
+	# Linux: installed in bin/plugins/plugin_python/dlls, finds uibase in lib
+	set_target_properties(runner PROPERTIES INSTALL_RPATH "$ORIGIN/../../../../lib")
+endif()
+
 # proxy will install runner
 
 # force runner to build mobase

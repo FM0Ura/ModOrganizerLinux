@@ -30,7 +30,12 @@ namespace mo2::python {
 
             static QString from(std::filesystem::path const& path)
             {
+#ifdef _WIN32
                 return QString::fromStdWString(path.native());
+#else
+                // Linux: the native encoding of the paths is UTF-8
+                return QString::fromStdString(path.native());
+#endif
             }
 
             static QString from(QFileInfo const& fileInfo)
@@ -46,7 +51,11 @@ namespace mo2::python {
 
             static std::filesystem::path from(QString const& value)
             {
+#ifdef _WIN32
                 return {value.toStdWString()};
+#else
+                return {value.toStdString()};
+#endif
             }
 
             static std::filesystem::path from(QFileInfo const& fileInfo)

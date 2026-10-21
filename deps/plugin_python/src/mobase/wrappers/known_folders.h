@@ -1,4 +1,6 @@
+#ifdef _WIN32
 #include <KnownFolders.h>
+#endif
 
 namespace mo2::python {
 
@@ -7,6 +9,7 @@ namespace mo2::python {
         KNOWNFOLDERID guid;
     };
 
+#ifdef _WIN32
     const std::array<KnownFolder, 142> KNOWN_FOLDERS{{
         {"AccountPictures", FOLDERID_AccountPictures},
         {"AddNewPrograms", FOLDERID_AddNewPrograms},
@@ -151,5 +154,20 @@ namespace mo2::python {
         {"VideosLibrary", FOLDERID_VideosLibrary},
         {"Windows", FOLDERID_Windows},
     }};
+#else
+    // the folders that getKnownFolder() of uibase supports on Linux (win32compat.h)
+    const std::array<KnownFolder, 10> KNOWN_FOLDERS{{
+        {"Desktop", FOLDERID_Desktop},
+        {"Documents", FOLDERID_Documents},
+        {"Downloads", FOLDERID_Downloads},
+        {"LocalAppData", FOLDERID_LocalAppData},
+        {"OneDrive", FOLDERID_OneDrive},
+        {"ProgramFiles", FOLDERID_ProgramFiles},
+        {"ProgramFilesX86", FOLDERID_ProgramFilesX86},
+        {"RoamingAppData", FOLDERID_RoamingAppData},
+        {"StartMenu", FOLDERID_StartMenu},
+        {"Windows", FOLDERID_Windows},
+    }};
+#endif
 
 }  // namespace mo2::python

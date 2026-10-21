@@ -26,6 +26,15 @@ set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL ${_CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL
 set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO ${_CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO})
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE ${_CMAKE_MAP_IMPORTED_CONFIG_RELEASE})
 
+if (NOT WIN32)
+	# the unquoted copies above drop the last element of the mappings of mo2-cmake, the
+	# empty configuration, where the imported targets of FindOpenGL (Qt6::Gui) keep
+	# their location on Linux
+	list(APPEND CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL "")
+	list(APPEND CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO "")
+	list(APPEND CMAKE_MAP_IMPORTED_CONFIG_RELEASE "")
+endif()
+
 get_filename_component(Python_HOME ${Python_EXECUTABLE} PATH)
 set(Python_DLL_DIR "${Python_HOME}/DLLs")
 set(Python_LIB_DIR "${Python_HOME}/Lib")

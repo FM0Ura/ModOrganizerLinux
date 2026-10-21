@@ -20,7 +20,9 @@ along with python proxy plugin.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <filesystem>
 
+#ifdef _WIN32
 #include <Windows.h>
+#endif
 
 #include <QCoreApplication>
 #include <QDirIterator>
@@ -38,6 +40,7 @@ using namespace MOBase;
 // retrieve the path to the folder containing the proxy DLL
 fs::path getPluginFolder()
 {
+#ifdef _WIN32
     wchar_t path[MAX_PATH];
     HMODULE hm = NULL;
 
@@ -51,6 +54,10 @@ fs::path getPluginFolder()
     }
 
     return fs::path(path).parent_path();
+#else
+    // Linux: see Task 3 of the Phase 4d.1 plan
+    return {};
+#endif
 }
 
 ProxyPython::ProxyPython()
@@ -75,10 +82,15 @@ bool ProxyPython::init(IOrganizer* moInfo)
     const auto pluginFolder = getPluginFolder();
 
     if (pluginFolder.empty()) {
+#ifdef _WIN32
         DWORD error   = ::GetLastError();
         m_LoadFailure = FailureType::DLL_NOT_FOUND;
         log::error("failed to resolve Python proxy directory ({}): {}", error,
                    qUtf8Printable(windowsErrorString(::GetLastError())));
+#else
+        m_LoadFailure = FailureType::DLL_NOT_FOUND;
+        log::error("failed to resolve Python proxy directory");
+#endif
         return false;
     }
 
@@ -111,6 +123,7 @@ bool ProxyPython::init(IOrganizer* moInfo)
     // will look for DLLs in it, this is required to find the Python and libffi DLL, but
     // also the runner DLL
     //
+#ifdef _WIN32
     const auto dllPaths = pluginFolder / "dlls";
     if (SetDllDirectoryW(dllPaths.c_str()) == 0) {
         DWORD error   = ::GetLastError();
@@ -119,6 +132,7 @@ bool ProxyPython::init(IOrganizer* moInfo)
                    qUtf8Printable(windowsErrorString(::GetLastError())));
         return false;
     }
+#endif
 
     // 2. we create the Python runner, we do not need to use ::LinkLibrary and
     // ::GetProcAddress because we use delayed load for the runner DLL (see the
@@ -139,7 +153,9 @@ bool ProxyPython::init(IOrganizer* moInfo)
     }
 
     // reset DLL directory
+#ifdef _WIN32
     SetDllDirectoryW(NULL);
+#endif
 
     if (!m_Runner || !m_Runner->isInitialized()) {
         m_LoadFailure = FailureType::INITIALIZATION;

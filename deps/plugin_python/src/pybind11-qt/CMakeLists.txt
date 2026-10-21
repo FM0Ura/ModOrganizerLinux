@@ -46,14 +46,27 @@ target_compile_definitions(pybind11-qt PUBLIC QT_NO_KEYWORDS)
 # we need sip.h for pybind11-qt
 add_custom_target(PyQt6-siph DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/sip.h")
 set_target_properties(PyQt6-siph PROPERTIES FOLDER autogen)
-add_custom_command(
-	OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sip.h"
-	COMMAND
-		${CMAKE_COMMAND} -E env PYTHONPATH=${MO2_PYLIBS_DIR}
-		${MO2_PYLIBS_DIR}/bin/sip-module.exe
-		--sip-h PyQt${MO2_QT_VERSION_MAJOR}.sip
-		--target-dir ${CMAKE_CURRENT_BINARY_DIR}
-)
+if (WIN32)
+	add_custom_command(
+		OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sip.h"
+		COMMAND
+			${CMAKE_COMMAND} -E env PYTHONPATH=${MO2_PYLIBS_DIR}
+			${MO2_PYLIBS_DIR}/bin/sip-module.exe
+			--sip-h PyQt${MO2_QT_VERSION_MAJOR}.sip
+			--target-dir ${CMAKE_CURRENT_BINARY_DIR}
+	)
+else()
+	# Linux: the sip-module of the system (package sip6), PyQt6 is not installed in
+	# the build directory
+	find_program(MO2_SIP_MODULE sip-module REQUIRED)
+	add_custom_command(
+		OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sip.h"
+		COMMAND
+			${MO2_SIP_MODULE}
+			--sip-h PyQt${MO2_QT_VERSION_MAJOR}.sip
+			--target-dir ${CMAKE_CURRENT_BINARY_DIR}
+	)
+endif()
 add_dependencies(PyQt6-siph PyQt6)
 add_dependencies(pybind11-qt PyQt6-siph)
 
