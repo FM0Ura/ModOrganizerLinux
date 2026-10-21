@@ -25,7 +25,7 @@ ALL_TARGETS=(
     7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
-    check_fnis tool_inieditor tool_inibakery
+    check_fnis tool_inieditor tool_inibakery plugin_python
 )
 
 ONLY=()
@@ -411,6 +411,20 @@ build_tool_inieditor() {
 build_tool_inibakery() {
     cmake_build tool_inibakery "$ROOT/deps/tool_inibakery"
     check_plugins filemapper "$INSTALL/bin/plugins/libinibakery.so"
+}
+
+# plugin_python (Phase 4d.1): the Python proxy (bin/plugins/plugin_python.so), its runner
+# and the mobase module (bin/plugins/plugin_python/), with the system's Python 3.14 and
+# PyQt6; with --tests the proxy must load and mobase must import in the system's Python
+build_plugin_python() {
+    # BUILD_TESTING is off: the upstream suites (tests/) are not built yet (Task 3 of
+    # Phase 4d.1 turns them on)
+    cmake_build plugin_python "$ROOT/deps/plugin_python" -DBUILD_TESTING=OFF
+    check_plugins plugin "$INSTALL/bin/plugins/plugin_python.so"
+    if [[ $TESTS == 1 ]]; then
+        LD_LIBRARY_PATH="$INSTALL/lib" python3 -I "$ROOT/tests/python-import/check_mobase.py" \
+            "$INSTALL" || die "mobase does not import"
+    fi
 }
 
 # --- driver -----------------------------------------------------------------
