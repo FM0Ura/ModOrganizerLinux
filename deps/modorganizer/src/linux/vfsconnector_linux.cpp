@@ -473,7 +473,12 @@ private:
   {
     if (m_client && !m_client->running()) {
       helperLost("mo2-vfs is not running");
-      m_client.reset();
+
+      // one that stopped answering but still runs may hold the mount of a running
+      // program: kept until its mount is gone (dropLostHelper() below)
+      if (m_client->exited()) {
+        m_client.reset();
+      }
     }
 
     // a helper that ended abnormally may have left its mount behind; also when a
@@ -490,6 +495,9 @@ private:
             "fusermount3 -uz on it");
       }
     }
+
+    // nothing of a lost helper is mounted any more
+    dropLostHelper();
 
     // a new helper has nothing mounted (m_active is false): `mount`, never `update`
     if (!m_client) {
@@ -584,13 +592,22 @@ private:
     lost(reason);
 
     if (m_client && !m_client->exited() && m_watched > 0) {
-      // not killed: a program may still be using the mount; whatever the helper left
-      // behind is cleaned up before the next one starts
+      // not killed: a program may still be using the mount, whose roots count as still
+      // mounted (the deferred refresh must not walk a hung mount) until the mount
+      // table no longer lists them (recheckLeftMounts()) or the helper recovers and
+      // unmounts; the helper is killed once its mount is gone (dropLostHelper())
       log::error("mo2-vfs stopped answering while programs use the virtual file "
                  "system: {}",
                  reason);
       m_cleanupNeeded = true;
-      deactivated();
+
+      if (m_roots.isEmpty()) {
+        deactivated();
+      } else {
+        keepLeftMounted(m_roots, "it is still mounted on " + m_roots.join(", ") +
+                                     "; the data directory is refreshed once it is "
+                                     "unmounted");
+      }
       return;
     }
 
@@ -712,8 +729,28 @@ private:
                   m_leftMounted.join(", "));
         m_cleanupNeeded = false;
         deactivated();
+        dropLostHelper();
       });
     });
+  }
+
+  // a helper that was lost (it ended, or stopped answering and still runs) is
+  // discarded; one that still runs is killed first: only called once its mount is gone,
+  // so that no program can be using it, and the signal goes to the helper only (its
+  // programs are in process groups of their own)
+  void dropLostHelper()
+  {
+    if (!m_client || m_client->running()) {
+      return;
+    }
+
+    if (!m_client->exited()) {
+      log::debug(
+          "killing mo2-vfs, which stopped answering, now that its mount is gone");
+      m_client->kill();
+    }
+
+    m_client.reset();
   }
 
   // runs the helper with `args` (vfsbridge::helperCommand()) without waiting for it;

@@ -1105,6 +1105,124 @@ exit 1
   EXPECT_EQ(called, 0);
 }
 
+// the first helper mounts /x/Data, starts a program (pid 1111) and then stops answering
+// (exec sleep: alive, never reads again); the next ones answer every request. The
+// mount table is the file mounts.json of `dir`, the number of helpers started is in
+// `dir`/count and the pid of the first one in `dir`/fake.pid
+static std::string hungHelperScript(const fs::path& dir)
+{
+  const auto table = (dir / "mounts.json").string();
+  const auto count = (dir / "count").string();
+  const auto pid   = (dir / "fake.pid").string();
+  return R"([ "$1" = "--cleanup" ] && exit 0
+if [ "$1" = "--list-mounts" ]; then cat ')" +
+         table + R"('; exit 0; fi
+n=$(( $(cat ')" +
+         count + R"(' 2>/dev/null || echo 0) + 1 ))
+echo $n > ')" +
+         count + R"('
+echo '{"event":"hello","version":"0"}'
+if [ $n = 1 ]; then
+  echo $$ > ')" +
+         pid + R"('
+  read line
+  echo '{"event":"ready","roots":["/x/Data"]}'
+  read line
+  echo '{"event":"spawned","pid":1111}'
+  exec sleep 30
+fi
+while read line; do
+  echo '{"event":"ready","roots":["/x/Data"]}'
+done
+)";
+}
+
+// mo2-vfs stops answering while a program it started uses the mount: it is not killed,
+// and its root counts as still mounted, so that the deferred refresh doesn't walk a
+// hung mount; once the mount table no longer lists it, the hung helper is killed, the
+// file system is inactive and the refresh is called back; the next activation gets a
+// new helper
+TEST_F(VfsConnectorTest, HungHelperWithAProgramKeepsTheMountUntilItIsGone)
+{
+  writeFile(m_state.path() / "mounts.json", R"({"roots":["/x/Data"]})");
+  fakeHelper(hungHelperScript(m_state.path()));
+  qputenv("MO2_VFS_TIMEOUT_MS", "300");
+  qputenv("MO2_VFS_RECHECK_MS", "100");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = "/";
+
+  vfs->activate();
+  EXPECT_EQ(vfs->spawn(r), 1111);
+
+  vfs->updateMapping({});  // the update times out (and is only logged)
+
+  const auto fakePid = std::stoi(readFile(m_state.path() / "fake.pid"));
+  processEvents(400);
+  EXPECT_EQ(::kill(fakePid, 0), 0);  // not killed
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(called, 0);
+  EXPECT_TRUE(vfs->staleMounts().contains("/x/Data"));
+  const auto reason = vfs->takeLostReason();
+  EXPECT_TRUE(reason.contains("did not reply")) << reason.toStdString();
+
+  // the mount is gone
+  writeFile(m_state.path() / "mounts.json", R"({"roots":[]})");
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(3)));
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+  EXPECT_NE(::kill(fakePid, 0), 0);  // killed and reaped
+
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(readFile(m_state.path() / "count"), "2\n");
+}
+
+// a hooked Run while the hung helper's root is still mounted fails and keeps the hung
+// helper (a program may be using its mount); once the root is gone (before any
+// recheck), the next activation kills it and mounts with a new helper
+TEST_F(VfsConnectorTest, ActivateKillsTheHungHelperOnlyOnceItsMountIsGone)
+{
+  writeFile(m_state.path() / "mounts.json", R"({"roots":["/x/Data"]})");
+  fakeHelper(hungHelperScript(m_state.path()));
+  qputenv("MO2_VFS_TIMEOUT_MS", "300");  // no recheck runs: its default is 5 s
+
+  const auto vfs = createVfsConnector();
+
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = "/";
+
+  vfs->activate();
+  EXPECT_EQ(vfs->spawn(r), 1111);
+  vfs->updateMapping({});  // times out
+
+  const auto fakePid = std::stoi(readFile(m_state.path() / "fake.pid"));
+
+  try {
+    vfs->activate();
+    FAIL() << "activate() mounted over the mount of the hung helper";
+  } catch (const std::runtime_error& e) {
+    EXPECT_NE(std::string(e.what()).find("still mounted"), std::string::npos)
+        << e.what();
+  }
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(::kill(fakePid, 0), 0);  // kept
+
+  writeFile(m_state.path() / "mounts.json", R"({"roots":[]})");
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_NE(::kill(fakePid, 0), 0);  // killed and reaped
+  EXPECT_EQ(readFile(m_state.path() / "count"), "2\n");
+}
+
 // the helper ended between activate() and spawn(): the program is not started without
 // the virtual file system (it would see and write the real data directory)
 TEST_F(VfsConnectorTest, HelperLostBeforeSpawnIsException)
