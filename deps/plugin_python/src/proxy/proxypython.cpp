@@ -176,7 +176,18 @@ bool ProxyPython::init(IOrganizer* moInfo)
             pluginFolder / "plugin_python" / "libs",
             fs::path{QFile::encodeName(IOrganizer::getPluginDataPath()).toStdString()}};
 #endif
+#ifdef _WIN32
         m_Runner->initialize(paths);
+#else
+        // Linux: Python may start and still fail to import mobase (e.g., without
+        // PyQt6), the interpreter then stays initialized but cannot be used: the
+        // failure is reported (the runner logged the error of Python) and no plugin
+        // is loaded
+        if (!m_Runner->initialize(paths)) {
+            m_LoadFailure = FailureType::DLL_NOT_FOUND;
+            m_Runner.reset();
+        }
+#endif
     }
 
     if (m_MOInfo) {
@@ -186,6 +197,10 @@ bool ProxyPython::init(IOrganizer* moInfo)
     // reset DLL directory
 #ifdef _WIN32
     SetDllDirectoryW(NULL);
+#else
+    if (m_LoadFailure != FailureType::NONE) {
+        return true;
+    }
 #endif
 
     if (!m_Runner || !m_Runner->isInitialized()) {
@@ -294,7 +309,7 @@ QString ProxyPython::shortDescription(unsigned int key) const
 #ifdef _WIN32
         return tr("Python DLL not found");
 #else
-        return tr("Python not found");
+        return tr("Python could not be loaded");
 #endif
     case FailureType::INVALID_DLL:
         return tr("Invalid Python DLL");
@@ -323,8 +338,9 @@ QString ProxyPython::fullDescription(unsigned int key) const
         return tr("The Python plugin DLL was not found, maybe your antivirus deleted "
                   "it. Re-installing MO2 might fix the problem.");
 #else
-        return tr("Python %1 or PyQt6 was not found. In the mo2-run distrobox, install "
-                  "them with: sudo dnf install python3 python3-pyqt6")
+        return tr("Python %1 or its modules (PyQt6) could not be loaded, the log of "
+                  "Mod Organizer has the error. In the mo2-run distrobox, install them "
+                  "with: sudo dnf install python3 python3-pyqt6")
             .arg(QStringLiteral(MO2_PYTHON_VERSION_STRING));
 #endif
     case FailureType::INVALID_DLL:

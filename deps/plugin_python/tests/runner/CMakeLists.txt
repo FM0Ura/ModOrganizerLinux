@@ -102,4 +102,16 @@ if (NOT WIN32)
 		PROPERTIES
 		ENVIRONMENT "PYTHONPATH=${PYTHONPATH}"
 	)
+
+	# Linux: a Python that cannot import mobase (e.g., without PyQt6) is a failure of
+	# the runner, in its own executable for the same reason
+	add_executable(runner-failure-tests EXCLUDE_FROM_ALL)
+	mo2_target_sources(runner-failure-tests
+		FOLDER src
+		PRIVATE
+			test_failure.cpp
+	)
+	mo2_configure_tests(runner-failure-tests NO_SOURCES WARNINGS 4)
+	set_target_properties(runner-failure-tests PROPERTIES FOLDER tests/runner)
+	target_link_libraries(runner-failure-tests PUBLIC runner pybind11::embed)
 endif()

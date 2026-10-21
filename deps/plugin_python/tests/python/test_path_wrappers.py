@@ -7,12 +7,13 @@ from PyQt6.QtCore import QDir, QFileInfo
 import mobase
 
 
-# the product version is the version resource of a Windows executable (python.exe), an
-# executable of Linux has none
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows version resource")
 def test_filepath_wrappers():
     # TBC that this works everywhere
     version = ".".join(map(str, sys.version_info[:3]))
+    if sys.platform != "win32":
+        # the product version is the version resource of a Windows executable
+        # (python.exe), an executable of Linux has none
+        version = ""
 
     # from string, ok
     assert mobase.getProductVersion(sys.executable) == version

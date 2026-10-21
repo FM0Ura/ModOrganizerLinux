@@ -60,6 +60,20 @@ namespace mo2::python {
         std::unordered_map<QString, std::vector<py::handle>> m_PythonObjects;
     };
 
+#ifndef _WIN32
+    namespace {
+        // Linux: after a failure once Python has started (e.g., mobase cannot import
+        // PyQt6), the interpreter stays (it cannot be finalized and initialized again)
+        // but the GIL is released, so that no other thread deadlocks on it
+        void releaseGilAfterFailure()
+        {
+            if (Py_IsInitialized() && PyGILState_Check()) {
+                PyEval_SaveThread();
+            }
+        }
+    }  // namespace
+#endif
+
     std::unique_ptr<IPythonRunner> createPythonRunner()
     {
         return std::make_unique<PythonRunner>();
@@ -180,8 +194,19 @@ namespace mo2::python {
         }
         catch (const py::error_already_set& ex) {
             MOBase::log::error("failed to init python: {}", ex.what());
+#ifndef _WIN32
+            releaseGilAfterFailure();
+#endif
             return false;
         }
+#ifndef _WIN32
+        catch (const std::exception& ex) {
+            // Linux: nothing escapes, e.g., a path that cannot be converted
+            MOBase::log::error("failed to init python: {}", ex.what());
+            releaseGilAfterFailure();
+            return false;
+        }
+#endif
     }
 
     void PythonRunner::addDllSearchPath(std::filesystem::path const& dllPath)
