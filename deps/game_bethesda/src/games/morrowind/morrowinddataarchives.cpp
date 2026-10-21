@@ -13,7 +13,7 @@ QStringList MorrowindDataArchives::getArchives(const QString& iniFile) const
 {
   wchar_t buffer[256];
   QStringList result;
-  // the INI with another case (the Proton prefix has Skyrim.ini for skyrim.ini)
+  // the INI with another case (the game has Morrowind.ini for morrowind.ini)
   std::wstring iniFileW =
       QDir::toNativeSeparators(GameGamebryo::resolveIgnoringCase(iniFile))
           .toStdWString();

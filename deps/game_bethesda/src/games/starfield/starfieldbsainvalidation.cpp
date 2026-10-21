@@ -37,7 +37,7 @@ bool StarfieldBSAInvalidation::prepareProfile(MOBase::IProfile* profile)
   QString basePath    = profile->localSettingsEnabled()
                             ? profile->absolutePath()
                             : m_Game->documentsDirectory().absolutePath();
-  // the INI with another case (Fallout4Custom.ini is fallout4custom.ini in a profile)
+  // the INI with another case (StarfieldCustom.ini may be starfieldcustom.ini)
   QString iniFilePath =
       GameGamebryo::resolveIgnoringCase(basePath + "/" + m_IniFileName);
   WCHAR setting[MAX_PATH];
