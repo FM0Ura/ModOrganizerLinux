@@ -365,11 +365,18 @@ function(mo2_add_lupdate TARGET)
 		set(lupdate_command ${lupdate} ${MO2_SOURCES} -ts ${MO2_TS_FILE})
 	else()
 		mo2_python_install_pyqt()
-		set(lupdate_command
-			${CMAKE_COMMAND}
-			-E env PYTHONPATH=${MO2_PYLIBS_DIR}
-			${MO2_PYLIBS_DIR}/bin/pylupdate${MO2_QT_VERSION_MAJOR}.exe
-			--ts "${MO2_TS_FILE}" ${translation_files})
+		if (WIN32)
+			set(lupdate_command
+				${CMAKE_COMMAND}
+				-E env PYTHONPATH=${MO2_PYLIBS_DIR}
+				${MO2_PYLIBS_DIR}/bin/pylupdate${MO2_QT_VERSION_MAJOR}.exe
+				--ts "${MO2_TS_FILE}" ${translation_files})
+		else()
+			find_program(MO2_PYLUPDATE pylupdate${MO2_QT_VERSION_MAJOR} REQUIRED)
+			set(lupdate_command
+				${MO2_PYLUPDATE}
+				--ts "${MO2_TS_FILE}" ${translation_files})
+		endif()
 
 		add_dependencies("${TARGET}_lupdate" PyQt6)
 	endif()

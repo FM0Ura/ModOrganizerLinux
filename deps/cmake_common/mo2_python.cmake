@@ -90,10 +90,13 @@ function(mo2_python_install_pyqt)
 
 	add_custom_target(PyQt6)
 	set_target_properties(PyQt6 PROPERTIES FOLDER autogen)
-	mo2_python_pip_install(PyQt6 NO_FORCE
-		PACKAGES
-			PyQt${MO2_QT_VERSION_MAJOR}==${MO2_PYQT_VERSION}
-			sip==${MO2_SIP_VERSION})
+	# Linux: the PyQt6 of the system, never from pip (it brings a Qt of its own)
+	if (WIN32)
+		mo2_python_pip_install(PyQt6 NO_FORCE
+			PACKAGES
+				PyQt${MO2_QT_VERSION_MAJOR}==${MO2_PYQT_VERSION}
+				sip==${MO2_SIP_VERSION})
+	endif()
 endfunction()
 
 #! mo2_python_uifiles : create .py files from .ui files for a python target
@@ -115,6 +118,14 @@ function(mo2_python_uifiles TARGET)
 
 	message(DEBUG "generating .py from ui files: ${MO2_FILES}")
 
+	if (WIN32)
+		set(_pyuic ${CMAKE_COMMAND} -E env PYTHONPATH=${CMAKE_BINARY_DIR}/pylibs
+			${MO2_PYLIBS_DIR}/bin/pyuic${MO2_QT_VERSION_MAJOR}.exe)
+	else()
+		find_program(MO2_PYUIC pyuic${MO2_QT_VERSION_MAJOR} REQUIRED)
+		set(_pyuic ${MO2_PYUIC})
+	endif()
+
 	set(pyui_files "")
 	foreach (UI_FILE ${MO2_FILES})
 		get_filename_component(name "${UI_FILE}" NAME_WLE)
@@ -127,10 +138,7 @@ function(mo2_python_uifiles TARGET)
 		set(output "${folder}/${name}.py")
 		add_custom_command(
 			OUTPUT "${output}"
-			COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH=${CMAKE_BINARY_DIR}/pylibs
-				${MO2_PYLIBS_DIR}/bin/pyuic${MO2_QT_VERSION_MAJOR}.exe
-				-o "${output}"
-				"${UI_FILE}"
+			COMMAND ${_pyuic} -o "${output}" "${UI_FILE}"
 			DEPENDS "${UI_FILE}"
 		)
 
