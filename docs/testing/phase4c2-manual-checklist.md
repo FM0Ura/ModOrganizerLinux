@@ -14,8 +14,8 @@ Spec: [`../superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](../super
 
 ## 1. Sem tela
 
-- [ ] Por SSH (sem exportar nada), dentro do box:
-  `~/<pasta do build>/bin/ModOrganizer; echo "saída $?"`.
+- [ ] Por SSH (sem exportar as variáveis da sessão gráfica):
+  `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer; echo "saída $?"`.
   Esperado: a mensagem `Mod Organizer needs a graphical session, ...` e `saída 1`; nenhum
   "has crashed" nem backtrace.
 
@@ -25,26 +25,33 @@ Spec: [`../superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](../super
   "Use profile-specific Game INI Files" desmarcado), aba **Archives**: desmarcar e marcar
   de novo um BSA de mod, com a opção de gerenciar arquivos ligada (ou ligar e desligar
   **Automatic Archive Invalidation** em **Profiles...**).
-  Esperado: no prefixo, `.../My Games/Skyrim Special Edition/Skyrim.ini` (o arquivo real,
-  com maiúscula) muda (`SResourceArchiveList`/`bInvalidateOlderFiles`), e **não** aparece um
-  `skyrim.ini` minúsculo ao lado: `ls ".../My Games/Skyrim Special Edition/"`.
+  Esperado: no prefixo (`.../steamapps/compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/`), o
+  `Skyrim.ini` (o arquivo real, com maiúscula) muda
+  (`SResourceArchiveList`/`bInvalidateOlderFiles`), e **não** aparece um `skyrim.ini`
+  minúsculo ao lado: `ls` nessa pasta.
 - [ ] (Opcional) Com o Fallout 4 instalado, o mesmo, conferindo `Fallout4Custom.ini`. Com
-  os INIs por perfil ligados, o `fallout4custom.ini` do perfil muda e não aparece um
-  `Fallout4Custom.ini` no perfil.
+  os INIs por perfil ligados, o `fallout4custom.ini` do perfil
+  (`<instância>/profiles/<perfil>/`) muda e não aparece um `Fallout4Custom.ini` nessa pasta.
 
 ## 3. Helper travado
 
 - [ ] Executar o SKSE (ou o **Shell VFS** da Fase 2) pelo MO2. Com ele aberto, num terminal
   do host: `pkill -STOP -x mo2-vfs`.
 - [ ] No MO2, provocar um refresh (F5, ou instalar/ativar um mod), que pede um `update` ao
-  VFS.
+  VFS. A janela do MO2 pode parar de responder por cerca de 30 s enquanto o pedido expira
+  (o pedido é síncrono).
   Esperado: depois de ~30 s o MO2 registra no log
   `mo2-vfs stopped answering while programs use the virtual file system` e **não** mostra
   a lista de plugins vazia (o refresh fica adiado).
 - [ ] No host, `pkill -CONT -x mo2-vfs` e fechar o programa.
-  Esperado: o mount some (`findmnt -n -o TARGET,FSTYPE | grep mo2-vfs` vazio no host) e,
-  em até ~5 s, o log mostra `the virtual file system is no longer mounted on ...` e o
-  refresh adiado roda (lista de plugins completa).
+  Esperado: o helper volta a responder e desmonta sozinho: o mount some
+  (`findmnt -n -o TARGET,FSTYPE | grep mo2-vfs` vazio no host) e o refresh adiado roda
+  (lista de plugins completa). Neste caminho o MO2 não registra a linha
+  `the virtual file system is no longer mounted on ...`.
+- [ ] (Opcional) Variante com o helper morto: repetir os dois primeiros passos e, em vez
+  de `pkill -CONT`, rodar no host `pkill -KILL -x mo2-vfs` e fechar o programa.
+  Esperado: em até ~5 s o log mostra `the virtual file system is no longer mounted on ...`
+  (o MO2 desmonta o mount morto) e o refresh adiado roda (lista de plugins completa).
 - [ ] Fechar e abrir o MO2.
   Esperado: sem aviso de mount órfão.
 
