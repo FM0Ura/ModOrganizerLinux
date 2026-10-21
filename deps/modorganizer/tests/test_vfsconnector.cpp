@@ -40,6 +40,12 @@ std::string readFile(const fs::path& p)
   return ss.str();
 }
 
+void writeFile(const fs::path& p, const std::string& content)
+{
+  std::ofstream out(p, std::ios::binary | std::ios::trunc);
+  out << content;
+}
+
 bool mounted(const fs::path& p)
 {
   const auto info = readFile("/proc/self/mountinfo");
@@ -65,6 +71,8 @@ protected:
     m_oldState  = qgetenv("MO2_VFS_STATE_DIR");
     m_oldBinary = qgetenv("MO2_VFS_BINARY");
     m_oldBridge = qgetenv("MO2_VFS_BRIDGE");
+    m_oldRecheck = qgetenv("MO2_VFS_RECHECK_MS");
+    m_oldTimeout = qgetenv("MO2_VFS_TIMEOUT_MS");
     qputenv("MO2_VFS_BRIDGE", "direct");
     qputenv("MO2_VFS_STATE_DIR", QByteArray::fromStdString(m_state.path().string()));
   }
@@ -74,6 +82,8 @@ protected:
     restore("MO2_VFS_STATE_DIR", m_oldState);
     restore("MO2_VFS_BINARY", m_oldBinary);
     restore("MO2_VFS_BRIDGE", m_oldBridge);
+    restore("MO2_VFS_RECHECK_MS", m_oldRecheck);
+    restore("MO2_VFS_TIMEOUT_MS", m_oldTimeout);
   }
 
   // a shell script that is the helper
@@ -126,7 +136,7 @@ private:
     }
   }
 
-  QByteArray m_oldState, m_oldBinary, m_oldBridge;
+  QByteArray m_oldState, m_oldBinary, m_oldBridge, m_oldRecheck, m_oldTimeout;
 };
 
 // the fields after the command of /proc/<pid>/stat: state ppid pgrp session
@@ -977,6 +987,7 @@ echo '{"event":"ready","roots":["/x/Data"]}'
 sleep 0.2
 exit 1
 )");
+  qputenv("MO2_VFS_RECHECK_MS", "100");
 
   const auto vfs = createVfsConnector();
   int called     = 0;
@@ -992,12 +1003,106 @@ exit 1
   EXPECT_TRUE(vfs->isActive());
   EXPECT_EQ(called, 0);
   EXPECT_TRUE(vfs->staleMounts().contains("/x/Data"));
+
+  // rechecked a few times: the table still can't be read
+  processEvents(500);
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(called, 0);
   const auto reason = vfs->takeLostReason();
   EXPECT_TRUE(reason.contains("mount table")) << reason.toStdString();
 
   // still unknown: not mounted over
   EXPECT_THROW(vfs->activate(), std::runtime_error);
   EXPECT_TRUE(vfs->isActive());
+}
+
+// a helper that ends with its mount on one root, which stays in the mount table until
+// the test empties `table` (the --list-mounts of the fake prints it)
+static std::string endingHelperScript(const fs::path& table, const fs::path& listed)
+{
+  return R"([ "$1" = "--cleanup" ] && exit 0
+if [ "$1" = "--list-mounts" ]; then echo x >> ')" +
+         listed.string() + R"('; cat ')" + table.string() + R"('; exit 0; fi
+echo '{"event":"hello","version":"0"}'
+read line
+echo '{"event":"ready","roots":["/x/Data"]}'
+sleep 0.2
+exit 1
+)";
+}
+
+// the helper ended and its mount could not be unmounted: the mount table is checked
+// again on a timer, and once the root is gone the file system is inactive and the
+// deferred refresh is called back, once; the recheck stops then
+TEST_F(VfsConnectorTest, RecheckClearsALeftMountOnceItIsGone)
+{
+  const auto table  = m_state.path() / "mounts.json";
+  const auto listed = m_state.path() / "listed";
+  writeFile(table, R"({"roots":["/x/Data"]})");
+  fakeHelper(endingHelperScript(table, listed));
+  qputenv("MO2_VFS_RECHECK_MS", "100");
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  vfs->activate();
+  processEvents(600);  // the helper ends; its root is still listed
+  ASSERT_TRUE(vfs->isActive());
+  ASSERT_TRUE(vfs->staleMounts().contains("/x/Data"));
+
+  processEvents(400);  // rechecked: still mounted
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(called, 0);
+
+  writeFile(table, R"({"roots":[]})");
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(3)));
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+
+  // no more rechecks
+  const auto runs = readFile(listed).size();
+  processEvents(400);
+  EXPECT_EQ(readFile(listed).size(), runs);
+}
+
+// closing Mod Organizer while a recheck runs: the process is killed, and nothing is
+// called on the destroyed connector
+TEST_F(VfsConnectorTest, DestroyedWhileRecheckingDoesNotCrash)
+{
+  const auto table  = m_state.path() / "mounts.json";
+  const auto listed = m_state.path() / "listed";
+  writeFile(table, R"({"roots":["/x/Data"]})");
+  fakeHelper(R"([ "$1" = "--cleanup" ] && exit 0
+if [ "$1" = "--list-mounts" ]; then echo x >> ')" +
+             listed.string() + R"('; sleep 5; exit 0; fi
+echo '{"event":"hello","version":"0"}'
+read line
+echo '{"event":"ready","roots":["/x/Data"]}'
+sleep 0.2
+exit 1
+)");
+  qputenv("MO2_VFS_RECHECK_MS", "100");
+
+  int called = 0;
+  {
+    auto vfs = createVfsConnector();
+    vfs->setDeactivatedCallback([&] {
+      ++called;
+    });
+    vfs->activate();
+    // the helper ends; cleanupLeftMounts() runs the slow --list-mounts once, then a
+    // recheck starts it again
+    processEvents(600);
+    for (int i = 0; i < 100 && readFile(listed).size() < 4; ++i) {
+      processEvents(100);
+    }
+    ASSERT_GE(readFile(listed).size(), 4u);  // two runs: "x\n" each
+  }
+  processEvents(200);
+  EXPECT_EQ(called, 0);
 }
 
 // the helper ended between activate() and spawn(): the program is not started without
