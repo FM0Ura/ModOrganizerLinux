@@ -419,11 +419,19 @@ build_tool_inibakery() {
 # and the mobase module (bin/plugins/plugin_python/), with the system's Python 3.14 and
 # PyQt6; with --tests its suites run (the runner's GoogleTest suite, with the filter of
 # sys.path and the isolation from the user's packages, and the pytest suite of mobase),
-# the proxy must load and mobase must import in the system's Python
+# the proxy must load and mobase must import in the system's Python; the proxy must not
+# need libpython nor the runner (it loads them at run time, so that a missing Python is
+# reported by the plugin instead of failing its load)
 build_plugin_python() {
     cmake_build plugin_python "$ROOT/deps/plugin_python"
     check_plugins plugin "$INSTALL/bin/plugins/plugin_python.so"
     if [[ $TESTS == 1 ]]; then
+        local needed
+        needed="$(LC_ALL=C readelf -d "$INSTALL/bin/plugins/plugin_python.so" | grep NEEDED)" ||
+            die "plugin_python.so: readelf found no NEEDED entry"
+        if grep -E "libpython|librunner" <<<"$needed"; then
+            die "plugin_python.so needs libpython or librunner (above): it must load them at run time"
+        fi
         LD_LIBRARY_PATH="$INSTALL/lib" python3 -I "$ROOT/tests/python-import/check_mobase.py" \
             "$INSTALL" || die "mobase does not import"
     fi
