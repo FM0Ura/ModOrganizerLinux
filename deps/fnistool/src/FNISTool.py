@@ -22,6 +22,14 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
 import mobase
 
+def _windowsPath(path):
+    """The path as the Windows program sees it: on Linux GenerateFNISforUsers.exe runs
+    through Proton, where the root of the file system is the drive Z:"""
+    if sys.platform == "win32":
+        return path
+    else:
+        return "Z:" + path.replace("/", "\\")
+
 class FNISMissingException(Exception):
     """Thrown if GenerateFNISforUsers.exe path can't be found"""
     pass
@@ -125,7 +133,7 @@ class FNISTool(mobase.IPluginTool):
         if redirectOutput:
             try:
                 outputPath = self.__getOutputPath()
-                args.append('RedirectFiles="' + outputPath + '"')
+                args.append('RedirectFiles="' + _windowsPath(outputPath) + '"')
                 outputModName = pathlib.Path(outputPath).name
             except UnknownOutputPreferenceException:
                 QMessageBox.critical(self.__parentWidget, self.tr("Output mod not set"), self.tr("The mod to output to was not specified. The tool will now exit."))
