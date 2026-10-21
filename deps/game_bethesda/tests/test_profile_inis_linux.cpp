@@ -1,6 +1,7 @@
 // GameGamebryo on Linux, the profile INIs: file names found ignoring case (the Proton
 // prefix has Skyrim.ini, iniFiles() names skyrim.ini), the INI of the local saves, and
-// the repair of a profile when it is opened.
+// the repair of a profile when it is opened, the archive lists and the BSA
+// invalidation.
 
 #include <gtest/gtest.h>
 
@@ -10,6 +11,8 @@
 
 #include <uibase/iprofile.h>
 
+#include "gamebryobsainvalidation.h"
+#include "gamebryodataarchives.h"
 #include "gamebryolocalsavegames.h"
 #include "gamegamebryo.h"
 
@@ -133,6 +136,48 @@ protected:
   QString m_profile;
 };
 
+// the archive lists of a game with one INI, like Skyrim (skyrimdataarchives.cpp):
+// fake.ini, in the profile or in the documents of the game
+class FakeArchives : public GamebryoDataArchives
+{
+public:
+  using GamebryoDataArchives::GamebryoDataArchives;
+
+  QStringList vanillaArchives() const override { return {}; }
+
+  QStringList archives(const IProfile* profile) const override
+  {
+    return getArchivesFromKey(iniFile(profile), "SResourceArchiveList");
+  }
+
+private:
+  QString iniFile(const IProfile* profile) const
+  {
+    return profile->localSettingsEnabled()
+               ? QDir(profile->absolutePath()).absoluteFilePath("fake.ini")
+               : localGameDirectory().absoluteFilePath("fake.ini");
+  }
+
+  void writeArchiveList(IProfile* profile, const QStringList& before) override
+  {
+    setArchivesToKey(iniFile(profile), "SResourceArchiveList", before.join(", "));
+  }
+};
+
+class FakeInvalidation : public GamebryoBSAInvalidation
+{
+public:
+  using GamebryoBSAInvalidation::GamebryoBSAInvalidation;
+
+private:
+  QString invalidationBSAName() const override { return "Fake - Invalidation.bsa"; }
+  unsigned long bsaVersion() const override { return 0x68; }
+};
+
+// the documents of the game and a profile, as for the local saves
+class IniCase : public LocalSaves
+{};
+
 }  // namespace
 
 TEST(ResolveIgnoringCase, FindsTheFileWithAnotherCase)
@@ -255,4 +300,74 @@ TEST(RepairProfileInis, IgnoresAProfileWithoutLocalInis)
   game.repairProfileInis(nullptr);
 
   EXPECT_TRUE(game.initialized.empty());
+}
+
+// the Proton prefix has Fake.ini, the game reads fake.ini: the archive list is read
+// from and written to the file that exists
+TEST_F(IniCase, ArchivesUseThePrefixIniWithAnotherCase)
+{
+  ASSERT_TRUE(write(m_myGames + "/Fake.ini",
+                    "[Archive]\r\nSResourceArchiveList=A.bsa, B.bsa\r\n"));
+  FakeGame game(m_myGames);
+  FakeProfile profile(m_profile, false, false);
+  FakeArchives archives(&game);
+
+  EXPECT_EQ(archives.archives(&profile), (QStringList{"A.bsa", "B.bsa"}));
+
+  archives.addArchive(&profile, 0, "C.bsa");
+
+  const QByteArray ini = read(m_myGames + "/Fake.ini");
+  EXPECT_TRUE(ini.contains("SResourceArchiveList=C.bsa, A.bsa, B.bsa"))
+      << ini.toStdString();
+  EXPECT_FALSE(QFile::exists(m_myGames + "/fake.ini"));
+}
+
+TEST_F(IniCase, ArchivesUseTheProfileIniWithAnotherCase)
+{
+  ASSERT_TRUE(
+      write(m_profile + "/FAKE.ini", "[Archive]\r\nSResourceArchiveList=A.bsa\r\n"));
+  FakeGame game(m_myGames);
+  FakeProfile profile(m_profile, true, false);
+  FakeArchives archives(&game);
+
+  archives.removeArchive(&profile, "A.bsa");
+  archives.addArchive(&profile, 0, "B.bsa");
+
+  const QByteArray ini = read(m_profile + "/FAKE.ini");
+  EXPECT_TRUE(ini.contains("SResourceArchiveList=B.bsa")) << ini.toStdString();
+  EXPECT_FALSE(ini.contains("A.bsa")) << ini.toStdString();
+  EXPECT_FALSE(QFile::exists(m_profile + "/fake.ini"));
+}
+
+// no INI in any case (a new profile): created with the name asked for, as before
+TEST_F(IniCase, ArchivesCreateTheIniWithTheNameAskedFor)
+{
+  FakeGame game(m_myGames);
+  FakeProfile profile(m_profile, true, false);
+  FakeArchives archives(&game);
+
+  archives.addArchive(&profile, 0, "C.bsa");
+
+  const QByteArray ini = read(m_profile + "/fake.ini");
+  EXPECT_TRUE(ini.contains("SResourceArchiveList=C.bsa")) << ini.toStdString();
+}
+
+// Fallout 4 names Fallout4Custom.ini, the profile has fallout4custom.ini (iniFiles()):
+// the invalidation writes to the file of the profile, without a second one
+TEST_F(IniCase, BsaInvalidationUsesTheProfileIniWithAnotherCase)
+{
+  ASSERT_TRUE(write(m_profile + "/fakecustom.ini", "[Display]\r\nbFull Screen=0\r\n"));
+  FakeGame game(m_myGames);
+  FakeProfile profile(m_profile, true, false);  // invalidation not active
+  FakeArchives archives(&game);
+  FakeInvalidation invalidation(&archives, "FakeCustom.ini", &game);
+
+  EXPECT_TRUE(invalidation.prepareProfile(&profile));
+
+  const QByteArray ini = read(m_profile + "/fakecustom.ini");
+  EXPECT_TRUE(ini.contains("bFull Screen=0")) << ini.toStdString();
+  EXPECT_TRUE(ini.contains("bInvalidateOlderFiles=1")) << ini.toStdString();
+  EXPECT_TRUE(ini.contains("SInvalidationFile=ArchiveInvalidation.txt"))
+      << ini.toStdString();
+  EXPECT_FALSE(QFile::exists(m_profile + "/FakeCustom.ini"));
 }

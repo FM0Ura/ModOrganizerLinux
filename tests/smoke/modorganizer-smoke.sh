@@ -4,6 +4,8 @@
 #   tests/smoke/modorganizer-smoke.sh <install prefix>
 #
 # 1. `ModOrganizer --help` exits with 0 and prints the usage (it mentions --instance);
+# 1b. without a display (WAYLAND_DISPLAY, DISPLAY and QT_QPA_PLATFORM unset), it exits
+#    with 1 and says it needs a graphical session, without crashing (Phase 4c.2);
 # 2. started with a fresh HOME and XDG directories (also XDG_RUNTIME_DIR and
 #    MO2_VFS_STATE_DIR; so there is no instance), the
 #    application gets past the creation of its QApplication and reaches the instance
@@ -43,6 +45,23 @@ out="$(QT_QPA_PLATFORM=offscreen "$APP" --help 2>&1)" || rc=$?
 printf '%s\n' "$out"
 ((rc == 0)) || fail "--help exited with $rc"
 [[ $out == *instance* ]] || fail "--help did not print the usage"
+
+echo "--- ModOrganizer without a display"
+rc=0
+nd_home="$(mktemp -d)"
+mkdir -m 700 "$nd_home/runtime"
+out="$(env -u WAYLAND_DISPLAY -u DISPLAY -u QT_QPA_PLATFORM HOME="$nd_home" \
+    XDG_CONFIG_HOME="$nd_home/.config" XDG_DATA_HOME="$nd_home/.local/share" \
+    XDG_CACHE_HOME="$nd_home/.cache" XDG_STATE_HOME="$nd_home/.local/state" \
+    XDG_RUNTIME_DIR="$nd_home/runtime" MO2_VFS_STATE_DIR="$nd_home/runtime/mo2-vfs" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$nd_home/no-bus" \
+    timeout -k 5 20 "$APP" 2>&1)" || rc=$?
+rm -rf "$nd_home"
+printf '%s\n' "$out"
+((rc == 1)) || fail "without a display, it exited with $rc instead of 1"
+[[ $out == *"needs a graphical session"* ]] || fail "without a display, no message"
+[[ $out != *"has crashed"* && $out != *"terminate called"* ]] ||
+    fail "without a display, the application crashed"
 
 # start <n>: one headless start with a fresh HOME, stopped by the timeout
 start() {

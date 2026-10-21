@@ -10,6 +10,11 @@
 #include <log.h>
 #include <report.h>
 
+#ifndef _WIN32
+#include "linux/displaycheck_linux.h"
+#include <QProcessEnvironment>
+#endif
+
 using namespace MOBase;
 
 #ifdef _WIN32
@@ -37,6 +42,23 @@ int run(int argc, char* argv[])
   }
 
   initLogging();
+
+#ifndef _WIN32
+  // without a display, QApplication aborts, which looks like a crash
+  {
+    QStringList args;
+    for (int i = 0; i < argc; ++i) {
+      args.push_back(QString::fromLocal8Bit(argv[i]));
+    }
+
+    const auto why =
+        missingDisplayMessage(args, QProcessEnvironment::systemEnvironment());
+    if (!why.isEmpty()) {
+      log::error("{}", why);
+      return 1;
+    }
+  }
+#endif
 
   // must be after logging
   TimeThis tt("main() multiprocess");

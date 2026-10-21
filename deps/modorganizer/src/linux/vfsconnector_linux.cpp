@@ -25,6 +25,7 @@
 #include "exitcodes_linux.h"
 #include "vfsbridge_linux.h"
 #include "vfsclient_linux.h"
+#include "vfstimeouts_linux.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -36,6 +37,7 @@
 #include <QMetaObject>
 #include <QProcess>
 #include <QTimer>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -108,14 +110,6 @@ QStringList cleanupStaleMounts()
   return stale;
 }
 
-// the timeout of mount and update requests; MO2_VFS_TIMEOUT_MS replaces it (tests)
-std::chrono::milliseconds mountTimeout()
-{
-  bool ok         = false;
-  const auto test = qEnvironmentVariable("MO2_VFS_TIMEOUT_MS").toInt(&ok);
-  return ok && test > 0 ? std::chrono::milliseconds(test) : 30s;
-}
-
 QString logLevelName(log::Levels level)
 {
   switch (level) {
@@ -138,6 +132,27 @@ QJsonArray toJson(const QStringList& list)
     a.push_back(s);
   }
   return a;
+}
+
+// the roots listed by `mo2-vfs --list-mounts` (its line {"roots":[...]}); nothing when
+// there is no such line
+std::optional<QStringList> parseMountedRoots(const QByteArray& output)
+{
+  for (const auto& line : output.split('\n')) {
+    const auto doc = QJsonDocument::fromJson(line.trimmed());
+    if (!doc.isObject() || !doc.object().contains("roots")) {
+      continue;
+    }
+
+    QStringList roots;
+    for (const auto& r : doc.object().value("roots").toArray()) {
+      roots.push_back(r.toString());
+    }
+
+    return roots;
+  }
+
+  return std::nullopt;
 }
 
 // the mo2-vfs mount points of the mount namespace of the helper (`mo2-vfs
@@ -172,17 +187,7 @@ std::optional<QStringList> mountedRoots()
     return std::nullopt;
   }
 
-  for (const auto& line : process.readAllStandardOutput().split('\n')) {
-    const auto doc = QJsonDocument::fromJson(line.trimmed());
-    if (!doc.isObject() || !doc.object().contains("roots")) {
-      continue;
-    }
-
-    QStringList roots;
-    for (const auto& r : doc.object().value("roots").toArray()) {
-      roots.push_back(r.toString());
-    }
-
+  if (auto roots = parseMountedRoots(process.readAllStandardOutput())) {
     return roots;
   }
 
@@ -195,7 +200,26 @@ std::optional<QStringList> mountedRoots()
 class LinuxVfsConnector : public VfsConnector
 {
 public:
-  explicit LinuxVfsConnector(QStringList stale) : m_stale(std::move(stale)) {}
+  explicit LinuxVfsConnector(QStringList stale) : m_stale(std::move(stale))
+  {
+    QObject::connect(&m_recheck, &QTimer::timeout, &m_context, [this] {
+      recheckLeftMounts();
+    });
+  }
+
+  // a recheck that is running is killed, without its callbacks
+  ~LinuxVfsConnector() override
+  {
+    m_recheck.stop();
+
+    if (m_recheckProcess != nullptr) {
+      m_recheckProcess->disconnect();
+      m_recheckProcess->kill();
+      m_recheckProcess->waitForFinished(2000);
+      delete m_recheckProcess;
+      m_recheckProcess = nullptr;
+    }
+  }
 
   void updateMapping(const MappingType& mapping) override
   {
@@ -214,7 +238,7 @@ public:
       // the mounted file system follows the mappings (also called from the refresh
       // and profile code, which don't expect an exception)
       try {
-        send(mappingRequest("update"), mountTimeout());
+        send(mappingRequest("update"), vfsMountTimeout());
         m_mappingSent = true;
       } catch (const std::exception& e) {
         m_mappingSent = false;
@@ -449,8 +473,18 @@ private:
   {
     if (m_client && !m_client->running()) {
       helperLost("mo2-vfs is not running");
-      m_client.reset();
+
+      // one that stopped answering but still runs may hold the mount of a running
+      // program: kept until its mount is gone (dropLostHelper() below)
+      if (m_client->exited()) {
+        m_client.reset();
+      }
     }
+
+    // a recheck that runs (recheckLeftMounts()) ends first, so that its `--cleanup`
+    // never runs next to the one below nor next to a new mount of the same roots; its
+    // callbacks run as it ends and see the state as it is then
+    waitForRecheck();
 
     // a helper that ended abnormally may have left its mount behind; also when a
     // helper runs again (started by spawn() for a program without the virtual file
@@ -467,6 +501,14 @@ private:
       }
     }
 
+    // nothing of a lost helper is mounted any more; one that still ran was killed: the
+    // cleanup above ran while it was alive and left its state file, which a later
+    // cleanup would take for that of a dead helper, unmounting the same roots under the
+    // new mount; cleaned up now, nothing of it is mounted, so nothing is unmounted
+    if (dropLostHelper()) {
+      cleanupStaleMounts();
+    }
+
     // a new helper has nothing mounted (m_active is false): `mount`, never `update`
     if (!m_client) {
       start();
@@ -475,7 +517,7 @@ private:
     if (m_active) {
       // one update per run: updateMapping() already sent these mappings
       if (!std::exchange(m_mappingSent, false)) {
-        send(mappingRequest("update"), mountTimeout());
+        send(mappingRequest("update"), vfsMountTimeout());
       }
       return;
     }
@@ -484,7 +526,7 @@ private:
     // delivered while the mount request waits
     ++m_generation;
 
-    const auto reply = send(mappingRequest("mount"), mountTimeout());
+    const auto reply = send(mappingRequest("mount"), vfsMountTimeout());
 
     m_roots.clear();
     for (const auto& r : reply.value("roots").toArray()) {
@@ -496,6 +538,7 @@ private:
     m_watched             = 0;
     m_pendingDeactivation = false;
     m_leftMounted.clear();
+    m_recheck.stop();
 
     if (!m_client->running()) {
       // the helper ended as it replied, and its end was handled by the same pass of the
@@ -559,13 +602,23 @@ private:
     lost(reason);
 
     if (m_client && !m_client->exited() && m_watched > 0) {
-      // not killed: a program may still be using the mount; whatever the helper left
-      // behind is cleaned up before the next one starts
+      // not killed: a program may still be using the mount, whose roots count as still
+      // mounted (the deferred refresh must not walk a hung mount) until the mount
+      // table no longer lists them (recheckLeftMounts()) or the helper recovers and
+      // unmounts; the helper is killed once its mount is gone (dropLostHelper())
       log::error("mo2-vfs stopped answering while programs use the virtual file "
                  "system: {}",
                  reason);
       m_cleanupNeeded = true;
-      deactivated();
+
+      if (m_roots.isEmpty()) {
+        deactivated();
+      } else {
+        keepLeftMounted(m_roots, "it is still mounted on " + m_roots.join(", ") +
+                                     "; the data directory is refreshed once it is "
+                                     "unmounted; once the programs that use it have "
+                                     "ended, unmount it with fusermount3 -uz");
+      }
       return;
     }
 
@@ -652,6 +705,149 @@ private:
         m_stale.push_back(root);
       }
     }
+
+    // checked again until the roots are gone (recheckLeftMounts())
+    if (!m_recheck.isActive()) {
+      m_recheck.start(vfsRecheckInterval());
+    }
+  }
+
+  // while roots are left mounted (keepLeftMounted()), the mount table is checked again
+  // every vfsRecheckInterval(), without blocking the event loop: `mo2-vfs --cleanup`
+  // (which only unmounts the roots of helpers that are gone), then `--list-mounts`;
+  // once none of the roots is listed, the file system is inactive (deactivated(), which
+  // runs the deferred refresh); nothing changes when the table can't be read
+  void recheckLeftMounts()
+  {
+    if (m_recheckProcess != nullptr || m_leftMounted.isEmpty()) {
+      return;
+    }
+
+    runHelperAsync({"--cleanup"}, [this](bool, const QByteArray&) {
+      runHelperAsync({"--list-mounts"}, [this](bool ok, const QByteArray& output) {
+        const auto mounted = ok ? parseMountedRoots(output) : std::nullopt;
+        if (!mounted || m_leftMounted.isEmpty()) {
+          return;
+        }
+
+        for (const auto& root : m_leftMounted) {
+          if (mounted->contains(root)) {
+            return;
+          }
+        }
+
+        log::info("the virtual file system is no longer mounted on {}",
+                  m_leftMounted.join(", "));
+        deactivated();
+
+        // a helper killed now leaves its state file (the cleanup above ran while it was
+        // alive): the next activation cleans up first
+        m_cleanupNeeded = dropLostHelper();
+      });
+    });
+  }
+
+  // a helper that was lost (it ended, or stopped answering and still runs) is
+  // discarded; one that still runs is killed first: only called once its mount is gone,
+  // so that no program can be using it, and the signal goes to the helper only (its
+  // programs are in process groups of their own); true when one that still ran was
+  // killed
+  bool dropLostHelper()
+  {
+    if (!m_client || m_client->running()) {
+      return false;
+    }
+
+    const bool killed = !m_client->exited();
+
+    if (killed) {
+      log::debug(
+          "killing mo2-vfs, which stopped answering, now that its mount is gone");
+
+      // its end is not a loss (the exited handler would report one while activating)
+      m_client->setExitedHandler(nullptr);
+      m_client->kill();
+    }
+
+    m_client.reset();
+    return killed;
+  }
+
+  // waits for the recheck that runs (recheckLeftMounts()), if any: each of its
+  // processes ends (killed after the deadline of 10 s) and its callbacks run, which may
+  // start its next process
+  void waitForRecheck()
+  {
+    while (m_recheckProcess != nullptr) {
+      auto* process = m_recheckProcess;
+
+      if (process->waitForFinished(10000)) {
+        continue;
+      }
+
+      log::warn("a recheck of the mount table did not finish in time");
+      process->kill();
+
+      if (!process->waitForFinished(2000)) {
+        // it never started, or it does not end: forgotten, without its callbacks
+        process->disconnect();
+        process->deleteLater();
+        if (m_recheckProcess == process) {
+          m_recheckProcess = nullptr;
+        }
+      }
+    }
+  }
+
+  // runs the helper with `args` (vfsbridge::helperCommand()) without waiting for it;
+  // `done` gets whether it exited with 0 and its standard output; a run that takes more
+  // than 10 s is killed (done(false, ...)); `done` is not called when it can't be
+  // started
+  void runHelperAsync(const QStringList& args,
+                      std::function<void(bool, const QByteArray&)> done)
+  {
+    vfsbridge::Command cmd;
+    try {
+      cmd = vfsbridge::helperCommand(vfsBinary(), args);
+    } catch (const std::exception& e) {
+      log::warn("cannot run mo2-vfs {}: {}", args.join(' '), e.what());
+      return;
+    }
+
+    auto* process    = new QProcess(&m_context);
+    m_recheckProcess = process;
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+
+    auto* deadline = new QTimer(process);
+    deadline->setSingleShot(true);
+    QObject::connect(deadline, &QTimer::timeout, process, [process, args] {
+      log::warn("mo2-vfs {} did not finish in time", args.join(' '));
+      process->kill();
+    });
+
+    QObject::connect(process, &QProcess::errorOccurred, &m_context,
+                     [this, process, args](QProcess::ProcessError error) {
+                       if (error != QProcess::FailedToStart) {
+                         return;
+                       }
+                       log::warn("cannot run mo2-vfs {}: {}", args.join(' '),
+                                 process->errorString());
+                       m_recheckProcess = nullptr;
+                       process->deleteLater();
+                     });
+
+    QObject::connect(
+        process, &QProcess::finished, &m_context,
+        [this, process, done = std::move(done)](int code, QProcess::ExitStatus status) {
+          m_recheckProcess = nullptr;
+          process->deleteLater();
+          done(status == QProcess::NormalExit && code == 0,
+               process->readAllStandardOutput());
+        });
+
+    process->start(cmd.program, cmd.arguments);
+    process->closeWriteChannel();
+    deadline->start(10000);
   }
 
   void start()
@@ -729,6 +925,8 @@ private:
   // nothing is mounted any more
   void deactivated()
   {
+    m_recheck.stop();
+
     if (!m_active && m_leftMounted.isEmpty()) {
       return;
     }
@@ -769,6 +967,10 @@ private:
   QString m_lostReason;
 
   QObject m_context;
+
+  // rechecks the roots left mounted (recheckLeftMounts()), and its running process
+  QTimer m_recheck;
+  QProcess* m_recheckProcess = nullptr;
   std::unique_ptr<VfsClient> m_client;
 
   // the roots of the last mount (its `ready` event)
