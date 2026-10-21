@@ -212,7 +212,13 @@ QList<PluginSetting> GameEnderalSE::settings() const
 void GameEnderalSE::initializeProfile(const QDir& path, ProfileSettings settings) const
 {
   if (settings.testFlag(IPluginGame::MODS)) {
+#ifdef _WIN32
+    // the Windows join keeps the upstream behavior (no separator)
+    copyToProfile(localAppFolder() + gameDirectoryName(), path, "plugins.txt");
+#else
+    // Linux needs the separator to find plugins.txt in the prefix
     copyToProfile(localAppFolder() + "/" + gameDirectoryName(), path, "plugins.txt");
+#endif
   }
 
   if (settings.testFlag(IPluginGame::CONFIGURATION)) {
