@@ -6,6 +6,7 @@
 #include <pybind11/pybind11.h>
 
 #include <QCoreApplication>
+#include <QFile>
 
 #include <uibase/log.h>
 
@@ -38,8 +39,16 @@ namespace mo2::python {
         // Register the deprecation:
         DeprecatedLines.emplace(filename, lineno);
 
+#ifdef _WIN32
         auto path = relative(std::filesystem::path(filename),
                              QCoreApplication::applicationDirPath().toStdWString());
+#else
+        // Linux: the paths are the bytes of the file system (UTF-8), never converted
+        // through the C++ locale
+        auto path = relative(
+            std::filesystem::path(filename),
+            QFile::encodeName(QCoreApplication::applicationDirPath()).toStdString());
+#endif
 
         // Show the message:
         if (message.empty()) {

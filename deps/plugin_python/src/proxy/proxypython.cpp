@@ -22,10 +22,13 @@ along with python proxy plugin.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef _WIN32
 #include <Windows.h>
+#else
+#include <dlfcn.h>
 #endif
 
 #include <QCoreApplication>
 #include <QDirIterator>
+#include <QFile>
 #include <QMessageBox>
 #include <QWidget>
 #include <QtPlugin>
@@ -55,8 +58,13 @@ fs::path getPluginFolder()
 
     return fs::path(path).parent_path();
 #else
-    // Linux: see Task 3 of the Phase 4d.1 plan
-    return {};
+    // Linux: the folder of the proxy (plugins/), from the address of this function
+    Dl_info info{};
+    if (dladdr(reinterpret_cast<void*>(&getPluginFolder), &info) == 0 ||
+        info.dli_fname == nullptr) {
+        return {};
+    }
+    return fs::path(info.dli_fname).parent_path();
 #endif
 }
 
@@ -74,10 +82,12 @@ bool ProxyPython::init(IOrganizer* moInfo)
         return false;
     }
 
+#ifdef _WIN32
     if (QCoreApplication::applicationDirPath().contains(';')) {
         m_LoadFailure = FailureType::SEMICOLON;
         return true;
     }
+#endif
 
     const auto pluginFolder = getPluginFolder();
 
@@ -132,6 +142,18 @@ bool ProxyPython::init(IOrganizer* moInfo)
                    qUtf8Printable(windowsErrorString(::GetLastError())));
         return false;
     }
+#else
+    // Linux: the extension modules of the system's Python (PyQt6, mobase) are not
+    // linked to libpython and need its symbols in the global scope, but Mod Organizer
+    // loads plugins with RTLD_LOCAL (spec of Phase 4d.1, section 3.1)
+    if (dlopen(MO2_PYTHON_LIBRARY, RTLD_NOW | RTLD_GLOBAL) == nullptr) {
+        m_LoadFailure = FailureType::DLL_NOT_FOUND;
+        log::error("failed to load {}: {}", MO2_PYTHON_LIBRARY, dlerror());
+        if (m_MOInfo) {
+            m_MOInfo->setPersistent(name(), "tryInit", false);
+        }
+        return true;
+    }
 #endif
 
     // 2. we create the Python runner, we do not need to use ::LinkLibrary and
@@ -141,10 +163,19 @@ bool ProxyPython::init(IOrganizer* moInfo)
     m_Runner = mo2::python::createPythonRunner();
 
     if (m_Runner) {
+#ifdef _WIN32
         const auto libpath = pluginFolder / "libs";
         const std::vector<fs::path> paths{
             libpath / "pythoncore.zip", libpath,
             std::filesystem::path{IOrganizer::getPluginDataPath().toStdWString()}};
+#else
+        // Linux: the proxy is plugins/plugin_python.so, next to the plugin_python
+        // folder; the standard library is the system's (the runner filters sys.path),
+        // the paths are the bytes of the file system (UTF-8)
+        const std::vector<fs::path> paths{
+            pluginFolder / "plugin_python" / "libs",
+            fs::path{QFile::encodeName(IOrganizer::getPluginDataPath()).toStdString()}};
+#endif
         m_Runner->initialize(paths);
     }
 
@@ -160,9 +191,11 @@ bool ProxyPython::init(IOrganizer* moInfo)
     if (!m_Runner || !m_Runner->isInitialized()) {
         m_LoadFailure = FailureType::INITIALIZATION;
     }
+#ifdef _WIN32
     else {
         m_Runner->addDllSearchPath(pluginFolder / "dlls");
     }
+#endif
 
     return true;
 }
@@ -258,7 +291,11 @@ QString ProxyPython::shortDescription(unsigned int key) const
     case FailureType::SEMICOLON:
         return tr("ModOrganizer path contains a semicolon");
     case FailureType::DLL_NOT_FOUND:
+#ifdef _WIN32
         return tr("Python DLL not found");
+#else
+        return tr("Python not found");
+#endif
     case FailureType::INVALID_DLL:
         return tr("Invalid Python DLL");
     case FailureType::INITIALIZATION:
@@ -282,8 +319,14 @@ QString ProxyPython::fullDescription(unsigned int key) const
                   "path without a semicolon.")
             .arg(QCoreApplication::applicationDirPath());
     case FailureType::DLL_NOT_FOUND:
+#ifdef _WIN32
         return tr("The Python plugin DLL was not found, maybe your antivirus deleted "
                   "it. Re-installing MO2 might fix the problem.");
+#else
+        return tr("Python %1 or PyQt6 was not found. In the mo2-run distrobox, install "
+                  "them with: sudo dnf install python3 python3-pyqt6")
+            .arg(QStringLiteral(MO2_PYTHON_VERSION_STRING));
+#endif
     case FailureType::INVALID_DLL:
         return tr(
             "The Python plugin DLL is invalid, maybe your antivirus is blocking it. "

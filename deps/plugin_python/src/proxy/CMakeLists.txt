@@ -49,7 +49,8 @@ else()
 	get_filename_component(_python_library "${_python_library}" REALPATH)
 	get_filename_component(MO2_PYTHON_LIBRARY "${_python_library}" NAME)
 	target_compile_definitions(proxy PRIVATE
-		MO2_PYTHON_LIBRARY="${MO2_PYTHON_LIBRARY}")
+		MO2_PYTHON_LIBRARY="${MO2_PYTHON_LIBRARY}"
+		MO2_PYTHON_VERSION_STRING="${MO2_PYTHON_VERSION}")
 endif()
 
 # translations (custom location)

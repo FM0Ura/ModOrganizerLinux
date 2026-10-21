@@ -8,6 +8,8 @@ add_library(runner SHARED
 	pythonrunner.h
 	pythonutils.h
 	pythonutils.cpp
+	syspath.h
+	syspath.cpp
 )
 mo2_configure_target(runner
 	NO_SOURCES

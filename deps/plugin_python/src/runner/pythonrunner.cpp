@@ -16,6 +16,7 @@
 #include "pybind11_qt/pybind11_qt.h"
 #include <pybind11/embed.h>
 #include <pybind11/functional.h>
+#include <pybind11/stl.h>
 #include <pybind11/stl/filesystem.h>
 
 #include <uibase/log.h>
@@ -23,6 +24,7 @@
 
 #include "error.h"
 #include "pythonutils.h"
+#include "syspath.h"
 
 using namespace MOBase;
 namespace py = pybind11;
@@ -87,6 +89,7 @@ namespace mo2::python {
             // set the module search paths
             //
             auto paths = pythonPaths;
+#ifdef _WIN32
             if (paths.empty()) {
 
                 // while it is possible to use config.pythonpath_env, it requires
@@ -100,6 +103,7 @@ namespace mo2::python {
                     }
                 }
             }
+#endif
 
             PyConfig config;
             PyConfig_InitIsolatedConfig(&config);
@@ -113,18 +117,18 @@ namespace mo2::python {
             config.optimization_level = 2;
 
             // set paths to configuration
+#ifdef _WIN32
             if (!paths.empty()) {
                 config.module_search_paths_set = 1;
                 for (auto const& path : paths) {
-#ifdef _WIN32
                     PyWideStringList_Append(&config.module_search_paths,
                                             absolute(path).native().c_str());
-#else
-                    PyWideStringList_Append(&config.module_search_paths,
-                                            absolute(path).wstring().c_str());
-#endif
                 }
             }
+#else
+            // Linux: Python computes the paths of the system's standard library, which
+            // are filtered below, with the paths of Mod Organizer
+#endif
 
             py::initialize_interpreter(&config, 1, &argv0, true);
 
@@ -138,6 +142,23 @@ namespace mo2::python {
 
                 return false;
             }
+
+#ifndef _WIN32
+            {
+                // Linux: only the system's standard library and packages, never the
+                // user's (~/.local, /usr/local, PYTHONPATH), then the folders of Mod
+                // Organizer (spec of Phase 4d.1, section 3.2); the paths are the bytes
+                // of the file system (UTF-8), never converted through the C++ locale
+                py::module_ sys = py::module_::import("sys");
+                std::vector<std::string> extra;
+                for (const auto& path : paths) {
+                    extra.push_back(absolute(path).string());
+                }
+                sys.attr("path") = py::cast(
+                    filterSysPath(sys.attr("path").cast<std::vector<std::string>>(),
+                                  systemSysPathRoots(), extra));
+            }
+#endif
 
             {
                 py::module_ mainModule   = py::module_::import("__main__");
