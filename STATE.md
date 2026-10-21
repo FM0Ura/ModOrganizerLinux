@@ -218,6 +218,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 ## Limitações conhecidas da Fase 4c.3
 
 - Com o mod do binário desativado, o programa roda da pasta do mod, com um aviso no log (o Nemesis então mostra o erro 1008).
+- Execuções sem o sistema de arquivos virtual rodam o programa da pasta do mod, sem a reescrita dos caminhos.
 - O Pandora 5.0.0-beta ignora o argumento `-o`: a saída vai para o `overwrite`.
 - O xEdit de outros jogos só tem cobertura por fixtures (`SteamGames`): nenhum outro jogo Bethesda foi testado de verdade.
 - O jogo precisa ter rodado uma vez pela Steam para o prefixo e o registro `Installed Path` existirem.
