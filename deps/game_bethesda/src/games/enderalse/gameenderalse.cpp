@@ -60,6 +60,10 @@ void GameEnderalSE::detectGame()
 
 QString GameEnderalSE::identifyGamePath() const
 {
+#ifndef _WIN32
+  // no registry: the Steam libraries
+  return MOBase::findSteamGame(gameName(), binaryName());
+#endif
   QMap<QString, QString> paths = {
       {"Software\\Bethesda Softworks\\" + gameName(), "Installed Path"},
       {"Software\\GOG.com\\Games\\1708684988", "path"},
