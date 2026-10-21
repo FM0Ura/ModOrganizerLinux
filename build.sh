@@ -415,11 +415,11 @@ build_tool_inibakery() {
 
 # plugin_python (Phase 4d.1): the Python proxy (bin/plugins/plugin_python.so), its runner
 # and the mobase module (bin/plugins/plugin_python/), with the system's Python 3.14 and
-# PyQt6; with --tests the proxy must load and mobase must import in the system's Python
+# PyQt6; with --tests its suites run (the runner's GoogleTest suite, with the filter of
+# sys.path and the isolation from the user's packages, and the pytest suite of mobase),
+# the proxy must load and mobase must import in the system's Python
 build_plugin_python() {
-    # BUILD_TESTING is off: the upstream suites (tests/) are not built yet (Task 3 of
-    # Phase 4d.1 turns them on)
-    cmake_build plugin_python "$ROOT/deps/plugin_python" -DBUILD_TESTING=OFF
+    cmake_build plugin_python "$ROOT/deps/plugin_python"
     check_plugins plugin "$INSTALL/bin/plugins/plugin_python.so"
     if [[ $TESTS == 1 ]]; then
         LD_LIBRARY_PATH="$INSTALL/lib" python3 -I "$ROOT/tests/python-import/check_mobase.py" \
