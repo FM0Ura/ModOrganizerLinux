@@ -129,7 +129,12 @@ function(mo2_python_uifiles TARGET)
 		set(_pyuic ${CMAKE_COMMAND} -E env PYTHONPATH=${CMAKE_BINARY_DIR}/pylibs
 			${MO2_PYLIBS_DIR}/bin/pyuic${MO2_QT_VERSION_MAJOR}.exe)
 	else()
-		find_program(MO2_PYUIC pyuic${MO2_QT_VERSION_MAJOR} REQUIRED)
+		# Linux: the pyuic6 of the system (package python3-pyqt6-devel), next to the
+		# Python of the build or in /usr/bin first, so that one installed by pip in
+		# ~/.local/bin is not preferred
+		get_filename_component(_python_bin_dir "${PYTHON_EXE}" DIRECTORY)
+		find_program(MO2_PYUIC pyuic${MO2_QT_VERSION_MAJOR}
+			HINTS "${_python_bin_dir}" /usr/bin REQUIRED)
 		set(_pyuic ${MO2_PYUIC})
 	endif()
 
