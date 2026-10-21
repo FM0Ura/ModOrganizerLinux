@@ -1,0 +1,12 @@
+; a minimal BAIN wizard script for the manual test of Phase 4d.1
+SelectOne "Choose the option", \
+    "Option A", "Installs the A file", "", \
+    "Option B", "Installs the B file", ""
+    Case "Option A"
+        SelectSubPackage "10 Option A"
+        Break
+    Case "Option B"
+        SelectSubPackage "20 Option B"
+        Break
+EndSelect
+SelectSubPackage "00 Core"
