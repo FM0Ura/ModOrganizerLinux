@@ -107,7 +107,7 @@ O que o xEdit lê do registro do prefixo (`Bethesda Softworks\<jogo>\Installed P
 - **Unitários (`modorganizer`, gtest):** `virtualizedPaths()` com o binário em `mods/`, só a pasta de trabalho, os dois, nenhum, `mods/<mod>` sem subpasta, `mods/` com maiúsculas diferentes e um prefixo parecido mas diferente (`mods2/`, que não conta).
 - **e2e (`tests/vfs-e2e`):** um `.exe` dentro de `mods/<mod>/Tool/` com o `umu-run` falso da Fase 3 (`MO2_VFS_BRIDGE=direct`). O falso registra argv e cwd, lê um arquivo vizinho pelo caminho do `Data` montado e cria um arquivo novo. Esperado: argv e cwd em `<jogo>/Data/Tool/…`, a leitura funciona, o arquivo novo vai para `overwrite/` e o mount cai no fim. Segundo caso, com o mod desativado: argv no caminho real e o aviso no log.
 - **game_bethesda:** o teste parametrizado do §3.
-- **CI:** Linux pelo `build.sh --tests`; Windows pelo `[windows-ci]` (o `adjustForVirtualized()` mudou de forma, não de comportamento).
+- **CI:** Linux pelo `build.sh --tests`; Windows pelo `[windows-ci]`, que só compila (o `adjustForVirtualized()` mudou de forma, não de comportamento; a equivalência foi conferida linha a linha na revisão).
 - **Manual:** checklist do §4 no Bazzite.
 
 ## 6. Pendências registradas (fora desta fase)
@@ -119,7 +119,7 @@ O que o xEdit lê do registro do prefixo (`Bethesda Softworks\<jogo>\Installed P
 
 | Risco | Mitigação |
 |---|---|
-| A refatoração do `adjustForVirtualized()` muda o Windows | Função pura com testes unitários nas duas plataformas; o CI do Windows compila e roda os testes; a montagem do `launch` não muda. |
+| A refatoração do `adjustForVirtualized()` muda o Windows | Função pura com testes unitários, que rodam só no Linux (o `organizer_tests` não é compilado no Windows); o CI do Windows apenas compila, e a equivalência do `adjustForVirtualized()` com o código anterior foi conferida linha a linha na revisão; a montagem do `launch` não muda. |
 | Ferramenta que depende de estar fora do `Data` | É o mesmo comportamento do MO2 no Windows; se aparecer, o usuário pode configurar o executável fora de `mods/`. |
 | Plugins de jogo que só compilam têm defeitos de caminho no Linux | É o que os testes do §3 procuram; a correção entra nesta fase. |
 | O mod do binário é ativo, mas outro mod de maior prioridade cobre o arquivo | O executável vencedor do `Data` é o que roda, como no Windows. |

@@ -17,7 +17,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | ✅ Concluída (2026-10-18) |
 | 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | 🟡 Em andamento |
 | 4c.1 | Plugins C++ restantes | installer_bain, installer_bundle, preview_base, preview_bsa, bsa_extractor, diagnose_basic, check_fnis, tool_inieditor, tool_inibakery | Todas as funcionalidades | 🟡 Em andamento |
-| 4c.2 | Pendências da Fase 2 | as 6 pendências adiadas do teste manual e da revisão final da Fase 2 | — | ⚪ Não iniciada |
+| 4c.2 | Pendências da Fase 2 | as 6 pendências adiadas do teste manual e da revisão final da Fase 2 | — | 🟡 Em andamento |
 | 4c.3 | Ferramentas pelo VFS | BodySlide, Nemesis/Pandora, xEdit de outros jogos | Ferramentas pelo VFS (critério 6) | 🟡 Em andamento |
 | 4d | Plugins Python | `plugin_python` (pybind11 + Python + PyQt6) e plugins Python (incl. `basic_games`) | Todas as funcionalidades | ⚪ Não iniciada |
 | 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ⚪ Não iniciada |

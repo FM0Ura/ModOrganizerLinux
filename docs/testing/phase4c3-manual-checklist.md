@@ -13,6 +13,7 @@ Spec: [`../superpowers/specs/2026-10-21-phase4c3-ferramentas-design.md`](../supe
   - Nemesis: `mods/<Nemesis>/Nemesis_Engine/Nemesis Unlimited Behavior Engine.exe`;
   - BodySlide: `mods/<BodySlide>/CalienteTools/BodySlide/BodySlide.exe` (ou `BodySlide x64.exe`, conforme o arquivo instalado);
   - Pandora: `mods/<Pandora>/.../Pandora Behaviour Engine+.exe`.
+- [ ] O binário pode ser escolhido tanto por `/home/...` quanto por `/var/home/...` (na distrobox são dois caminhos para a mesma pasta): os dois funcionam e o programa roda de `Data`. Vale testar o Nemesis com cada grafia.
 - [ ] Anote o conteúdo do `overwrite` (de preferência, vazio).
 
 ## 1. Nemesis
@@ -33,6 +34,7 @@ Spec: [`../superpowers/specs/2026-10-21-phase4c3-ferramentas-design.md`](../supe
 ## 4. Mod desativado
 
 - [ ] Desativar o mod do Nemesis e executá-lo. Esperado: o log do MO2 tem `'<mod>' is not active; '<binário>' runs from the mods directory`; o Nemesis abre e mostra o "ERROR(1008)" (roda da pasta do mod, como antes desta fase). Reativar o mod.
+- [ ] (Opcional) Outro perfil: crie um segundo perfil com o mod do Nemesis desativado e, com o perfil aberto tendo-o ativado, rode num terminal `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer run -p <perfil> -e Nemesis`. Esperado: o aviso `'<mod>' is not active; '<binário>' runs from the mods directory` no log.
 
 ## 5. Regressão
 
