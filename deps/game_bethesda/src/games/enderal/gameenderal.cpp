@@ -272,6 +272,10 @@ int GameEnderal::nexusGameID() const
 
 QString GameEnderal::identifyGamePath() const
 {
+#ifndef _WIN32
+  // no registry: the Steam libraries
+  return MOBase::findSteamGame(gameName(), binaryName());
+#endif
   QString path = "Software\\SureAI\\Enderal";
   QString result;
   try {
