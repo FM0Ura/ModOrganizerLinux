@@ -1,11 +1,14 @@
 # Code greatly inspired by https://github.com/LostDragonist/steam-library-setup-tool
 
 import sys
-import winreg
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import TypedDict, cast
 
 import vdf  # pyright: ignore[reportMissingTypeStubs]
+
+if sys.platform == "win32":
+    import winreg
 
 
 class SteamGame:
@@ -143,12 +146,46 @@ def find_steam_path() -> Path | None:
     Returns:
         The Steam path, or None if Steam is not installed.
     """
+    if sys.platform != "win32":
+        # Linux: the Steam folders are known to Mod Organizer, see find_games()
+        return None
+
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Valve\\Steam") as key:
             value = winreg.QueryValueEx(key, "SteamExe")
             return Path(value[0].replace("/", "\\")).parent
     except FileNotFoundError:
         return None
+
+
+class _LinuxSteamGames(Mapping[str, Path]):
+    """
+    The installed Steam games on Linux, asked to Mod Organizer by app ID
+    (mobase.utils.steamApp, the Steam module of uibase, which knows the Steam
+    roots and the library folders). The games cannot be listed, only asked for.
+    """
+
+    @staticmethod
+    def _find(appid: object) -> Path | None:
+        import mobase
+
+        app = mobase.utils.steamApp(str(appid))  # pyright: ignore[reportAttributeAccessIssue]
+        return Path(app["gamePath"]) if app else None
+
+    def __getitem__(self, appid: str) -> Path:
+        path = self._find(appid)
+        if path is None:
+            raise KeyError(appid)
+        return path
+
+    def __contains__(self, appid: object) -> bool:
+        return self._find(appid) is not None
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
 
 
 def find_games() -> dict[str, Path]:
@@ -159,6 +196,9 @@ def find_games() -> dict[str, Path]:
         A mapping from Steam game ID to install locations for available
         Steam games.
     """
+    if sys.platform != "win32":
+        return _LinuxSteamGames()  # pyright: ignore[reportReturnType]
+
     steam_path = find_steam_path()
     if not steam_path:
         return {}

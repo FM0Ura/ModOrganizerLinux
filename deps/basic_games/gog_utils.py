@@ -1,11 +1,26 @@
 # Code adapted from EzioTheDeadPoet / erri120:
 #     https://github.com/ModOrganizer2/modorganizer-basic_games/pull/5
 
-import winreg
+import functools
+import sys
 from pathlib import Path
+
+from PyQt6.QtCore import qInfo
+
+if sys.platform == "win32":
+    import winreg
+
+
+@functools.cache
+def _only_steam_on_linux() -> None:
+    qInfo("GOG: only Steam games are detected on Linux")
 
 
 def find_games() -> dict[str, Path]:
+    if sys.platform != "win32":
+        _only_steam_on_linux()
+        return {}
+
     # List the game IDs from the registry:
     game_ids: list[str] = []
     try:

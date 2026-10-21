@@ -1,7 +1,7 @@
 import json
 import os.path
 import shutil
-import winreg
+import sys
 from enum import IntEnum, auto
 from pathlib import Path
 from typing import cast
@@ -10,6 +10,9 @@ from PyQt6.QtCore import QDir, QFileInfo, QStandardPaths
 from PyQt6.QtWidgets import QMainWindow, QTabWidget, QWidget
 
 import mobase
+
+if sys.platform == "win32":
+    import winreg
 
 from ..basic_features import BasicGameSaveGameInfo
 from ..basic_game import BasicGame
@@ -23,6 +26,10 @@ def getLootPath() -> Path | None:
     Parse the LOOT path using either the modern InnoSetup registry entries (local vs. global installs) or the
     old registry path.
     """
+    if sys.platform != "win32":
+        # Linux: there is no registry, LOOT is run by Mod Organizer (lootcli)
+        return None
+
     paths = [
         (
             winreg.HKEY_CURRENT_USER,

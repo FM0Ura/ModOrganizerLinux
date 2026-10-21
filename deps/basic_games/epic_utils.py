@@ -1,13 +1,18 @@
 # -*- encoding: utf-8 -*-
 from __future__ import annotations
 
+import functools
 import itertools
 import json
 import os
 import sys
-import winreg
 from collections.abc import Iterable
 from pathlib import Path
+
+from PyQt6.QtCore import qInfo
+
+if sys.platform == "win32":
+    import winreg
 
 ErrorList = list[tuple[str, Exception]]
 
@@ -85,7 +90,16 @@ def find_heroic_games(errors: ErrorList | None = None):
     )
 
 
+@functools.cache
+def _only_steam_on_linux() -> None:
+    qInfo("Epic Games: only Steam games are detected on Linux")
+
+
 def find_games(errors: ErrorList | None = None) -> dict[str, Path]:
+    if sys.platform != "win32":
+        _only_steam_on_linux()
+        return {}
+
     return dict(
         itertools.chain(
             find_epic_games(errors=errors),

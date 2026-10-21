@@ -2,7 +2,9 @@
 
 # Heavily influenced by https://github.com/erri120/GameFinder
 
+import functools
 import os
+import sys
 import threading
 import time
 from collections.abc import Sequence
@@ -10,6 +12,12 @@ from pathlib import Path
 from urllib import parse
 
 import psutil
+from PyQt6.QtCore import qInfo
+
+
+@functools.cache
+def _only_steam_on_linux() -> None:
+    qInfo("Origin: only Steam games are detected on Linux")
 
 
 class OriginWatcher:
@@ -70,6 +78,10 @@ def find_games() -> dict[str, Path]:
         A mapping from Origin manifest IDs to install locations for available
         Origin games.
     """
+    if sys.platform != "win32":
+        _only_steam_on_linux()
+        return {}
+
     games: dict[str, Path] = {}
 
     program_data_path = os.path.expandvars("%PROGRAMDATA%")

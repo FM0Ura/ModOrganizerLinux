@@ -1,12 +1,20 @@
 # -*- encoding: utf-8 -*-
 
 import configparser
+import functools
 import os
 import sys
 import xml.etree.ElementTree as et
 from configparser import NoOptionError
 from pathlib import Path
 from typing import Dict
+
+from PyQt6.QtCore import qInfo
+
+
+@functools.cache
+def _only_steam_on_linux() -> None:
+    qInfo("EA Desktop: only Steam games are detected on Linux")
 
 
 def find_games(errors: list[tuple[str, Exception]] | None = None) -> Dict[str, Path]:
@@ -17,6 +25,10 @@ def find_games(errors: list[tuple[str, Exception]] | None = None) -> Dict[str, P
         A mapping from EA Desktop content IDs to install locations for available
         EA Desktop games.
     """
+    if sys.platform != "win32":
+        _only_steam_on_linux()
+        return {}
+
     games: Dict[str, Path] = {}
 
     local_app_data_path = os.path.expandvars("%LocalAppData%")
