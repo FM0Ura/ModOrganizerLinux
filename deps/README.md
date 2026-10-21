@@ -84,6 +84,16 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   imported configuration mapping of mo2-cmake (see the `deps/plugin_python:` commits);
   a `git subtree pull` must keep them. Its upstream tests are not built yet (the build
   turns `BUILD_TESTING` off for it).
+- **`fnistool`**, **`installer_wizard`**, **`script_extender_plugin_checker`** and
+  **`tool_configurator`** (Python plugins) carry Linux fixes that are not upstream, each
+  in `if sys.platform == "win32": ... else: ...`: `fnistool` passes `RedirectFiles` as a
+  `Z:` path; `installer_wizard` opens the wizard script with the desktop and converts the
+  backslashes of the wizard paths; `script_extender_plugin_checker` converts the Windows
+  paths of the script extender log (drive `Z:`, `/home` against `/var/home`, case);
+  `tool_configurator` finds the INI files ignoring case. **`cmake_common`** also carries one:
+  the success file of the pip requirements (`mo2_python.cmake`) is touched with
+  `cmake -E touch` on Linux. A `git subtree pull` of any of them must keep these (see the
+  `deps/<name>: Linux:` commits).
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 
