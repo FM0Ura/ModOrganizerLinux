@@ -13,15 +13,17 @@
 #include <sstream>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <uibase/log.h>
 #include <unistd.h>
+#include <vector>
 
 #include "fusetest.h"
 #include "linux/exitcodes_linux.h"
+#include "linux/vfstimeouts_linux.h"
 #include "shared/util.h"
 #include "spawn.h"
 #include "tempdir.h"
 #include "vfsconnector.h"
-#include "linux/vfstimeouts_linux.h"
 
 namespace fs = std::filesystem;
 
@@ -68,9 +70,9 @@ class VfsConnectorTest : public ::testing::Test
 protected:
   void SetUp() override
   {
-    m_oldState  = qgetenv("MO2_VFS_STATE_DIR");
-    m_oldBinary = qgetenv("MO2_VFS_BINARY");
-    m_oldBridge = qgetenv("MO2_VFS_BRIDGE");
+    m_oldState   = qgetenv("MO2_VFS_STATE_DIR");
+    m_oldBinary  = qgetenv("MO2_VFS_BINARY");
+    m_oldBridge  = qgetenv("MO2_VFS_BRIDGE");
     m_oldRecheck = qgetenv("MO2_VFS_RECHECK_MS");
     m_oldTimeout = qgetenv("MO2_VFS_TIMEOUT_MS");
     qputenv("MO2_VFS_BRIDGE", "direct");
@@ -186,6 +188,36 @@ void processEvents(int ms)
   QTimer::singleShot(ms, &loop, &QEventLoop::quit);
   loop.exec();
 }
+
+// the messages logged while it exists
+struct LogCapture
+{
+  std::vector<std::string> lines;
+
+  LogCapture()
+  {
+    current = &lines;
+    MOBase::log::getDefault().setCallback(&LogCapture::add);
+  }
+
+  ~LogCapture()
+  {
+    MOBase::log::getDefault().setCallback(nullptr);
+    current = nullptr;
+  }
+
+  LogCapture(const LogCapture&)            = delete;
+  LogCapture& operator=(const LogCapture&) = delete;
+
+  static void add(MOBase::log::Entry e)
+  {
+    if (current != nullptr) {
+      current->push_back(e.message);
+    }
+  }
+
+  static inline std::vector<std::string>* current = nullptr;
+};
 
 // releases the mount of a test that failed before it
 struct Release
@@ -1106,15 +1138,40 @@ exit 1
 }
 
 // the first helper mounts /x/Data, starts a program (pid 1111) and then stops answering
-// (exec sleep: alive, never reads again); the next ones answer every request. The
-// mount table is the file mounts.json of `dir`, the number of helpers started is in
-// `dir`/count and the pid of the first one in `dir`/fake.pid
-static std::string hungHelperScript(const fs::path& dir)
+// (exec sleep: alive, never reads again; with `recovers`, it reads the next request
+// without answering it, and once the file `dir`/recover exists it reports that it
+// unmounted, then never reads again); the next ones answer every request. The mount
+// table is the file mounts.json of `dir`, the number of helpers started is in
+// `dir`/count and the pid of the first one in `dir`/fake.pid. `dir`/requests.log gets
+// a line for each `--cleanup` ("cleanup none" before the first helper started,
+// "cleanup alive" while it runs, "cleanup dead" once it is gone) and one for each
+// mount request to the next helpers ("mount")
+static std::string hungHelperScript(const fs::path& dir, bool recovers = false)
 {
-  const auto table = (dir / "mounts.json").string();
-  const auto count = (dir / "count").string();
-  const auto pid   = (dir / "fake.pid").string();
-  return R"([ "$1" = "--cleanup" ] && exit 0
+  const auto table    = (dir / "mounts.json").string();
+  const auto count    = (dir / "count").string();
+  const auto pid      = (dir / "fake.pid").string();
+  const auto requests = (dir / "requests.log").string();
+  const auto recover  = (dir / "recover").string();
+
+  // what the first helper does after the spawn, before it stops reading
+  const std::string recovery = recovers ? R"(  read line
+  while [ ! -e ')" + recover +
+                                              R"(' ]; do sleep 0.05; done
+  echo '{"event":"unmounted"}'
+)"
+                                        : "";
+
+  return R"(if [ "$1" = "--cleanup" ]; then
+  if [ ! -e ')" +
+         pid + R"(' ]; then s=none
+  elif kill -0 $(cat ')" +
+         pid + R"(') 2>/dev/null; then s=alive
+  else s=dead; fi
+  echo "cleanup $s" >> ')" +
+         requests + R"('
+  exit 0
+fi
 if [ "$1" = "--list-mounts" ]; then cat ')" +
          table + R"('; exit 0; fi
 n=$(( $(cat ')" +
@@ -1129,12 +1186,26 @@ if [ $n = 1 ]; then
   echo '{"event":"ready","roots":["/x/Data"]}'
   read line
   echo '{"event":"spawned","pid":1111}'
-  exec sleep 30
+)" + recovery +
+         R"(  exec sleep 30
 fi
 while read line; do
+  case "$line" in *'"op":"mount"'*) echo mount >> ')" +
+         requests + R"(' ;; esac
   echo '{"event":"ready","roots":["/x/Data"]}'
 done
 )";
+}
+
+// a `--cleanup` ran after the hung helper was gone and before the next mount: the one
+// that ran while it was alive left its state file, which a later cleanup would take
+// for the state of a dead helper and so unmount its roots under the new mount
+static void expectCleanupAfterTheKillBeforeTheMount(const fs::path& dir)
+{
+  const auto log   = readFile(dir / "requests.log");
+  const auto mount = log.find("mount\n");
+  ASSERT_NE(mount, std::string::npos) << log;
+  EXPECT_NE(log.rfind("cleanup dead\n", mount), std::string::npos) << log;
 }
 
 // mo2-vfs stops answering while a program it started uses the mount: it is not killed,
@@ -1183,6 +1254,7 @@ TEST_F(VfsConnectorTest, HungHelperWithAProgramKeepsTheMountUntilItIsGone)
   vfs->activate();
   EXPECT_TRUE(vfs->isActive());
   EXPECT_EQ(readFile(m_state.path() / "count"), "2\n");
+  expectCleanupAfterTheKillBeforeTheMount(m_state.path());
 }
 
 // a hooked Run while the hung helper's root is still mounted fails and keeps the hung
@@ -1221,6 +1293,156 @@ TEST_F(VfsConnectorTest, ActivateKillsTheHungHelperOnlyOnceItsMountIsGone)
   EXPECT_TRUE(vfs->isActive());
   EXPECT_NE(::kill(fakePid, 0), 0);  // killed and reaped
   EXPECT_EQ(readFile(m_state.path() / "count"), "2\n");
+  expectCleanupAfterTheKillBeforeTheMount(m_state.path());
+}
+
+// the hung helper recovers and unmounts (its `unmounted` event): the file system is
+// inactive and the deferred refresh is called back; the next activation kills the
+// helper, which can't be used any more (a request timed out), without taking its end
+// for a loss, and mounts with a new one
+TEST_F(VfsConnectorTest, RecoveredHungHelperIsReplacedByTheNextActivation)
+{
+  writeFile(m_state.path() / "mounts.json", R"({"roots":["/x/Data"]})");
+  fakeHelper(hungHelperScript(m_state.path(), true));
+  qputenv("MO2_VFS_TIMEOUT_MS", "300");  // no recheck runs: its default is 5 s
+
+  const auto vfs = createVfsConnector();
+  int called     = 0;
+  vfs->setDeactivatedCallback([&] {
+    ++called;
+  });
+
+  VfsSpawnRequest r;
+  r.argv             = {"true"};
+  r.workingDirectory = "/";
+
+  vfs->activate();
+  EXPECT_EQ(vfs->spawn(r), 1111);
+  vfs->updateMapping({});  // times out
+
+  const auto fakePid = std::stoi(readFile(m_state.path() / "fake.pid"));
+  processEvents(100);
+  ASSERT_TRUE(vfs->isActive());
+  EXPECT_EQ(called, 0);
+  vfs->takeLostReason();
+
+  // it recovers and unmounts
+  writeFile(m_state.path() / "mounts.json", R"({"roots":[]})");
+  writeFile(m_state.path() / "recover", "");
+  EXPECT_TRUE(vfs->waitInactive(std::chrono::seconds(3)));
+  processEvents(100);
+  EXPECT_EQ(called, 1);
+  EXPECT_EQ(::kill(fakePid, 0), 0);  // not killed yet
+
+  LogCapture logs;
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_NE(::kill(fakePid, 0), 0);  // killed and reaped
+  EXPECT_EQ(readFile(m_state.path() / "count"), "2\n");
+  expectCleanupAfterTheKillBeforeTheMount(m_state.path());
+
+  // killing it is not a loss
+  for (const auto& line : logs.lines) {
+    EXPECT_EQ(line.find("mo2-vfs ended"), std::string::npos) << line;
+  }
+  EXPECT_TRUE(vfs->takeLostReason().isEmpty());
+}
+
+// a helper that ends with its mount on /x/Data, which stays in the mount table until
+// the test empties `dir`/mounts.json; the next helpers answer every request. Each
+// `--cleanup` takes a while and adds "cleanup start" and "cleanup end" to
+// `dir`/requests.log, and each mount request to the next helpers adds "mount"
+static std::string slowCleanupHelperScript(const fs::path& dir)
+{
+  const auto table    = (dir / "mounts.json").string();
+  const auto count    = (dir / "count").string();
+  const auto requests = (dir / "requests.log").string();
+  return R"(if [ "$1" = "--cleanup" ]; then
+  echo "cleanup start" >> ')" +
+         requests + R"('
+  sleep 0.4
+  echo "cleanup end" >> ')" +
+         requests + R"('
+  exit 0
+fi
+if [ "$1" = "--list-mounts" ]; then cat ')" +
+         table + R"('; exit 0; fi
+n=$(( $(cat ')" +
+         count + R"(' 2>/dev/null || echo 0) + 1 ))
+echo $n > ')" +
+         count + R"('
+echo '{"event":"hello","version":"0"}'
+if [ $n = 1 ]; then
+  read line
+  echo '{"event":"ready","roots":["/x/Data"]}'
+  sleep 0.2
+  exit 1
+fi
+while read line; do
+  case "$line" in *'"op":"mount"'*) echo mount >> ')" +
+         requests + R"(' ;; esac
+  echo '{"event":"ready","roots":["/x/Data"]}'
+done
+)";
+}
+
+// the number of `--cleanup` runs of slowCleanupHelperScript() that have started and not
+// ended yet, at the end of `log`
+static int runningCleanups(const std::string& log)
+{
+  int running = 0;
+  std::istringstream in(log);
+  for (std::string line; std::getline(in, line);) {
+    if (line == "cleanup start") {
+      ++running;
+    } else if (line == "cleanup end") {
+      --running;
+    }
+  }
+  return running;
+}
+
+// an activation while a recheck runs its `--cleanup`: the recheck ends first (and its
+// callbacks run), so that its cleanup never runs next to the one of the activation nor
+// next to the new mount of the same root
+TEST_F(VfsConnectorTest, ActivateWaitsForARunningRecheck)
+{
+  const auto requests = m_state.path() / "requests.log";
+  writeFile(m_state.path() / "mounts.json", R"({"roots":["/x/Data"]})");
+  fakeHelper(slowCleanupHelperScript(m_state.path()));
+  qputenv("MO2_VFS_RECHECK_MS", "100");
+
+  const auto vfs = createVfsConnector();
+  vfs->activate();
+  processEvents(600);  // the helper ends; its root is still listed
+  ASSERT_TRUE(vfs->isActive());
+
+  // the root is gone; a recheck is running its cleanup
+  writeFile(m_state.path() / "mounts.json", R"({"roots":[]})");
+  for (int i = 0; i < 300 && runningCleanups(readFile(requests)) == 0; ++i) {
+    processEvents(10);
+  }
+  ASSERT_EQ(runningCleanups(readFile(requests)), 1) << readFile(requests);
+
+  vfs->activate();
+  EXPECT_TRUE(vfs->isActive());
+  EXPECT_EQ(readFile(m_state.path() / "count"), "2\n");
+
+  // at most one cleanup at a time, and none during the mount
+  const auto log = readFile(requests);
+  std::istringstream in(log);
+  int running = 0;
+  for (std::string line; std::getline(in, line);) {
+    if (line == "cleanup start") {
+      ++running;
+      EXPECT_EQ(running, 1) << log;
+    } else if (line == "cleanup end") {
+      --running;
+    } else if (line == "mount") {
+      EXPECT_EQ(running, 0) << log;
+    }
+  }
+  EXPECT_NE(log.find("mount\n"), std::string::npos) << log;
 }
 
 // the helper ended between activate() and spawn(): the program is not started without

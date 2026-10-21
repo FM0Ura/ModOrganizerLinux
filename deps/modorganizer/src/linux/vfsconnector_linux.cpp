@@ -481,6 +481,11 @@ private:
       }
     }
 
+    // a recheck that runs (recheckLeftMounts()) ends first, so that its `--cleanup`
+    // never runs next to the one below nor next to a new mount of the same roots; its
+    // callbacks run as it ends and see the state as it is then
+    waitForRecheck();
+
     // a helper that ended abnormally may have left its mount behind; also when a
     // helper runs again (started by spawn() for a program without the virtual file
     // system): it must never be mounted over
@@ -496,8 +501,13 @@ private:
       }
     }
 
-    // nothing of a lost helper is mounted any more
-    dropLostHelper();
+    // nothing of a lost helper is mounted any more; one that still ran was killed: the
+    // cleanup above ran while it was alive and left its state file, which a later
+    // cleanup would take for that of a dead helper, unmounting the same roots under the
+    // new mount; cleaned up now, nothing of it is mounted, so nothing is unmounted
+    if (dropLostHelper()) {
+      cleanupStaleMounts();
+    }
 
     // a new helper has nothing mounted (m_active is false): `mount`, never `update`
     if (!m_client) {
@@ -606,7 +616,8 @@ private:
       } else {
         keepLeftMounted(m_roots, "it is still mounted on " + m_roots.join(", ") +
                                      "; the data directory is refreshed once it is "
-                                     "unmounted");
+                                     "unmounted; once the programs that use it have "
+                                     "ended, unmount it with fusermount3 -uz");
       }
       return;
     }
@@ -727,9 +738,11 @@ private:
 
         log::info("the virtual file system is no longer mounted on {}",
                   m_leftMounted.join(", "));
-        m_cleanupNeeded = false;
         deactivated();
-        dropLostHelper();
+
+        // a helper killed now leaves its state file (the cleanup above ran while it was
+        // alive): the next activation cleans up first
+        m_cleanupNeeded = dropLostHelper();
       });
     });
   }
@@ -737,20 +750,53 @@ private:
   // a helper that was lost (it ended, or stopped answering and still runs) is
   // discarded; one that still runs is killed first: only called once its mount is gone,
   // so that no program can be using it, and the signal goes to the helper only (its
-  // programs are in process groups of their own)
-  void dropLostHelper()
+  // programs are in process groups of their own); true when one that still ran was
+  // killed
+  bool dropLostHelper()
   {
     if (!m_client || m_client->running()) {
-      return;
+      return false;
     }
 
-    if (!m_client->exited()) {
+    const bool killed = !m_client->exited();
+
+    if (killed) {
       log::debug(
           "killing mo2-vfs, which stopped answering, now that its mount is gone");
+
+      // its end is not a loss (the exited handler would report one while activating)
+      m_client->setExitedHandler(nullptr);
       m_client->kill();
     }
 
     m_client.reset();
+    return killed;
+  }
+
+  // waits for the recheck that runs (recheckLeftMounts()), if any: each of its
+  // processes ends (killed after the deadline of 10 s) and its callbacks run, which may
+  // start its next process
+  void waitForRecheck()
+  {
+    while (m_recheckProcess != nullptr) {
+      auto* process = m_recheckProcess;
+
+      if (process->waitForFinished(10000)) {
+        continue;
+      }
+
+      log::warn("a recheck of the mount table did not finish in time");
+      process->kill();
+
+      if (!process->waitForFinished(2000)) {
+        // it never started, or it does not end: forgotten, without its callbacks
+        process->disconnect();
+        process->deleteLater();
+        if (m_recheckProcess == process) {
+          m_recheckProcess = nullptr;
+        }
+      }
+    }
   }
 
   // runs the helper with `args` (vfsbridge::helperCommand()) without waiting for it;
@@ -790,14 +836,14 @@ private:
                        process->deleteLater();
                      });
 
-    QObject::connect(process, &QProcess::finished, &m_context,
-                     [this, process, done = std::move(done)](
-                         int code, QProcess::ExitStatus status) {
-                       m_recheckProcess = nullptr;
-                       process->deleteLater();
-                       done(status == QProcess::NormalExit && code == 0,
-                            process->readAllStandardOutput());
-                     });
+    QObject::connect(
+        process, &QProcess::finished, &m_context,
+        [this, process, done = std::move(done)](int code, QProcess::ExitStatus status) {
+          m_recheckProcess = nullptr;
+          process->deleteLater();
+          done(status == QProcess::NormalExit && code == 0,
+               process->readAllStandardOutput());
+        });
 
     process->start(cmd.program, cmd.arguments);
     process->closeWriteChannel();
