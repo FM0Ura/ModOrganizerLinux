@@ -60,6 +60,10 @@ Um helper perdido (o `VfsClient` não está mais utilizável depois de um timeou
 
 Matar o helper é seguro nesses pontos porque seu mount já não existe; o `SIGKILL` vai só para o pid do helper, e os programas que ele iniciou estão em grupos de processos próprios (`process_group(0)` no `spawn` do `mo2-vfs`), então não são afetados.
 
+O helper morto não apaga o próprio arquivo de estado, e o `--cleanup` anterior rodou com ele vivo: um `--cleanup` posterior o tomaria por um helper morto e desmontaria a mesma raiz debaixo do mount novo. Por isso `doActivate()` roda o `--cleanup` de novo depois de matá-lo (antes do `start()`), a reconferência que o mata deixa `m_cleanupNeeded` ligado, e `doActivate()` espera uma reconferência em andamento antes da sua limpeza. O fim do helper morto assim não conta como perda (sem o handler de saída).
+
+No modo host (MO2 no box), `VfsClient::kill()` mata só o cliente `distrobox-host-exec`: pela spec da Fase 3, §1.2, o `mo2-vfs` do host só recebe EOF, então um helper travado (parado com `SIGSTOP`, por exemplo) continua vivo no host depois de "morto". Seu mount já não existe nesse ponto; o processo sobra até ser encerrado à mão (`pkill -x mo2-vfs` no host) ou voltar a rodar e ler o EOF.
+
 ### 2.4 R2: limite do timeout
 
 `mountTimeout()` vira `vfsMountTimeout()` = `min(MO2_VFS_TIMEOUT_MS, 30 s)`, ao lado de `vfsRecheckInterval()` (§2.2), num arquivo pequeno testável (`linux/vfstimeouts_linux.{h,cpp}`, biblioteca `organizer_launch`): as variáveis (de testes) só encurtam os valores; vazias, zero, negativas ou inválidas valem o padrão.
@@ -102,8 +106,8 @@ Matar o helper é seguro nesses pontos porque seu mount já não existe; o `SIGK
 
 Checklist manual `docs/testing/phase4c2-manual-checklist.md` (curto):
 1. Sem tela: por SSH sem as variáveis, o MO2 mostra a mensagem e sai com código 1, sem "has crashed".
-2. INIs: com o Skyrim SE (e o Fallout 4, se instalado), ativar/desativar a invalidação de arquivos e conferir que `SResourceArchiveList`/`bInvalidateOlderFiles` mudam no INI real (`Skyrim.ini`/`Fallout4Custom.ini` do prefixo ou o do perfil) e que nenhum INI duplicado com outra caixa aparece.
-3. Helper travado: com um jogo/programa rodando pelo MO2, `kill -STOP` no `mo2-vfs` e um refresh (F5) → o refresh fica adiado (sem lista vazia); `kill -CONT`, fechar o programa → o refresh adiado roda em até ~5 s depois de o mount sumir.
+2. INIs: o Skyrim SE não registra invalidação de arquivos (`gameskyrimse.cpp`), e só a `GamebryoBSAInvalidation` grava a lista de arquivos (`addArchive`/`removeArchive`); com ele, o I2 afeta só a leitura: depois de usar o perfil (aba **Archives**, um "Executar"), nenhum `skyrim.ini` minúsculo aparece ao lado do `Skyrim.ini` do prefixo. A gravação é coberta pelo `test_profile_inis_linux.cpp`; opcionalmente, com um jogo com invalidação instalado (Fallout 4: `Fallout4Custom.ini`, `bInvalidateOlderFiles`; Skyrim LE, Oblivion, FO3/NV), ligar/desligar **Automatic Archive Invalidation** muda o INI real (do prefixo ou o do perfil) sem criar um duplicado com outra caixa.
+3. Helper travado: com um programa rodando pelo MO2, um F5 não pede nada ao VFS (`refreshDirectoryStructure()` só adia enquanto `isActive()`), nem ativar ou instalar um mod; só um "Executar" (`organizercore.cpp`) ou o LOOT (`prepareVFS()`) chamam `updateMapping()`. Então: `pkill -STOP -x mo2-vfs` no host, **Unlock** no aviso de interface travada e um segundo "Executar" (ou **Sort** do LOOT) → a janela para de responder por ~30 s; o log mostra "did not reply to update in time" e "mo2-vfs stopped answering while programs use the virtual file system"; o "Executar" falha com "still mounted"; F5 não esvazia a lista de plugins. Depois `pkill -CONT -x mo2-vfs` e fechar o programa → o mount some e o refresh adiado roda (sem a linha "no longer mounted"). Variante opcional: `pkill -KILL -x mo2-vfs` → em até ~5 s o log mostra "the virtual file system is no longer mounted on …" (mais uma linha de erro "mo2-vfs ended") e o refresh roda.
 4. Regressão rápida: Skyrim SE + SKSE com mods pelo "Executar".
 
 ## 7. Riscos

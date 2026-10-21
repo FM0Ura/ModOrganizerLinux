@@ -178,6 +178,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 4c.2: o branch `fase-4c2-pendencias` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c2-manual-checklist.md`.
+
 Fase 4c.1: o branch `fase-4c1-plugins` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c1-manual-checklist.md`.
 
 Fase 4b: o branch `fase-4b-loot` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4b-manual-checklist.md`.
@@ -201,7 +203,8 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 ## Limitações conhecidas da Fase 4c.2
 
 - Um `DISPLAY` definido mas inalcançável (ex.: `:0` sem servidor X) ainda aborta na Qt ("could not connect to display"); só a falta das variáveis é detectada.
-- Um helper que para de responder com programas rodando só é morto quando o mount dele some; se ele nunca desmontar, o mount fica até o usuário fechar os programas e usar `fusermount3 -uz` (ou "Unlock"), e o refresh fica adiado até lá.
+- Um helper que para de responder com programas rodando só é morto quando o mount dele some; se ele nunca desmontar, o mount fica até o usuário fechar os programas e usar `fusermount3 -uz` (o "Unlock" não o libera), e o refresh fica adiado até lá.
+- No modo host (MO2 no box, o uso normal no Bazzite), matar o helper travado mata só o cliente `distrobox-host-exec`: o `mo2-vfs` do host só recebe EOF (spec da Fase 3, §1.2) e, se estiver parado (`SIGSTOP`) ou travado, continua vivo no host depois que o mount some, até ser encerrado à mão (`pkill -x mo2-vfs` no host).
 - "Executar" sem VFS com um helper travado ainda descarta o helper travado sem matá-lo (o destrutor espera até 5 s e o deixa rodando), como antes.
 - Valem as limitações das Fases 1 a 4c.1.
 

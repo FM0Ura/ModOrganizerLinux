@@ -9,8 +9,8 @@ Spec: [`../superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](../super
 ## Preparação
 
 - O item 1 roda por SSH, **sem exportar** `WAYLAND_DISPLAY`, `DISPLAY` nem as demais variáveis da sessão gráfica.
-- O item 2 pede o Skyrim SE com um mod que tenha um `.bsa`; o Fallout 4 é opcional.
-- O item 3 usa o SKSE (ou o **Shell VFS** da Fase 2) e dois terminais: um no host, para o `pkill` e o `findmnt`, e o MO2 aberto pela área de trabalho. Anote o log do MO2 (`logs/mo_interface.log` da instância) antes de começar.
+- O item 2 pede o Skyrim SE; a parte de gravação é opcional e pede um jogo com invalidação de arquivos (Fallout 4, Skyrim LE, Oblivion ou Fallout 3/New Vegas).
+- O item 3 usa o SKSE (ou o **Shell VFS** da Fase 2), um segundo executável (ou o LOOT) e dois terminais: um no host, para o `pkill` e o `findmnt`, e o MO2 aberto pela área de trabalho. Anote o log do MO2 (`logs/mo_interface.log` da instância) antes de começar.
 
 ## 1. Sem tela
 
@@ -21,37 +21,56 @@ Spec: [`../superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](../super
 
 ## 2. Arquivos (BSA/BA2) no INI certo
 
+O Skyrim SE não tem invalidação de arquivos no MO2 (o plugin do jogo não registra
+**Automatic Archive Invalidation**), e marcar ou desmarcar um BSA na aba **Archives** não
+grava o INI. Com ele, o item só confere a leitura; a gravação no INI com outra caixa é
+coberta pelo `test_profile_inis_linux.cpp` (`deps/game_bethesda/tests`).
+
 - [ ] Com o Skyrim SE, no perfil com **INIs por perfil desligados** (**Profiles...** ->
-  "Use profile-specific Game INI Files" desmarcado), aba **Archives**: desmarcar e marcar
-  de novo um BSA de mod, com a opção de gerenciar arquivos ligada (ou ligar e desligar
-  **Automatic Archive Invalidation** em **Profiles...**).
-  Esperado: no prefixo (`.../steamapps/compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/`), o
-  `Skyrim.ini` (o arquivo real, com maiúscula) muda
-  (`SResourceArchiveList`/`bInvalidateOlderFiles`), e **não** aparece um `skyrim.ini`
-  minúsculo ao lado: `ls` nessa pasta.
-- [ ] (Opcional) Com o Fallout 4 instalado, o mesmo, conferindo `Fallout4Custom.ini`. Com
-  os INIs por perfil ligados, o `fallout4custom.ini` do perfil
-  (`<instância>/profiles/<perfil>/`) muda e não aparece um `Fallout4Custom.ini` nessa pasta.
+  "Use profile-specific Game INI Files" desmarcado): abrir o perfil, olhar a aba
+  **Archives** e executar o jogo uma vez pelo MO2.
+  Esperado: no prefixo (`.../steamapps/compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/`)
+  **não** aparece um `skyrim.ini` minúsculo ao lado do `Skyrim.ini`: `ls` nessa pasta.
+- [ ] (Opcional) Gravação, com um jogo que tenha invalidação e esteja instalado: Fallout 4
+  (o mais simples), Skyrim LE, Oblivion ou Fallout 3/New Vegas. Com o Fallout 4, em
+  **Profiles...**, ligar e desligar **Automatic Archive Invalidation**.
+  Esperado, com os INIs por perfil desligados: no prefixo
+  (`.../compatdata/377160/pfx/drive_c/users/steamuser/Documents/My Games/Fallout4/`) o
+  `Fallout4Custom.ini` muda (`bInvalidateOlderFiles` em `[Archive]`) e não aparece um
+  `fallout4custom.ini` ao lado. Com os INIs por perfil ligados ("Use profile-specific Game
+  INI Files"): o `fallout4custom.ini` do perfil (`<instância>/profiles/<perfil>/`) muda e
+  não aparece um `Fallout4Custom.ini` nessa pasta.
 
 ## 3. Helper travado
 
+Com um programa aberto pelo MO2, um F5 não pede nada ao VFS (o refresh só fica adiado
+enquanto o VFS está ativo), e ativar ou instalar um mod também não. Só um novo
+**Run** (ou o **Sort** do LOOT) pede um `update` ao helper; por isso o item destrava a
+interface com **Unlock** e executa um segundo programa.
+
 - [ ] Executar o SKSE (ou o **Shell VFS** da Fase 2) pelo MO2. Com ele aberto, num terminal
   do host: `pkill -STOP -x mo2-vfs`.
-- [ ] No MO2, provocar um refresh (F5, ou instalar/ativar um mod), que pede um `update` ao
-  VFS. A janela do MO2 pode parar de responder por cerca de 30 s enquanto o pedido expira
-  (o pedido é síncrono).
-  Esperado: depois de ~30 s o MO2 registra no log
-  `mo2-vfs stopped answering while programs use the virtual file system` e **não** mostra
-  a lista de plugins vazia (o refresh fica adiado).
+- [ ] No MO2, clicar em **Unlock** no aviso "Mod Organizer is locked while the application
+  is running." e executar (**Run**) um segundo programa (ou **Sort** do LOOT).
+  Esperado: a janela do MO2 para de responder por cerca de 30 s (o `update` é síncrono e
+  expira); depois o log mostra `cannot update the virtual file system: mo2-vfs did not
+  reply to update in time` e `mo2-vfs stopped answering while programs use the virtual
+  file system`, e o MO2 mostra o erro (**Error**, ou "failed to start loot" no LOOT)
+  `the virtual file system of an earlier mount is still mounted on ... and cannot be
+  unmounted; close the programs that use it and run fusermount3 -uz on it`. O segundo
+  programa não abre. Tentar de novo dá o mesmo erro "still mounted", já sem a espera.
+- [ ] Apertar F5.
+  Esperado: a lista de plugins **não** fica vazia (o refresh fica adiado).
 - [ ] No host, `pkill -CONT -x mo2-vfs` e fechar o programa.
   Esperado: o helper volta a responder e desmonta sozinho: o mount some
   (`findmnt -n -o TARGET,FSTYPE | grep mo2-vfs` vazio no host) e o refresh adiado roda
   (lista de plugins completa). Neste caminho o MO2 não registra a linha
   `the virtual file system is no longer mounted on ...`.
-- [ ] (Opcional) Variante com o helper morto: repetir os dois primeiros passos e, em vez
+- [ ] (Opcional) Variante com o helper morto: repetir os três primeiros passos e, em vez
   de `pkill -CONT`, rodar no host `pkill -KILL -x mo2-vfs` e fechar o programa.
   Esperado: em até ~5 s o log mostra `the virtual file system is no longer mounted on ...`
-  (o MO2 desmonta o mount morto) e o refresh adiado roda (lista de plugins completa).
+  (o MO2 desmonta o mount morto), mais uma linha de erro `mo2-vfs ended (...) while the
+  virtual file system was active`, e o refresh adiado roda (lista de plugins completa).
 - [ ] Fechar e abrir o MO2.
   Esperado: sem aviso de mount órfão.
 
