@@ -50,4 +50,13 @@ namespace mo2::python {
 
 }  // namespace mo2::python
 
+#ifndef _WIN32
+// Linux: the factory the proxy looks up with dlsym() after loading the runner at run
+// time (the proxy is not linked to the runner, which needs libpython), returns
+// createPythonRunner().release(); the object is deleted through the virtual destructor
+// of IPythonRunner, i.e., in the code of the runner
+//
+extern "C" RUNNER_DLL_EXPORT mo2::python::IPythonRunner* mo2_create_python_runner();
+#endif
+
 #endif  // PYTHONRUNNER_H

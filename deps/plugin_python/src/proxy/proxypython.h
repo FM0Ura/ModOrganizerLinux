@@ -65,6 +65,10 @@ private:
     void* m_RunnerLib;
 #endif
     std::unique_ptr<mo2::python::IPythonRunner> m_Runner;
+#ifndef _WIN32
+    // Linux: libpython itself could not be loaded (Python missing, or another version)
+    bool m_PythonLibraryMissing = false;
+#endif
 
     enum class FailureType : unsigned int {
         NONE           = 0,

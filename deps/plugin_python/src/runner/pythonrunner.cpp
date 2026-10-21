@@ -398,3 +398,10 @@ namespace mo2::python {
     }
 
 }  // namespace mo2::python
+
+#ifndef _WIN32
+mo2::python::IPythonRunner* mo2_create_python_runner()
+{
+    return mo2::python::createPythonRunner().release();
+}
+#endif

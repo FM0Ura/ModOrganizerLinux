@@ -57,8 +57,10 @@ if (WIN32)
 	)
 else()
 	# Linux: the sip-module of the system (package sip6), PyQt6 is not installed in
-	# the build directory
-	find_program(MO2_SIP_MODULE sip-module REQUIRED)
+	# the build directory; next to the Python of the build or in /usr/bin first, so that
+	# one installed by pip in ~/.local/bin is not preferred
+	get_filename_component(_python_bin_dir "${Python_EXECUTABLE}" DIRECTORY)
+	find_program(MO2_SIP_MODULE sip-module HINTS "${_python_bin_dir}" /usr/bin REQUIRED)
 	add_custom_command(
 		OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sip.h"
 		COMMAND

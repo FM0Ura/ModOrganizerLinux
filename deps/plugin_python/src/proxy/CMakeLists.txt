@@ -15,7 +15,16 @@ mo2_configure_plugin(proxy
     ${CMAKE_CURRENT_SOURCE_DIR}/../mobase
     ${CMAKE_CURRENT_SOURCE_DIR}/../pybind11-qt)
 mo2_default_source_group()
-target_link_libraries(proxy PRIVATE runner mo2::uibase)
+if (WIN32)
+	target_link_libraries(proxy PRIVATE runner mo2::uibase)
+else()
+	# Linux: the proxy loads the runner (and libpython) at run time, with dlopen(), so
+	# that a missing Python is reported by the plugin instead of failing its load; only
+	# the header of the runner's interface is needed here, the runner is still built
+	target_link_libraries(proxy PRIVATE mo2::uibase)
+	target_include_directories(proxy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../runner)
+	add_dependencies(proxy runner)
+endif()
 set_target_properties(proxy PROPERTIES OUTPUT_NAME ${PLUGIN_NAME})
 if (WIN32)
 	mo2_install_plugin(proxy FOLDER)
@@ -35,11 +44,9 @@ if (WIN32)
 	target_link_options(proxy PRIVATE "/DELAYLOAD:runner.dll")
 	install(FILES $<TARGET_FILE:runner> DESTINATION ${PLUGIN_PYTHON_DIR}/dlls)
 else()
-	# Linux: the runner is found next to the proxy, in plugin_python/dlls; Python and
-	# PyQt6 are the system's (spec of Phase 4d.1, section 3), nothing else is installed
-	set_target_properties(proxy PROPERTIES
-		INSTALL_RPATH "$ORIGIN/plugin_python/dlls"
-		BUILD_WITH_INSTALL_RPATH OFF)
+	# Linux: the runner is installed in plugin_python/dlls, where the proxy loads it from;
+	# Python and PyQt6 are the system's (spec of Phase 4d.1, section 3), nothing else is
+	# installed
 	# installed as a target, not as a file, so that its INSTALL_RPATH is applied
 	install(TARGETS runner LIBRARY DESTINATION ${PLUGIN_PYTHON_DIR}/dlls)
 

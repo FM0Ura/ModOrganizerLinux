@@ -24,6 +24,7 @@ along with python proxy plugin.  If not, see <http://www.gnu.org/licenses/>.
 #include <Windows.h>
 #else
 #include <dlfcn.h>
+#include <string>
 #endif
 
 #include <QCoreApplication>
@@ -143,16 +144,49 @@ bool ProxyPython::init(IOrganizer* moInfo)
         return false;
     }
 #else
-    // Linux: the extension modules of the system's Python (PyQt6, mobase) are not
-    // linked to libpython and need its symbols in the global scope, but Mod Organizer
-    // loads plugins with RTLD_LOCAL (spec of Phase 4d.1, section 3.1)
-    if (dlopen(MO2_PYTHON_LIBRARY, RTLD_NOW | RTLD_GLOBAL) == nullptr) {
+    // Linux: libpython and the runner are loaded here, at run time, not linked to the
+    // proxy: a missing library (Python not installed, or another version of it) is
+    // then reported as a problem of the plugin instead of failing the load of the proxy
+    //
+    // the handles are never closed: the interpreter cannot be finalized and started
+    // again (see PythonRunner::initialize()), libpython and the runner, which hold it,
+    // stay mapped until the end of the process
+    const auto loadFailed = [this] {
         m_LoadFailure = FailureType::DLL_NOT_FOUND;
-        log::error("failed to load {}: {}", MO2_PYTHON_LIBRARY, dlerror());
         if (m_MOInfo) {
             m_MOInfo->setPersistent(name(), "tryInit", false);
         }
         return true;
+    };
+    const auto lastDlError = [] {
+        const char* error = dlerror();
+        return std::string(error ? error : "unknown error");
+    };
+
+    // the extension modules of the system's Python (PyQt6, mobase) are not linked to
+    // libpython and need its symbols in the global scope, but Mod Organizer loads
+    // plugins with RTLD_LOCAL (spec of Phase 4d.1, section 3.1)
+    if (dlopen(MO2_PYTHON_LIBRARY, RTLD_NOW | RTLD_GLOBAL) == nullptr) {
+        m_PythonLibraryMissing = true;
+        log::error("failed to load {}: {}", MO2_PYTHON_LIBRARY, lastDlError());
+        return loadFailed();
+    }
+
+    const auto runnerPath = pluginFolder / "plugin_python" / "dlls" / "librunner.so";
+    m_RunnerLib           = dlopen(runnerPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (m_RunnerLib == nullptr) {
+        log::error("failed to load the Python runner {}: {}", runnerPath.string(),
+                   lastDlError());
+        return loadFailed();
+    }
+
+    using CreateRunner = decltype(&mo2_create_python_runner);
+    const auto createRunner =
+        reinterpret_cast<CreateRunner>(dlsym(m_RunnerLib, "mo2_create_python_runner"));
+    if (createRunner == nullptr) {
+        log::error("failed to find mo2_create_python_runner in {}: {}",
+                   runnerPath.string(), lastDlError());
+        return loadFailed();
     }
 #endif
 
@@ -160,7 +194,13 @@ bool ProxyPython::init(IOrganizer* moInfo)
     // ::GetProcAddress because we use delayed load for the runner DLL (see the
     // CMakeLists.txt)
     //
+#ifdef _WIN32
     m_Runner = mo2::python::createPythonRunner();
+#else
+    // Linux: the runner was loaded above, the object is deleted through the virtual
+    // destructor of IPythonRunner, in the code of the runner
+    m_Runner.reset(createRunner());
+#endif
 
     if (m_Runner) {
 #ifdef _WIN32
@@ -338,10 +378,21 @@ QString ProxyPython::fullDescription(unsigned int key) const
         return tr("The Python plugin DLL was not found, maybe your antivirus deleted "
                   "it. Re-installing MO2 might fix the problem.");
 #else
-        return tr("Python %1 or its modules (PyQt6) could not be loaded, the log of "
-                  "Mod Organizer has the error. In the mo2-run distrobox, install them "
-                  "with: sudo dnf install python3 python3-pyqt6")
-            .arg(QStringLiteral(MO2_PYTHON_VERSION_STRING));
+    {
+        QString text =
+            tr("Python %1 or its modules (PyQt6) could not be loaded, the log of "
+               "Mod Organizer has the error. In the mo2-run distrobox, install them "
+               "with: sudo dnf install python3 python3-pyqt6")
+                .arg(QStringLiteral(MO2_PYTHON_VERSION_STRING));
+        if (m_PythonLibraryMissing) {
+            text += "<br>" + tr("This build of Mod Organizer expects Python %1 (%2): "
+                                "for another version of Python, Mod Organizer must be "
+                                "rebuilt.")
+                                 .arg(QStringLiteral(MO2_PYTHON_VERSION_STRING))
+                                 .arg(QStringLiteral(MO2_PYTHON_LIBRARY));
+        }
+        return text;
+    }
 #endif
     case FailureType::INVALID_DLL:
         return tr(
