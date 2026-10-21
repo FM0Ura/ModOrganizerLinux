@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Os jogos do `basic_games` são detectados pela Steam e usam as pastas do prefixo do Proton de cada jogo no Linux; NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 funcionam, e o BG3 gera a ordem de carga com o LSLib pelo .NET do sistema.
+**Goal:** Os jogos do `basic_games` são detectados pela Steam e usam as pastas do prefixo do Proton de cada jogo no Linux; NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 funcionam; a ordem de carga do BG3 (LSLib) fica desativada no Linux com aviso (spec §1.3).
 
-**Architecture:** Um binding novo do `mobase` (`mobase.utils.steamApp`, só Linux) expõe o `steam::findApp` do `uibase`. O `basic_games` (subtree) usa-o no Linux: `find_games()` vira um mapeamento preguiçoso por app ID e a expansão de `%USERPROFILE%`/`%DOCUMENTS%` aponta para o prefixo do jogo. O BG3 roda `dotnet Divine.dll` com argumentos em lista. Testes pytest com uma Steam falsa.
+**Architecture:** Um binding novo do `mobase` (`mobase.utils.steamApp`, só Linux) expõe o `steam::findApp` do `uibase`. O `basic_games` (subtree) usa-o no Linux: `find_games()` vira um mapeamento preguiçoso por app ID e a expansão de `%USERPROFILE%`/`%DOCUMENTS%` aponta para o prefixo do jogo. No Linux, o BG3 não chama o LSLib (defeito do LSLib no Unix, spec §1.3) e avisa o usuário. Testes pytest com uma Steam falsa.
 
 **Tech Stack:** Python 3.14 (Fedora), PyQt6, pybind11 (`plugin_python`), C++20/Qt 6 (`uibase`), pytest, .NET 8 (Fedora `dotnet-runtime-8.0`), bash.
 
@@ -16,7 +16,7 @@
 - Fonte da verdade da Steam: `MOBase::steam::findApp()` (spec §1.2). Nada de reimplementar a descoberta da Steam em Python.
 - No Linux: `%USERPROFILE%` = `<compatData>/pfx/drive_c/users/steamuser`, `%DOCUMENTS%` = `<compatData>/pfx/drive_c/users/steamuser/Documents` do prefixo **do app ID do jogo**; sem app ID, sem jogo instalado ou com `compatData` vazio: o comportamento atual (XDG via `QStandardPaths`) e um aviso no log, uma vez por jogo (spec §3.2).
 - GOG, Epic, Origin, EA Desktop: no Linux, `find_games()` devolve `{}` sem erro e registra uma vez que só a Steam é suportada (spec §3.1).
-- BG3: `dotnet <tools_dir>/Divine.dll` com os mesmos argumentos do `Divine.exe`, em lista (sem `shell`), sem `creationflags` no Linux (spec §3.3), salvo se o spike da Task 1 provar que o `Divine.dll` não funciona — então o plano segue a Ruling registrada no ledger.
+- BG3 no Linux: a geração do `modsettings.lsx` não baixa nem executa o LSLib; o usuário recebe um aviso de que a ordem de carga do BG3 ainda não é gerada no Linux (spec §1.3, §3.3). Decisão do usuário depois do spike da Task 1.
 - Importação: `git subtree add --prefix deps/basic_games https://github.com/ModOrganizer2/modorganizer-basic_games master --squash`; hash em `deps/README.md`; os patches Linux listados nas notas de `deps/README.md` (padrão da 4d.1).
 - Código Windows idêntico ou em `#ifdef _WIN32`/`#ifndef _WIN32` (C++) e `if sys.platform == "win32":` (Python). O CI do Windows só compila `deps/modorganizer`.
 - Commits: patches dentro de `deps/<nome>` em `deps/<nome>: Linux: …` (só arquivos daquele subtree); `build: …`, `tests: …`, `docs: …`. Todo commit termina com:
@@ -44,8 +44,7 @@ Jogos reais do usuário (Steam nativa, `/var/home/fmoura-server/.local/share/Ste
 
 - Jogo instalado pela Steam mas nunca rodado (sem `compatdata/<id>/pfx`): documentos e saves nas pastas XDG, com o aviso no log, sem exceção (Task 4, teste).
 - Jogo com app ID em outra biblioteca da Steam (outro disco) ou Steam Flatpak: detectado (o `steam::findApp` já cobre; o teste da Task 2 usa uma segunda biblioteca).
-- Caminho de mod com espaços ou acentos passado ao `Divine.dll`: um argumento só, sem quebrar (Task 5, teste da montagem do comando).
-- `dotnet` ausente no box: o BG3 avisa com o pacote a instalar e não quebra o MO2 (Task 5, teste com `PATH` sem `dotnet`).
+- Usuário do BG3 pede a ordem de carga no Linux: aviso claro, nada baixado do GitHub, nenhum processo iniciado, MO2 segue funcionando (Task 5, teste).
 - Jogo do `basic_games` com `GameSteamId` em lista (vários IDs): o primeiro instalado vence (Task 3, teste).
 
 ---
@@ -533,105 +532,52 @@ e o mesmo para `%USERPROFILE%` com `user_profile` (fallback `HomeLocation`). Os 
 
 ---
 
-### Task 5: BG3 e Cyberpunk no Linux
+### Task 5: BG3 sem LSLib no Linux, e Cyberpunk
 
 **Files:**
-- Modify: `deps/basic_games/games/baldursgate3/pak_parser.py` (comando do `Divine`), e o que a revisão achar em `games/baldursgate3/*.py` e `games/game_cyberpunk2077.py`
-- Test: `tests/basic-games/test_bg3_divine.py`
+- Modify: `deps/basic_games/games/baldursgate3/bg3_utils.py` (ponto de entrada da geração do `modsettings.lsx`) e, se for por onde o LSLib é acionado, `lslib_retriever.py`/`pak_parser.py` — só o necessário para que, no Linux, nada do LSLib rode
+- Modify: o que a revisão achar em `games/game_cyberpunk2077.py`
+- Test: `tests/basic-games/test_bg3_linux.py`
 
 **Interfaces:**
-- Consumes: o resultado da Task 1 (ledger). Se a Ruling for "Divine.exe por Proton", o controlador reescreve esta tarefa antes do despacho.
-- Produces: no Linux, `PakParser._divine_args(action: str, source) -> list[str]` (ou nome equivalente, documentado no relatório) começando com `[<dotnet>, "<tools>/Divine.dll", "-g", "bg3", "-l", "info", "-a", action, "-s", str(source)]`.
+- Consumes: Task 3 (pacote instalado, fixture `steam`, `_load_basic_games`), Task 4 (pastas no prefixo).
 
-- [ ] **Step 1: Testes que falham**
+Contexto (spec §1.3): o `Divine` do LSLib não funciona no Linux (valida caminhos com `System.Uri` e quebra com qualquer caminho Unix). Decisão do usuário: desativar a ordem de carga do BG3 no Linux, com aviso; o resto do plugin do BG3 segue funcionando.
 
-`tests/basic-games/test_bg3_divine.py`:
+- [ ] **Step 1: Teste que falha**
 
-```python
-import shutil
-from pathlib import Path
-
-import pytest
-
-
-class _Utils:
-    def __init__(self, tools: Path):
-        self.tools_dir = tools
-
-    def tr(self, s):
-        return s
-
-
-def _parser(tmp_path):
-    from basic_games.games.baldursgate3.pak_parser import BG3PakParser
-
-    return BG3PakParser(_Utils(tmp_path / "tools"))
-
-
-def test_divine_runs_with_dotnet_and_one_argument_per_path(tmp_path, monkeypatch):
-    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/dotnet" if name == "dotnet" else None)
-    source = tmp_path / "Mods/Ação Mod/Some Mod.pak"
-    args = _parser(tmp_path)._divine_args("list-package", source)
-    assert args[:2] == ["/usr/bin/dotnet", str(tmp_path / "tools" / "Divine.dll")]
-    assert args[2:] == ["-g", "bg3", "-l", "info", "-a", "list-package", "-s", str(source)]
-
-
-def test_without_dotnet_it_says_what_to_install(tmp_path, monkeypatch):
-    monkeypatch.setattr(shutil, "which", lambda name: None)
-    with pytest.raises(FileNotFoundError, match="dotnet-runtime-8.0"):
-        _parser(tmp_path)._divine_args("list-package", tmp_path / "x.pak")
-```
-
-(Confira o nome real da classe do parser e do construtor em `pak_parser.py` e o que ele pede de `utils` — ajuste o `_Utils` mínimo, sem mudar a intenção dos testes. Se o plugin trata a falta do LSLib com uma mensagem ao usuário em outro ponto, faça o `FileNotFoundError` subir até lá e mostre a mesma mensagem — leia `bg3_utils.construct_modsettings_xml`.)
-
-Run: `./build.sh --only basic_games --tests` — Expected: FAIL (`_divine_args` não existe).
-
-- [ ] **Step 2: Implementar em `pak_parser.py`**
+Leia `bg3_utils.py` (`construct_modsettings_xml` e quem a chama), `lslib_retriever.py` (`download_lslib_if_missing`) e `pak_parser.py` (`run_divine`) no `deps/basic_games` para achar o ponto único por onde a geração começa. Escreva `tests/basic-games/test_bg3_linux.py`:
 
 ```python
-    def _divine_args(self, action: str, source: Path | str) -> list[str]:
-        """Linux: Divine.dll (LSLib, .NET 8) with the dotnet of the system, one
-        argument per item (no shell: paths with spaces stay whole)."""
-        dotnet = shutil.which("dotnet")
-        if dotnet is None:
-            raise FileNotFoundError(
-                "dotnet was not found: install dotnet-runtime-8.0 in the mo2-run "
-                "distrobox (sudo dnf install dotnet-runtime-8.0)"
-            )
-        return [
-            dotnet,
-            str(self._utils.tools_dir / "Divine.dll"),
-            "-g", "bg3", "-l", "info",
-            "-a", action,
-            "-s", str(source),
-        ]
+import subprocess
+import urllib.request
+
+
+def test_load_order_does_not_use_lslib_on_linux(steam, monkeypatch):
+    from test_detection import _load_basic_games
+
+    calls = []
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: calls.append(("run", a)))
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: calls.append(("popen", a)))
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: calls.append(("urlopen", a)))
+    monkeypatch.setattr(urllib.request, "urlretrieve", lambda *a, **k: calls.append(("urlretrieve", a)))
+
+    game = _load_basic_games()["BG3Game"]
+    game.detectGame()
+    # <the real entry point of the load-order generation, called the way the plugin
+    #  calls it; it must not raise and must report that it is not available on Linux>
+    result = ...
+    assert calls == []
+    assert <the observable "not on Linux" outcome>
 ```
 
-e em `run_divine`:
+Substitua as duas linhas marcadas pelo ponto de entrada real e pelo resultado observável que você escolher no Step 2 (por exemplo: a função devolve `False` e uma mensagem foi registrada por um `qWarning`/um diálogo substituído por `monkeypatch`; se o plugin mostra um `QMessageBox`, faça `monkeypatch` de `QMessageBox.information`/`warning`/`exec` e assegure que foi chamado uma vez com o texto do aviso). A classe `BG3Game` e a forma de obter o `BG3Utils` vêm do código real (o `BG3Game` provavelmente cria o `utils` no `init(organizer)` — use o mínimo de `organizer` falso que o código exigir, ou chame a função do `BG3Utils` diretamente se for isso que o plugin expõe; registre a escolha).
 
-```python
-        if sys.platform == "win32":
-            command = f'{self._divine_command} -a {action} -s "{source}"'
-            result = subprocess.run(
-                command,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-        else:
-            command = " ".join(self._divine_args(action, source))
-            result = subprocess.run(
-                self._divine_args(action, source),
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-```
+Run: `./build.sh --only basic_games --tests` — Expected: FAIL (o código tenta baixar o LSLib ou rodar o `Divine.exe`).
 
-(o bloco Windows é o original, sem mudança; `command` continua existindo para o `qWarning` de erro; `import shutil`/`import sys` se faltarem.)
+- [ ] **Step 2: Implementar**
+
+No ponto de entrada, no Linux (`if sys.platform != "win32":`), antes de qualquer download ou execução: registrar o motivo no log (`qWarning("Baldur's Gate 3: the load order (modsettings.lsx) is not generated on Linux: LSLib's Divine does not accept Unix paths; see the README")`) e avisar o usuário uma vez por sessão pelo mesmo canal que o plugin já usa para a falta do LSLib (texto em `self._utils.tr(...)` se o plugin traduz), e retornar como o plugin retorna quando o LSLib não está disponível. Windows byte-idêntico. O mapeamento de um `modsettings.lsx` existente do perfil (`bg3_file_mapper.py`) não muda.
 
 - [ ] **Step 3: Revisão Linux do BG3 e do Cyberpunk**
 
@@ -639,34 +585,32 @@ e em `run_divine`:
 grep -rn -E 'winreg|startfile|windll|CREATE_NO_WINDOW|\\\\|\.exe["'"'"']|os\.sep|subprocess' deps/basic_games/games/baldursgate3 deps/basic_games/games/game_cyberpunk2077.py deps/basic_games/basic_game.py deps/basic_games/basic_features --include=*.py
 ```
 
-Para cada ocorrência: corrigir em `sys.platform` só o que quebra no Linux (como a 4d.1: caminho que vai para um programa Windows → `Z:\…`; caminho do Linux montado com `\` → `pathlib`; `os.startfile` → `QDesktopServices.openUrl`), ou registrar "não precisa" com o motivo. O `redMod.exe` do Cyberpunk roda por `organizer.startApplication()` — conferir os argumentos com caminhos (a lista de mods, `-modlist=…`): se forem caminhos do Linux para o `redMod.exe`, converter para `Z:\…`.
+Para cada ocorrência fora do caminho do LSLib: corrigir em `sys.platform` só o que quebra no Linux (caminho para programa Windows → `Z:\…`; caminho do Linux montado com `\` → `pathlib`; `os.startfile` → `QDesktopServices.openUrl`), ou registrar "não precisa" com o motivo. O `redMod.exe` do Cyberpunk roda por `organizer.startApplication()` — conferir os argumentos com caminhos (a lista de mods, `-modlist=…`): se forem caminhos do Linux para o `redMod.exe`, converter para `Z:\…`.
 
 - [ ] **Step 4: Rodar e ver passar** — `./build.sh --only basic_games --tests`; Expected: todos os testes de `tests/basic-games` PASS.
 
-- [ ] **Step 5: Commits** — `deps/basic_games: Linux: Baldur's Gate 3 runs Divine.dll with the dotnet of the system`; um commit por outro patch (`deps/basic_games: Linux: Cyberpunk 2077: …`); `tests: basic_games: the Divine command of Baldur's Gate 3`.
+- [ ] **Step 5: Commits** — `deps/basic_games: Linux: Baldur's Gate 3 does not generate the load order (LSLib)`; um commit por outro patch (`deps/basic_games: Linux: Cyberpunk 2077: …`); `tests: basic_games: Baldur's Gate 3 does not run LSLib on Linux`.
 
 ---
 
 ### Task 6: Container, documentação, checklist e ponto de controle de CI
 
 **Files:**
-- Modify: `build/Containerfile` (`dotnet-runtime-8.0`)
 - Modify: `README.md`, `ROADMAP.md`, `STATE.md`, `deps/README.md` (notas dos patches)
 - Create: `docs/testing/phase4d2-manual-checklist.md`
 
-- [ ] **Step 1: Containerfile e README** — `dotnet-runtime-8.0` na lista do `dnf` do Containerfile; no README, na subseção "Plugins Python", um parágrafo sobre o `basic_games`: jogos da Steam detectados no Linux pelo app ID; documentos e saves no prefixo do Proton (rodar o jogo uma vez pela Steam); só Steam (GOG/Epic/EA/Origin não); o BG3 precisa de `sudo dnf install dotnet-runtime-8.0` no box para a ordem de carga; e na lista de pacotes do box limpo `fedora:44`, `dotnet-runtime-8.0`.
+- [ ] **Step 1: README** — na subseção "Plugins Python", um parágrafo sobre o `basic_games`: jogos da Steam detectados no Linux pelo app ID; documentos e saves no prefixo do Proton (rodar o jogo uma vez pela Steam); só Steam (GOG/Epic/EA/Origin não); no BG3 a ordem de carga (`modsettings.lsx`) ainda não é gerada no Linux (defeito do LSLib com caminhos Unix) — gere-a por fora e o MO2 a mapeia do perfil. Sem pacote novo.
 
 - [ ] **Step 2: Checklist** — `docs/testing/phase4d2-manual-checklist.md`, no formato do da 4d.1:
-  - Preparação: box com `dotnet-runtime-8.0`; MO2 pelo box com o `install/` do worktree `ModOrganizerLinux-4d2`.
+  - Preparação: MO2 pelo box com o `install/` do worktree `ModOrganizerLinux-4d2`.
   - NieR:Automata: criar instância (o jogo aparece na lista), instalar um mod simples (pasta na raiz do jogo), executar o jogo pelo MO2 (VFS), o mod é visto; fechar.
   - Cyberpunk 2077: criar instância; documentos/saves apontam para `…/compatdata/1091500/pfx/drive_c/users/steamuser/…` (aba Saves lista os saves do jogo, se houver); instalar um mod de arquivo (`archive/pc/mod`); executar pelo MO2; opcional: um mod REDmod e o deploy do `redMod.exe`.
-  - BG3: criar instância; instalar um mod `.pak` do Nexus; na aba de plugins/ordem, gerar a ordem de carga; o `modsettings.lsx` aparece em `…/compatdata/1086940/pfx/drive_c/users/steamuser/AppData/Local/Larian Studios/Baldur's Gate 3/PlayerProfiles/Public/modsettings.lsx` durante a execução (VFS); o jogo mostra o mod.
-  - Sem `dotnet` (opcional): a mensagem com o pacote a instalar.
+  - BG3: criar instância (detectado; documentos em `…/compatdata/1086940/pfx/drive_c/users/steamuser/AppData/Local/Larian Studios/Baldur's Gate 3`); instalar um mod `.pak` do Nexus; pedir a ordem de carga → o aviso de que ela não é gerada no Linux, sem travar; executar o jogo pelo MO2.
   - Regressão: Skyrim SE (SKSE), os plugins Python da 4d.1.
 
-- [ ] **Step 3: ROADMAP e STATE** — 4d.2 `🟡 Em andamento`; linha de links da 4d.2; STATE com cabeçalho (fase atual 4d.2, branch `fase-4d2-basic-games` a partir de `fase-4d1-python`, worktree `../ModOrganizerLinux-4d2`), progresso (Tasks 1–7 e commits), limitações (só Steam; jogos do `basic_games` além dos três só "detectados, não validados"; BG3 precisa de `dotnet-runtime-8.0`; Stellar Blade sem plugin), decisões de 2026-10-21 (escopo; abordagem A; LSLib pelo .NET do sistema, com o resultado do spike). `deps/README.md`: notas dos patches Linux do `basic_games` e do binding `steamApp` no `plugin_python`.
+- [ ] **Step 3: ROADMAP e STATE** — 4d.2 `🟡 Em andamento`; linha de links da 4d.2; STATE com cabeçalho (fase atual 4d.2, branch `fase-4d2-basic-games` a partir de `fase-4d1-python`, worktree `../ModOrganizerLinux-4d2`), progresso (Tasks 1–7 e commits), limitações (só Steam; jogos do `basic_games` além dos três só "detectados, não validados"; ordem de carga do BG3 desativada no Linux pelo defeito do LSLib; Stellar Blade sem plugin), decisões de 2026-10-21 (escopo; abordagem A; spike do LSLib e a ordem do BG3 adiada), e uma pendência para reativar a ordem do BG3 quando o LSLib aceitar caminhos Unix. `deps/README.md`: notas dos patches Linux do `basic_games` e do binding `steamApp` no `plugin_python`.
 
-- [ ] **Step 4: Build completo e commits** — `distrobox enter mo2-run -- env TMPDIR=/tmp/mo2t ./build.sh --tests` verde (`==> done`); `build: dotnet-runtime-8.0 in the container` (Containerfile); `docs: Phase 4d.2: basic_games in the README, manual checklist, roadmap and state`; `git commit --allow-empty -m "ci: Phase 4d.2 checkpoint [windows-ci]"` (com as linhas de atribuição). Sem push.
+- [ ] **Step 4: Build completo e commits** — `distrobox enter mo2-run -- env TMPDIR=/tmp/mo2t ./build.sh --tests` verde (`==> done`); `docs: Phase 4d.2: basic_games in the README, manual checklist, roadmap and state`; `git commit --allow-empty -m "ci: Phase 4d.2 checkpoint [windows-ci]"` (com as linhas de atribuição). Sem push.
 
 ---
 
