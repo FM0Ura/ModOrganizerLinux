@@ -80,12 +80,20 @@ pid_t toPid(HANDLE h)
 }
 
 // whether the mod is active in the profile of a run; false for a mod that doesn't
-// exist (OrganizerCore::fileMapping() reads the profile the same way)
+// exist. The open profile is read from memory: its modlist.txt may still have a
+// deferred write pending (beforeRun() flushes it before fileMapping() reads the file),
+// so the disk could disagree with what is going to be mounted. Another profile has no
+// pending writes and is read like fileMapping() does
 bool modActive(OrganizerCore& core, const QString& profileName, const QString& mod)
 {
   const unsigned int index = ModInfo::getIndex(mod);
   if (index == UINT_MAX) {
     return false;
+  }
+
+  if (const auto current = core.currentProfile();
+      current && current->name() == profileName) {
+    return current->modEnabled(index);
   }
 
   const Profile profile(QDir(core.settings().paths().profiles() + "/" + profileName),
