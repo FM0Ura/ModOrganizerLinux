@@ -129,6 +129,7 @@ set(_organizer_env_sources
 
 set(_organizer_launch_sources
 	filemappingbuilder.cpp
+	virtualizedpaths.cpp
 	shared/appconfig.cpp
 	linux/exitcodes_linux.cpp
 	linux/loot_linux.cpp
