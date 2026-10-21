@@ -69,7 +69,7 @@ Carregar plugins Python no MO2 do Linux, como no Windows: o `plugin_python` inic
 Quase todos são Python puro, sem `winreg` nem `os.startfile`. Cada um é revisado por: caminhos montados com `\`, `.exe` executado diretamente, nomes de arquivo com maiúsculas diferentes das do disco, e chamadas a APIs do Windows. Correções em `if sys.platform == "win32"`.
 
 - **`fnistool`:** roda `GenerateFNISforUsers.exe` pelo `organizer.startApplication()`, que no Linux vai por Proton com o VFS (Fases 3 e 4c.3); a revisão confere o caminho da ferramenta e o argumento `RedirectFiles` (caminho de mod em formato Windows: `Z:\…`).
-- **`preview_dds`:** `QOpenGLWidget`/`QOpenGLTexture` funcionam no Wayland. Com ele instalado, o `preview_base` deixa de pular `.dds` (a pendência registrada no STATE.md da 4c.1).
+- **`preview_dds`:** `QOpenGLWidget`/`QOpenGLTexture` funcionam no Wayland. O `preview_base` sempre pula `.dds` (por desenho do upstream, para o plugin de DDS tratar): com o `preview_dds` instalado, `.dds` passa a ter pré-visualização (a pendência registrada no STATE.md da 4c.1).
 - **`installer_wizard`:** `bain-wizard-interpreter` instalado na pasta do plugin (§1.2).
 
 ## 5. Testes

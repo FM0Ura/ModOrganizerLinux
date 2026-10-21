@@ -19,7 +19,8 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 4c.1 | Plugins C++ restantes | installer_bain, installer_bundle, preview_base, preview_bsa, bsa_extractor, diagnose_basic, check_fnis, tool_inieditor, tool_inibakery | Todas as funcionalidades | 🟡 Em andamento |
 | 4c.2 | Pendências da Fase 2 | as 6 pendências adiadas do teste manual e da revisão final da Fase 2 | — | 🟡 Em andamento |
 | 4c.3 | Ferramentas pelo VFS | BodySlide, Nemesis/Pandora, xEdit de outros jogos | Ferramentas pelo VFS (critério 6) | 🟡 Em andamento |
-| 4d | Plugins Python | `plugin_python` (pybind11 + Python + PyQt6) e plugins Python (incl. `basic_games`) | Todas as funcionalidades | ⚪ Não iniciada |
+| 4d.1 | Plugins Python — runtime | `plugin_python` (pybind11 + Python 3.14 + PyQt6 do Fedora) + seis plugins (preview_dds, form43_checker, script_extender_plugin_checker, tool_configurator, installer_wizard, fnistool) | Todas as funcionalidades | 🟡 Em andamento |
+| 4d.2 | `basic_games` | Suporte a jogos da comunidade (`basic_games`) sobre o runtime da 4d.1 | Todas as funcionalidades | ⚪ Não iniciada |
 | 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ⚪ Não iniciada |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
 
@@ -80,6 +81,8 @@ Fase 4c.1 — Spec: [`docs/superpowers/specs/2026-10-20-phase4c1-cpp-plugins-des
 Fase 4c.2 — Spec: [`docs/superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](docs/superpowers/specs/2026-10-20-phase4c2-pendencias-design.md) · Plano: [`docs/superpowers/plans/2026-10-20-phase4c2-pendencias.md`](docs/superpowers/plans/2026-10-20-phase4c2-pendencias.md) · Checklist manual: [`docs/testing/phase4c2-manual-checklist.md`](docs/testing/phase4c2-manual-checklist.md)
 
 Fase 4c.3 — Spec: [`docs/superpowers/specs/2026-10-21-phase4c3-ferramentas-design.md`](docs/superpowers/specs/2026-10-21-phase4c3-ferramentas-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4c3-ferramentas.md`](docs/superpowers/plans/2026-10-21-phase4c3-ferramentas.md) · Checklist manual: [`docs/testing/phase4c3-manual-checklist.md`](docs/testing/phase4c3-manual-checklist.md)
+
+Fase 4d.1 — Spec: [`docs/superpowers/specs/2026-10-21-phase4d1-python-design.md`](docs/superpowers/specs/2026-10-21-phase4d1-python-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4d1-python.md`](docs/superpowers/plans/2026-10-21-phase4d1-python.md) · Checklist manual: [`docs/testing/phase4d1-manual-checklist.md`](docs/testing/phase4d1-manual-checklist.md)
 
 - (4d) `plugin_python` (pybind11 + Python embutido) e os plugins Python da comunidade.
 - (4b) `lootcli` nativo (libloot) → ordenação com LOOT.
