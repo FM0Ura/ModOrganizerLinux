@@ -360,6 +360,21 @@ class MainWindow(QDialog):
         self.__updateTree()
 
 
+def iniPath(base_path, fileName):
+    """The path of an INI file in the given folder; the names come lowercase, and unlike
+    on Windows a file system on Linux tells the case apart"""
+    filePath = base_path + "/" + fileName
+    if sys.platform == "win32" or os.path.exists(filePath):
+        return filePath
+    else:
+        try:
+            for name in os.listdir(base_path):
+                if name.lower() == fileName.lower():
+                    return base_path + "/" + name
+        except OSError:
+            pass
+        return filePath
+
 class IniEdit(mobase.IPluginTool):
 
     def __init__(self):
@@ -463,7 +478,7 @@ class IniEdit(mobase.IPluginTool):
         else:
             base_path = self.__organizer.managedGame().documentsDirectory().absolutePath()
 
-        filePath = base_path + "/" + fileName
+        filePath = iniPath(base_path, fileName)
         if not os.path.exists(filePath):
             return
         parser.read(filePath)
@@ -523,7 +538,7 @@ class IniEdit(mobase.IPluginTool):
                 base_path = self.__organizer.managedGame().documentsDirectory().absolutePath()
 
             for fileName in self.__iniFiles():
-                filePath = base_path + "/" + fileName
+                filePath = iniPath(base_path, fileName)
                 if os.path.exists(filePath):
                     parser = configparser.ConfigParser(allow_no_value=True)
                     parser.optionxform = str
@@ -545,7 +560,7 @@ class IniEdit(mobase.IPluginTool):
                             ini_files[setting["file"]].set(sectionkey,  settingkey,  str(setting["value"]))
                         setting["saved"] = setting["value"]
             for fileName, data in ini_files.items():
-                filePath = base_path + "/" + fileName
+                filePath = iniPath(base_path, fileName)
                 if os.path.exists(filePath):
                     out = open(filePath, 'w')
                     data.write(out)
