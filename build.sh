@@ -103,6 +103,11 @@ build_cmake_smoke() {
     out="$("$BUILD_OUT/cmake-smoke/smoke_main")" || die "cmake-smoke executable failed"
     [[ $out == ok ]] || die "cmake-smoke printed '$out', expected 'ok'"
     log "cmake-smoke: $out"
+    [[ -f "$BUILD_OUT/cmake-smoke/form.py" ]] ||
+        die "cmake-smoke: pyuic6 did not generate form.py"
+    grep -q "class Ui_Form" "$BUILD_OUT/cmake-smoke/form.py" ||
+        die "cmake-smoke: form.py is not a pyuic6 output"
+    log "cmake-smoke: python ok"
 }
 
 # uibase is the plugin API / shared UI library; with --tests its GoogleTest suite runs
