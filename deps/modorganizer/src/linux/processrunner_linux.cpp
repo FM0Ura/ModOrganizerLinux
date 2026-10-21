@@ -46,6 +46,7 @@
 #include "../virtualizedpaths.h"
 #include "exitcodes_linux.h"
 #include "protonlauncher_linux.h"
+#include "vfsbridge_linux.h"
 
 #include <QCoreApplication>
 #include <QEventLoop>
@@ -252,7 +253,7 @@ ProcessRunner::Results ProcessRunner::run()
     // a program inside the mods directory runs from its place in the data directory,
     // where the virtual file system shows it (see the top of this file)
     const auto* game = m_core.managedGame();
-    if (const auto paths = virtualizedPaths(
+    if (const auto paths = vfsbridge::virtualizedPathsOnHost(
             m_core.settings().paths().mods(), game->dataDirectory().absolutePath(),
             m_sp.binary.absoluteFilePath(), m_sp.currentDirectory.path())) {
       if (paths->mod.isEmpty()) {
@@ -309,7 +310,7 @@ ProcessRunner::Results ProcessRunner::run()
   } catch (const std::exception& e) {
     auto text =
         QObject::tr("Cannot start \"%1\": %2")
-            .arg(m_sp.binary.absoluteFilePath(), QString::fromStdString(e.what()));
+            .arg(launchBinary.absoluteFilePath(), QString::fromStdString(e.what()));
     if (request.argv.value(0) == "umu-run" &&
         QString::fromStdString(e.what()).contains("umu-run")) {
       // spawn_failed for argv[0]: umu-run is not in the PATH of the host

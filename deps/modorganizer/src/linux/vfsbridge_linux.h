@@ -3,6 +3,9 @@
 
 #include <QString>
 #include <QStringList>
+#include <optional>
+
+#include "../virtualizedpaths.h"
 
 // How Mod Organizer starts the mo2-vfs helper: directly, or on the host through
 // distrobox-host-exec when Mod Organizer runs in a container (the mounts and the
@@ -39,6 +42,16 @@ Command helperCommand(const QString& binary, const QStringList& args,
 // is a directory, the canonical path of <rootDir>/run/host + path without that prefix;
 // otherwise the canonical path. A path that does not exist is returned unchanged.
 QString hostCanonicalPath(const QString& path, const QString& rootDir = "/");
+
+// virtualizedPaths() (virtualizedpaths.h) for paths that may name the same directory
+// differently in the container (/home and /var/home): the paths as given first, then
+// as the host sees them (hostCanonicalPath()), for the mods directory, the binary and
+// the working directory
+std::optional<VirtualizedPaths> virtualizedPathsOnHost(const QString& modsPath,
+                                                       const QString& dataPath,
+                                                       const QString& binary,
+                                                       const QString& workingDirectory,
+                                                       const QString& rootDir = "/");
 }  // namespace vfsbridge
 
 #endif  // VFSBRIDGE_LINUX_H

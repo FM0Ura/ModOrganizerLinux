@@ -84,4 +84,21 @@ QString hostCanonicalPath(const QString& path, const QString& rootDir)
 
   return real.isEmpty() ? path : real;
 }
+
+std::optional<VirtualizedPaths> virtualizedPathsOnHost(const QString& modsPath,
+                                                       const QString& dataPath,
+                                                       const QString& binary,
+                                                       const QString& workingDirectory,
+                                                       const QString& rootDir)
+{
+  if (auto p = virtualizedPaths(modsPath, dataPath, binary, workingDirectory)) {
+    return p;
+  }
+
+  // the rewritten paths come from dataPath, so only the ones compared are canonical
+  return virtualizedPaths(
+      hostCanonicalPath(modsPath, rootDir), dataPath, hostCanonicalPath(binary, rootDir),
+      workingDirectory.isEmpty() ? workingDirectory
+                                 : hostCanonicalPath(workingDirectory, rootDir));
+}
 }  // namespace vfsbridge
