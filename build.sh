@@ -456,7 +456,13 @@ build_script_extender_plugin_checker() {
     python_plugin script_extender_plugin_checker ScriptExtenderPluginChecker.py
 }
 build_tool_configurator() { python_plugin tool_configurator pyCfg.py; }
-build_installer_wizard() { python_plugin installer_wizard installer_wizard; }
+build_installer_wizard() {
+    python_plugin installer_wizard installer_wizard
+    # the interpreter of the wizard scripts is installed by pip (plugin-requirements.txt)
+    [[ $TESTS == 1 ]] || return 0
+    [[ -d $INSTALL/bin/plugins/installer_wizard/lib/wizard ]] ||
+        die "installer_wizard: the pip package bain-wizard-interpreter is not installed in lib/"
+}
 build_fnistool() { python_plugin fnistool FNISTool.py FNISPatches.py FNISToolReset.py; }
 
 # --- driver -----------------------------------------------------------------
