@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 from enum import Enum, auto
@@ -10,38 +11,56 @@ import mobase
 from PyQt6.QtCore import QCoreApplication, qDebug
 
 
-def nativePath(path: str | Path, dataDirectory: str) -> Path:
+def nativePath(path: str | Path) -> Path:
     """
     The log is written by the Windows program, so the plugin path is a Windows path, e.g.
     Z:\\home\\user\\...\\Data\\SKSE\\Plugins\\plugin.dll when the game runs through Proton, where
-    the drive Z: is the root of the file system and the other drives are not visible to MO2.
-    Returns the path on this system, or a path in the data directory when only the part
-    after the Data folder can be recognized.
+    the drive Z: is the root of the file system.
     """
     if sys.platform == "win32":
         return Path(path)
     else:
         converted = str(path).replace("\\", "/")
         if len(converted) > 1 and converted[1] == ":":
-            drive = converted[0].lower()
             converted = converted[2:]
-            if drive != "z":
-                parts = converted.split("/")
-                for i in range(len(parts) - 2, -1, -1):
-                    if parts[i].lower() == "data":
-                        return Path(dataDirectory).joinpath(*parts[i + 1:])
         return Path(converted)
+
+
+def pathRelativeToData(path: str | Path, dataDirectory: str) -> str:
+    """
+    The path of a plugin relative to the data directory of the game (raises ValueError if
+    it is not in it). On Linux the paths of the log may differ from the one of MO2 in the
+    case (Data and data), in a symbolic link (/home is /var/home on some systems) and in
+    the drive (only Z: is the root of the file system), so besides the comparison of the
+    paths without case, with and without resolving the links, the part after the last
+    Data folder is taken.
+    """
+    if sys.platform == "win32":
+        return str(Path(path).relative_to(dataDirectory))
+
+    native = nativePath(path)
+    for plugin, data in ((native, Path(dataDirectory)),
+                         (Path(os.path.realpath(native)), Path(os.path.realpath(dataDirectory)))):
+        pluginParts = [part.lower() for part in plugin.parts]
+        dataParts = [part.lower() for part in data.parts]
+        if len(pluginParts) > len(dataParts) and pluginParts[:len(dataParts)] == dataParts:
+            return "/".join(plugin.parts[len(dataParts):])
+
+    for i in range(len(native.parts) - 2, -1, -1):
+        if native.parts[i].lower() == "data":
+            return "/".join(native.parts[i + 1:])
+
+    raise ValueError(f"{path} is not in {dataDirectory}")
 
 
 class PluginMessage:
     kUnknownOrigin = "<unknown>"
 
     def __init__(self, pluginPath: str | Path, organizer: mobase.IOrganizer):
-        dataDirectory = organizer.managedGame().dataDirectory().absolutePath()
-        self._pluginPath = nativePath(pluginPath, dataDirectory)
+        self._pluginPath = nativePath(pluginPath)
         try:
             self._pluginOrigin = organizer.getFileOrigins(
-                str(self._pluginPath.relative_to(dataDirectory)))[0]
+                pathRelativeToData(self._pluginPath, organizer.managedGame().dataDirectory().absolutePath()))[0]
         except:
             self._pluginOrigin = PluginMessage.kUnknownOrigin
 
