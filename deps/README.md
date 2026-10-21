@@ -37,6 +37,12 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `tool_inieditor` | https://github.com/ModOrganizer2/modorganizer-tool_inieditor | `master` (`18b0e1c5869c1f6b6c129b7a3758142b582fea8c`) | 2026-10-06 |
 | `tool_inibakery` | https://github.com/ModOrganizer2/modorganizer-tool_inibakery | `master` (`355cac9619175016d9cee45589ecb01bba408a07`) | 2026-10-06 |
 | `plugin_python` | https://github.com/ModOrganizer2/modorganizer-plugin_python | `master` (`baf09209f51566a39c6247ed93999ae54a6046df`) | 2026-10-06 |
+| `preview_dds` | https://github.com/ModOrganizer2/modorganizer-preview_dds | `master` (`5cfbf5dd38829731c0aa2e472747e4c4fa20f679`) | 2026-05-21 |
+| `form43_checker` | https://github.com/ModOrganizer2/modorganizer-form43_checker | `master` (`70709437486cccbd8fd03da403ad4f5dc5bf3441`) | 2026-05-21 |
+| `script_extender_plugin_checker` | https://github.com/ModOrganizer2/modorganizer-script_extender_plugin_checker | `master` (`975e95db3602fcfd747bd3c9e9620f12b7fd9b78`) | 2026-05-21 |
+| `tool_configurator` | https://github.com/ModOrganizer2/modorganizer-tool_configurator | `master` (`22b6243ea47b4e28ee788d3b184db42489c7d4dc`) | 2026-05-21 |
+| `installer_wizard` | https://github.com/ModOrganizer2/modorganizer-installer_wizard | `master` (`d38019a994a42609376975227201531007cba9ae`) | 2025-05-29 |
+| `fnistool` | https://github.com/ModOrganizer2/modorganizer-fnistool | `master` (`6cd125da7494450f77dfbafb61a8294088f9a8fb`) | 2026-06-03 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`

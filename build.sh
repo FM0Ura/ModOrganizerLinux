@@ -26,6 +26,8 @@ ALL_TARGETS=(
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
     check_fnis tool_inieditor tool_inibakery plugin_python
+    preview_dds form43_checker script_extender_plugin_checker tool_configurator
+    installer_wizard fnistool
 )
 
 ONLY=()
@@ -426,6 +428,36 @@ build_plugin_python() {
             "$INSTALL" || die "mobase does not import"
     fi
 }
+
+# the Python plugins of Mod Organizer 2.5 (Phase 4d.1), installed in bin/plugins: the DDS
+# preview, the Form 43 and script extender plugin checkers, the INI configurator, the
+# installer of BAIN archives with wizard scripts and the FNIS tool; with --tests each
+# must compile in the system's Python (python3 -m py_compile) after installation
+python_plugin() {
+    local target="$1"; shift
+    cmake_build "$target" "$ROOT/deps/$target"
+    [[ $TESTS == 1 ]] || return 0
+    # the compiled files go to a scratch folder: the installed plugins stay as installed
+    local f cache="$BUILD_OUT/$target/pycache"
+    for f in "$@"; do
+        [[ -e $INSTALL/bin/plugins/$f ]] || die "$target: $f is not installed"
+        if [[ -d $INSTALL/bin/plugins/$f ]]; then
+            python3 -I -X pycache_prefix="$cache" -m compileall -q "$INSTALL/bin/plugins/$f" >/dev/null ||
+                die "$target: $f does not compile"
+        else
+            python3 -I -X pycache_prefix="$cache" -m py_compile "$INSTALL/bin/plugins/$f" ||
+                die "$target: $f does not compile"
+        fi
+    done
+}
+build_preview_dds() { python_plugin preview_dds DDSPreview.py; }
+build_form43_checker() { python_plugin form43_checker Form43Checker.py; }
+build_script_extender_plugin_checker() {
+    python_plugin script_extender_plugin_checker ScriptExtenderPluginChecker.py
+}
+build_tool_configurator() { python_plugin tool_configurator pyCfg.py; }
+build_installer_wizard() { python_plugin installer_wizard installer_wizard; }
+build_fnistool() { python_plugin fnistool FNISTool.py FNISPatches.py FNISToolReset.py; }
 
 # --- driver -----------------------------------------------------------------
 
