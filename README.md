@@ -66,13 +66,14 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
      podman build -t mo2-linux-build -f build/Containerfile build/
      distrobox create --name mo2-run --image localhost/mo2-linux-build
      ```
-   - Ou uma imagem Fedora limpa com os mesmos pacotes do `build/Containerfile`:
+   - Ou uma imagem Fedora limpa, com os pacotes de execução do `build/Containerfile` e os do Python (para compilar, use a imagem do `build/Containerfile`):
      ```sh
      distrobox create --name mo2-run --image fedora:44
      distrobox enter mo2-run -- sudo dnf -y install --setopt=install_weak_deps=False \
          qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtwebsockets-devel \
          qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
-         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret
+         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret \
+         python3 python3-pyqt6
      ```
    - Se o box `mo2-run` foi criado com uma imagem anterior à Fase 4a: `distrobox enter mo2-run -- sudo dnf -y install libsecret` (para guardar os logins no Secret Service).
 2. Obtenha o artefato `mo2-linux-install`. Duas rotas:

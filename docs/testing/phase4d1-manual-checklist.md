@@ -8,7 +8,7 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d1-python-design.md`](../superpowe
 
 ## 1. Python carregado
 
-- [ ] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, o "Python Proxy" e os plugins Python (DDS Preview, Form 43 Checker, Script Extender Plugin Checker, Configurator, Wizard Installer, FNIS Tool/Patches/Reset) aparecem habilitados.
+- [ ] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, o "Python Proxy" e os plugins Python ("DDS Preview Plugin", "Form 43 Plugin Checker", "Script Extender Plugin Load Checker", "Configurator", "BAIN Wizard Installer", "FNIS Integration Tool", "FNIS Patches Tool" e "FNIS Integration Tool Reset") aparecem habilitados.
 - [ ] No log (`logs/mo_interface.log`): nenhuma linha `failed to init python`.
 
 ## 2. Pré-visualização de DDS
@@ -17,8 +17,8 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d1-python-design.md`](../superpowe
 
 ## 3. Verificadores
 
-- [ ] Com um plugin `.esp` de formato 43 (Oldrim) ativo, se houver: o ícone de notificações mostra o aviso do Form 43 Checker. Sem um, conferir só que não há erro do plugin no log.
-- [ ] Script Extender Plugin Checker: depois de rodar o SKSE uma vez (Fase 3), sem erro no log; com uma DLL do SKSE que não carregou (opcional), o aviso aparece.
+- [ ] Com um plugin `.esp` de formato 43 (Oldrim) ativo, se houver: o ícone de notificações mostra o aviso do "Form 43 Plugin Checker". Sem um, conferir só que não há erro do plugin no log.
+- [ ] "Script Extender Plugin Load Checker": depois de rodar o SKSE uma vez (Fase 3), sem erro no log; com uma DLL do SKSE que não carregou (opcional), o aviso aparece.
 
 ## 4. Configurator
 
@@ -30,11 +30,47 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d1-python-design.md`](../superpowe
 
 ## 6. Isolamento
 
-- [ ] No host, `pip install --user requests` (ou qualquer pacote ausente do box); abrir o MO2. Esperado: nada muda (o MO2 não usa o pacote). Opcional: um plugin de teste com `import requests` falha com `ModuleNotFoundError` no log. Desinstale depois (`pip uninstall requests`).
+A prova automática é o teste `Isolation.UserPackagesAreInvisible` (ctest do `plugin_python`); aqui se confirma o mesmo no MO2 de verdade, com um plugin de teste descartável. `<pasta do build>` é o `install/` do worktree. Com o MO2 fechado:
+
+- [ ] Descobrir a pasta de pacotes do usuário do box e criar nela um pacote que não existe no box (o `$HOME` do box é o do host):
+
+```sh
+SITE=$(distrobox enter mo2-run -- python3 -c 'import site; print(site.getusersitepackages())')
+mkdir -p "$SITE/mo2_isolation_probe" && echo 'X = 1' > "$SITE/mo2_isolation_probe/__init__.py"
+distrobox enter mo2-run -- python3 -c 'import mo2_isolation_probe; print("box python sees it:", mo2_isolation_probe.X)'
+```
+
+  Esperado: a última linha imprime `box python sees it: 1` (o Python comum do box enxerga o pacote; sem isso o teste não prova nada).
+- [ ] Criar o plugin de teste e abrir o MO2 pelo box:
+
+```sh
+cat > <pasta do build>/bin/plugins/isolation_probe.py <<'PY'
+import importlib.util
+import sys
+
+seen = importlib.util.find_spec("mo2_isolation_probe") is not None
+with open("/tmp/mo2_isolation_probe.txt", "w") as f:
+    f.write("visible\n" if seen else "invisible\n")
+    f.write("\n".join(sys.path) + "\n")
+
+
+def createPlugins():
+    return []
+PY
+rm -f /tmp/mo2_isolation_probe.txt
+distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer
+```
+
+  Depois de o MO2 abrir (pode fechá-lo): `head -1 /tmp/mo2_isolation_probe.txt`. **Esperado: `invisible`.** Se mostrar `visible`, o isolamento falhou (reprove o item). O resto do arquivo é o `sys.path` do MO2: só a biblioteca padrão e o `site-packages` do sistema (`/usr/lib64/python3.14`, `/usr/lib/python3.14`) e pastas do MO2, nada sob `$HOME` nem `/usr/local`. Se o arquivo não existir, o plugin de teste não foi carregado (confira o item 1).
+- [ ] Limpeza:
+
+```sh
+rm -rf "$SITE/mo2_isolation_probe" <pasta do build>/bin/plugins/isolation_probe.py /tmp/mo2_isolation_probe.txt
+```
 
 ## 7. FNIS (opcional)
 
-- [ ] Com o FNIS instalado como mod: **FNIS Tool** no menu de ferramentas pede a pasta de saída (um mod), roda o `GenerateFNISforUsers.exe` por Proton com o VFS, e a saída vai para o mod escolhido.
+- [ ] Com o FNIS instalado como mod: **FNIS/Run FNIS** no menu de ferramentas (também há **FNIS/Configure FNIS Patches** e **FNIS/Reset FNIS Settings**) pede a pasta de saída (um mod), roda o `GenerateFNISforUsers.exe` por Proton com o VFS, e a saída vai para o mod escolhido.
 
 ## 8. Regressão
 
