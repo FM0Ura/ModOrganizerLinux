@@ -1,6 +1,7 @@
 #include "starfieldbsainvalidation.h"
 
 #include "dummybsa.h"
+#include "gamegamebryo.h"
 #include "iplugingame.h"
 #include "iprofile.h"
 #include "registry.h"
@@ -36,7 +37,9 @@ bool StarfieldBSAInvalidation::prepareProfile(MOBase::IProfile* profile)
   QString basePath    = profile->localSettingsEnabled()
                             ? profile->absolutePath()
                             : m_Game->documentsDirectory().absolutePath();
-  QString iniFilePath = basePath + "/" + m_IniFileName;
+  // the INI with another case (Fallout4Custom.ini is fallout4custom.ini in a profile)
+  QString iniFilePath =
+      GameGamebryo::resolveIgnoringCase(basePath + "/" + m_IniFileName);
   WCHAR setting[MAX_PATH];
 
   if (profile->invalidationActive(nullptr)) {

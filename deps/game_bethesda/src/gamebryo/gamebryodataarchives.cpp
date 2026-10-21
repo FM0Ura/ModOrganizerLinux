@@ -27,7 +27,10 @@ QStringList GamebryoDataArchives::getArchivesFromKey(const QString& iniFile,
 {
   wchar_t* buffer = new wchar_t[size];
   QStringList result;
-  std::wstring iniFileW = QDir::toNativeSeparators(iniFile).toStdWString();
+  // the INI with another case (the Proton prefix has Skyrim.ini for skyrim.ini)
+  std::wstring iniFileW =
+      QDir::toNativeSeparators(GameGamebryo::resolveIgnoringCase(iniFile))
+          .toStdWString();
 
   // epic ms fail: GetPrivateProfileString uses errno (for whatever reason) to signal a
   // fail since the return value has a different meaning (number of bytes copied).
@@ -49,10 +52,11 @@ QStringList GamebryoDataArchives::getArchivesFromKey(const QString& iniFile,
 void GamebryoDataArchives::setArchivesToKey(const QString& iniFile, const QString& key,
                                             const QString& value)
 {
+  const QString path = GameGamebryo::resolveIgnoringCase(iniFile);
   if (!MOBase::WriteRegistryValue(L"Archive", key.toStdWString().c_str(),
                                   value.toStdWString().c_str(),
-                                  iniFile.toStdWString().c_str())) {
-    qWarning("failed to set archives in \"%s\"", qUtf8Printable(iniFile));
+                                  path.toStdWString().c_str())) {
+    qWarning("failed to set archives in \"%s\"", qUtf8Printable(path));
   }
 }
 
