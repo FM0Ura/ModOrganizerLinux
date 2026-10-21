@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from enum import Enum, auto
 from pathlib import Path
 from typing import Callable, NamedTuple
@@ -9,14 +10,38 @@ import mobase
 from PyQt6.QtCore import QCoreApplication, qDebug
 
 
+def nativePath(path: str | Path, dataDirectory: str) -> Path:
+    """
+    The log is written by the Windows program, so the plugin path is a Windows path, e.g.
+    Z:\\home\\user\\...\\Data\\SKSE\\Plugins\\plugin.dll when the game runs through Proton, where
+    the drive Z: is the root of the file system and the other drives are not visible to MO2.
+    Returns the path on this system, or a path in the data directory when only the part
+    after the Data folder can be recognized.
+    """
+    if sys.platform == "win32":
+        return Path(path)
+    else:
+        converted = str(path).replace("\\", "/")
+        if len(converted) > 1 and converted[1] == ":":
+            drive = converted[0].lower()
+            converted = converted[2:]
+            if drive != "z":
+                parts = converted.split("/")
+                for i in range(len(parts) - 2, -1, -1):
+                    if parts[i].lower() == "data":
+                        return Path(dataDirectory).joinpath(*parts[i + 1:])
+        return Path(converted)
+
+
 class PluginMessage:
     kUnknownOrigin = "<unknown>"
 
     def __init__(self, pluginPath: str | Path, organizer: mobase.IOrganizer):
-        self._pluginPath = Path(pluginPath)
+        dataDirectory = organizer.managedGame().dataDirectory().absolutePath()
+        self._pluginPath = nativePath(pluginPath, dataDirectory)
         try:
             self._pluginOrigin = organizer.getFileOrigins(
-                str(self._pluginPath.relative_to(organizer.managedGame().dataDirectory().absolutePath())))[0]
+                str(self._pluginPath.relative_to(dataDirectory)))[0]
         except:
             self._pluginOrigin = PluginMessage.kUnknownOrigin
 
