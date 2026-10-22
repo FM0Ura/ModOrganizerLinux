@@ -67,6 +67,30 @@ def test_a_game_with_several_steam_ids_is_detected_by_the_second(steam):
         Path(game.gameDirectory().absolutePath())
         == steam / "steamapps/common/NieRAutomata"
     )
+    # the ID of the installed game, not the first of the list
+    assert game.steamAPPId() == "524220"
+    assert game.is_steam()
+
+
+def test_the_steam_app_id_follows_a_path_set_by_hand(steam):
+    from basic_games.basic_game import BasicGame
+
+    BasicGame.steam_games = _load_basic_games_steam()
+    game = _load_basic_games()["Cyberpunk2077Game"].__class__()
+    assert not game.is_steam()
+    game.setGamePath(steam / "steamapps/common/Cyberpunk 2077")
+    assert game.steamAPPId() == "1091500"
+    assert game.is_steam()
+
+    # a folder that is not a Steam game of this one (and a link to the real one)
+    other = _load_basic_games()["Cyberpunk2077Game"].__class__()
+    other.setGamePath(steam / "steamapps/common/NieRAutomata")
+    assert not other.is_steam()
+    link = steam.parent / "link"
+    link.symlink_to(steam / "steamapps/common/Cyberpunk 2077")
+    linked = game.__class__()
+    linked.setGamePath(link)
+    assert linked.steamAPPId() == "1091500" and linked.is_steam()
 
 
 def test_every_game_module_imports_on_linux(steam, capsys):

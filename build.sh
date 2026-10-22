@@ -480,7 +480,8 @@ build_basic_games() {
     [[ $TESTS == 1 ]] || return 0
     [[ -d $INSTALL/bin/plugins/basic_games/lib/vdf ]] ||
         die "basic_games: the pip package vdf is not installed in lib/"
-    PYTHONPATH="$INSTALL/bin/plugins/plugin_python/libs:$INSTALL/bin/plugins" \
+    PYTHONDONTWRITEBYTECODE=1 \
+        PYTHONPATH="$INSTALL/bin/plugins/plugin_python/libs:$INSTALL/bin/plugins" \
         python3 -m pytest -p no:cacheprovider "$ROOT/tests/basic-games" -q ||
         die "basic_games tests failed"
 }
