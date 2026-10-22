@@ -108,7 +108,12 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   Linux only, `createPlugins()` skips a game module that failed to import instead of
   registering the classes of the previous one again, and `BasicGame.setGamePath()`
   records which of the game's Steam app IDs is installed in the given path (the Windows
-  code iterates the list of Steam games, which Linux cannot produce). All of them run
+  code iterates the list of Steam games, which Linux cannot produce). The new
+  `proton_utils.py` resolves `%USERPROFILE%`, `%DOCUMENTS%` and the default documents
+  folder (`replace_variables()` and `_default_documents_directory()` in `basic_game.py`)
+  into the Proton prefix of the game's Steam app ID (`<compatData>/pfx/drive_c/users/steamuser`),
+  falling back to the XDG folders with a one-time warning when a Steam game has no
+  prefix. All of them run
   behind `if sys.platform == "win32": ... else: ...` or `if sys.platform != "win32":`
   (the Windows flow is the upstream one), except that the guarded `continue` of
   `createPlugins()` sits inside the existing `except` clauses. A `git subtree pull` must
