@@ -3,12 +3,26 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-21
-**Fase atual:** 4d.1 — Plugins Python (runtime) · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4c.3 (🟡 implementação concluída; push, CI e teste manual pendentes)
-**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`)
+**Fase atual:** 4d.2 — `basic_games` · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4d.1 (🟡 implementação concluída; PR #7 aberto; teste manual pendente)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`). **Branch da Fase 4d.2:** `fase-4d2-basic-games` (a partir de `fase-4d1-python`; worktree `../ModOrganizerLinux-4d2`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4d.2 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-21-phase4d2-basic-games-design.md`](docs/superpowers/specs/2026-10-21-phase4d2-basic-games-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4d2-basic-games.md`](docs/superpowers/plans/2026-10-21-phase4d2-basic-games.md) · Checklist manual: [`docs/testing/phase4d2-manual-checklist.md`](docs/testing/phase4d2-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | Spike do LSLib no Linux (sem commits de código): `dotnet Divine.dll` falha no Linux, o `TryToValidatePath` do LSLib usa `System.Uri` e um caminho Unix `/…` vira URI relativa, então toda ação sai com código 134. Decisão do usuário: a ordem de carga do BG3 fica para depois; spec e plano atualizados | ✅ | `1eda1e8` (spec e plano) |
+| 2 | `mobase.utils.steamApp(app_id)` (só no Linux): o `steam::findApp()` do `uibase` exposto ao Python | ✅ | `d088285` |
+| 3 | `basic_games`: subtree (hash em `deps/README.md`), alvo no `build.sh`, `find_games()` da Steam preguiçoso por app ID e as outras lojas vazias, teste com Steam falsa; a revisão pediu registrar o app ID da Steam que casa com o caminho do jogo no Linux, pular no Linux o módulo de jogo que falhou ao importar e nenhum bytecode na árvore | ✅ | subtree (split `f1207d6`), `899cab0`, `910f763`, `7de498f`, `e71dca9`, `397e408`, `5a800c3`, `5daa851`, `b886fec` |
+| 4 | Pastas do usuário (`%USERPROFILE%`, `%DOCUMENTS%` e a pasta de documentos padrão) no prefixo do Proton do app ID do jogo, com o fallback XDG e um aviso por jogo | ✅ | `11b3e5e`, `01b7b3b`, `bf250eb` |
+| 5 | Baldur's Gate 3 sem o LSLib (nada é baixado nem executado no Linux, com um aviso uma vez por sessão) e o `-modlist` do `redMod.exe` do Cyberpunk 2077 como caminho `Z:` | ✅ | `3bafae0`, `e08fd29`, `e438ed2`, `2d226ba` |
+| 6 | Documentação, checklist e ponto de controle de CI (inclui o merge de `fase-4d1-python` com a correção do CI da 4d.1 `742af0c`: plugin Python de arquivo único importa módulos vizinhos, a ordem de carga é a do sistema de arquivos; o CI do PR #7 falhara no `FNISPatches`, que importa o `FNISTool`) | ✅ README (seção "Plugins Python"), checklist, ROADMAP, STATE e as notas de `deps/README.md`; o push e o PR dependem da revisão final e da autorização do usuário | `8e888d6` (merge), este commit |
+| 7 | Teste manual no Bazzite ([`docs/testing/phase4d2-manual-checklist.md`](docs/testing/phase4d2-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4d.1 — progresso
 
@@ -205,6 +219,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 4d.2: o branch `fase-4d2-basic-games` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4d2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box (com `python3 python3-pyqt6`, como na 4d.1; nenhum pacote novo), com NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 da Steam rodados ao menos uma vez (o prefixo do Proton precisa existir); depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4d2-manual-checklist.md`.
+
 Fase 4d.1: o branch `fase-4d1-python` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4d1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box, **que precisa dos pacotes `python3 python3-pyqt6`** (README, "Plugins Python"); depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4d1-manual-checklist.md`.
 
 Fase 4c.3: o branch `fase-4c3-ferramentas` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c3` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c3-manual-checklist.md`.
@@ -225,13 +241,25 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Fase 4d.1: revisão final, push de `fase-4d1-python` e PR contra `fase-4c3-ferramentas` (com a autorização do usuário); conferir os dois CIs (Linux, com a imagem reconstruída com os pacotes novos; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4d1-manual-checklist.md`. Depois, a Fase 4d.2 (`basic_games`).
-2. Fase 4c.3: revisão final, push de `fase-4c3-ferramentas` e PR contra `fase-4c2-pendencias` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c3-manual-checklist.md`.
-3. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
-4. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
-5. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
-6. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
-7. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. Fase 4d.2: revisão final, push de `fase-4d2-basic-games` e PR contra `fase-4d1-python` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4d2-manual-checklist.md`.
+2. Fase 4d.1: revisão final, push de `fase-4d1-python` e PR contra `fase-4c3-ferramentas` (com a autorização do usuário); conferir os dois CIs (Linux, com a imagem reconstruída com os pacotes novos; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4d1-manual-checklist.md`. Depois, a Fase 4e (BSA/BA2).
+3. Fase 4c.3: revisão final, push de `fase-4c3-ferramentas` e PR contra `fase-4c2-pendencias` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c3-manual-checklist.md`.
+4. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
+5. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
+6. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
+7. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
+8. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4d.2
+
+- Só a Steam: GOG, Epic, EA Desktop e Origin não existem no Linux; as lojas devolvem `{}` e o log registra uma vez que só a Steam é suportada.
+- Só NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 foram validados (fixtures e, depois do teste manual, no Bazzite). Os demais jogos do `basic_games` ficam "detectados, não validados". Lacunas conhecidas: `game_oblivion_remaster.py` monta a pasta do usuário por `QStandardPaths` (documentos e saves ficam fora do prefixo); os jogos que leem `os.getenv("LOCALAPPDATA")` ou `os.path.expandvars("%APPDATA%")` (`game_thug2`, `game_msfs2020`, `game_subnautica`) não são mapeados para o prefixo.
+- **Ordem de carga do BG3 (`modsettings.lsx`) não é gerada no Linux:** o `Divine.dll` do LSLib rejeita caminhos Unix (spike da Task 1); nada é baixado nem executado e o usuário recebe um aviso uma vez por sessão. Um `modsettings.lsx` feito à mão no perfil continua sendo mapeado para o prefixo do jogo.
+- Stellar Blade não tem plugin no `basic_games`.
+- O caminho `Z:` do `-modlist` do `redMod.exe` do Cyberpunk 2077 não é canonicalizado para o host: funciona porque o `/home` do host é `/var/home` (o mesmo diretório visto de dentro do box); um caminho privado do box não valeria para o Proton do host.
+- O `dotnet-runtime-8.0` foi instalado no box `mo2-run` só para o spike do LSLib e não é necessário (`sudo dnf remove dotnet-runtime-8.0`); a imagem do container não mudou.
+- O código Windows do `basic_games` não é compilado nem executado no CI.
+- Valem as limitações das Fases 1 a 4d.1.
 
 ## Limitações conhecidas da Fase 4d.1
 
@@ -244,7 +272,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 - `KnownFolder` (módulo `mobase`) tem 10 pastas no Linux, as de `win32compat.h`; um plugin que use as demais recebe `AttributeError`.
 - O código Windows destes subtrees não é compilado no CI (o CI do Windows só compila `deps/modorganizer`).
 - Uma segunda inicialização do proxy depois de uma falha na inicialização do Python no mesmo processo volta sem o `mobase` (o desenho do upstream: "never re-initialize").
-- O `basic_games` não faz parte desta fase (Fase 4d.2).
+- O `basic_games` não fez parte desta fase (ver a Fase 4d.2).
 - Valem as limitações das Fases 1 a 4c.3.
 
 ## Limitações conhecidas da Fase 4c.3
@@ -388,6 +416,10 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-21 | Fase 4d.1 (revisão final): no Linux o proxy não se liga ao runner; abre o `libpython` (`RTLD_GLOBAL`) e `plugin_python/dlls/librunner.so` (`RTLD_LOCAL`) por `dlopen` e cria o runner pela fábrica `extern "C"` `mo2_create_python_runner`, sem nunca fechar os handles (o interpretador não pode ser finalizado); qualquer falha é o aviso `DLL_NOT_FOUND` do painel. O Windows continua com o `/DELAYLOAD` |
 | 2026-10-21 | Fase 4d.1: o pybind11 3 exigiu uma correção do caster de holder em `shared_cpp_owner.h`; o teste `test_filepath_wrappers` do upstream roda no Linux, com a versão de produto vazia esperada |
 | 2026-10-21 | Fase 4d.1, patches dos plugins: o `fnistool` passa `RedirectFiles` como `Z:\…`; o `installer_wizard` abre o script com o desktop e usa caminhos nativos no wizard; o `script_extender_plugin_checker` converte os caminhos Windows dos plugins lidos no log (casando `/home` e `/var/home`, sem diferenciar maiúsculas); o `tool_configurator` acha os INIs sem diferenciar maiúsculas; o `cmake_common` cria o arquivo de sucesso do pip com `cmake -E touch` |
+| 2026-10-21 | Fase 4d.2, escopo (decisão do usuário): base Steam/Proton para todos os jogos do `basic_games`, validada em NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3; Stellar Blade fora (sem plugin) |
+| 2026-10-21 | Fase 4d.2, abordagem A (decisão do usuário): o `steam::findApp()` do `uibase` é exposto como `mobase.utils.steamApp` (só no Linux), o `find_games()` da Steam é preguiçoso (consulta por app ID, não lista) e `%USERPROFILE%`/`%DOCUMENTS%` apontam para o prefixo do Proton do app ID do jogo (fallback XDG com aviso, uma vez por jogo) |
+| 2026-10-21 | Fase 4d.2, spike do LSLib (Task 1) e adiamento (decisão do usuário): o `dotnet Divine.dll` falha no Linux (`TryToValidatePath` usa `System.Uri`, e um caminho Unix vira URI relativa: código 134 em toda ação), então a ordem de carga do BG3 fica para depois; no Linux o plugin do BG3 não baixa nem roda o LSLib e avisa o usuário uma vez por sessão; sem pacote novo (`dotnet-runtime-8.0` dispensável) |
+| 2026-10-21 | Fase 4d.2: as compilações usam um `TMPDIR` por worktree (`TMPDIR=/tmp/mo2t`); execuções de smoke simultâneas com o mesmo `TMPDIR` colidiam na memória compartilhada da instância única do Qt (o antigo "erro de SHM") |
 
 ## Pendências por fase
 
@@ -442,6 +474,10 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 
 **Fase 4c.3 (Ferramentas pelo VFS)**
 - O comando `run` às vezes para de esperar o programa antes de ele terminar: visto duas vezes com o log em nível normal no spike de 2026-10-21, nunca em debug. O MO2 sai com "mo2-vfs is still running, left to end by itself" e o mount fica até o programa sair.
+
+**Fase 4d.2 (`basic_games`)**
+- Reativar a ordem de carga do Baldur's Gate 3 (`dotnet Divine.dll`, gerando o `modsettings.lsx`) quando o LSLib aceitar caminhos Unix (hoje `System.Uri` os trata como relativos); remover então o desvio do Linux em `LSLibRetriever.download_lslib_if_missing()`.
+- Mapear para o prefixo os jogos que leem `LOCALAPPDATA`/`%APPDATA%` do ambiente (`game_thug2`, `game_msfs2020`, `game_subnautica`) e a pasta de usuário do `game_oblivion_remaster.py`.
 
 **Fase 5 (Distribuição)**
 - Nota de proveniência/licença do `dxgiformat.h`; `7z.so` com libstdc++ dinâmica; separar símbolos de depuração (binário de ~345 MB).

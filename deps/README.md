@@ -87,6 +87,11 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   it loads `libpython` and `plugin_python/dlls/librunner.so` with `dlopen` (the runner
   exports `mo2_create_python_runner`), so that a missing Python is reported by the
   plugin; `build.sh --tests` checks that neither is `NEEDED` by `plugin_python.so`.
+  On Linux only (`#ifndef _WIN32`), `mobase.utils.steamApp(app_id)` exposes
+  `MOBase::steam::findApp()` of uibase to Python (a dict with `appId`, `root`, `library`,
+  `gamePath` and `compatData`, or `None` when the app is not installed); `basic_games` is
+  the user. It sits in `src/mobase/wrappers/utils.cpp`, with its pytest in
+  `tests/python/test_steam.py` (`deps/plugin_python: Linux: mobase.utils.steamApp`).
 - **`fnistool`**, **`installer_wizard`**, **`script_extender_plugin_checker`** and
   **`tool_configurator`** (Python plugins) carry Linux fixes that are not upstream, each
   in `if sys.platform == "win32": ... else: ...`: `fnistool` passes `RedirectFiles` as a
