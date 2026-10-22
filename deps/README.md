@@ -104,12 +104,16 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   be listed, so `items()` is empty), `find_steam_path()` returns `None`; `gog_utils`,
   `epic_utils`, `origin_utils` and `eadesktop_utils` return `{}` and log once that only
   Steam games are detected; `winreg` is imported only on Windows (also in
-  `games/game_oblivion_remaster.py`, whose `getLootPath()` returns `None`); and
-  `createPlugins()` skips a game module that failed to import instead of registering
-  the classes of the previous one again. Each is in
-  `if sys.platform == "win32": ... else: ...`. A `git subtree pull` must keep them (see
-  the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games --tests` runs
-  `tests/basic-games` against the installed package.
+  `games/game_oblivion_remaster.py`, whose `getLootPath()` returns `None`); and, on
+  Linux only, `createPlugins()` skips a game module that failed to import instead of
+  registering the classes of the previous one again, and `BasicGame.setGamePath()`
+  records which of the game's Steam app IDs is installed in the given path (the Windows
+  code iterates the list of Steam games, which Linux cannot produce). All of them run
+  behind `if sys.platform == "win32": ... else: ...` or `if sys.platform != "win32":`
+  (the Windows flow is the upstream one), except that the guarded `continue` of
+  `createPlugins()` sits inside the existing `except` clauses. A `git subtree pull` must
+  keep them (see the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games
+  --tests` runs `tests/basic-games` against the installed package.
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 
