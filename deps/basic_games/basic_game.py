@@ -18,20 +18,37 @@ from .basic_features.basic_save_game_info import (
 )
 
 
+def _proton_folder(which: str, game: BasicGame) -> str | None:
+    """Linux: the user folder of the game in its Proton prefix, None (the folders of
+    Linux) if there is no prefix."""
+    if sys.platform == "win32":
+        return None
+    from . import proton_utils
+
+    ids = proton_utils.steam_ids(game)
+    if not ids:
+        return None
+    return getattr(proton_utils, which)(ids, game.gameName())
+
+
 def replace_variables(value: str, game: BasicGame) -> str:
     """Replace special paths in the given value."""
 
     if value.find("%DOCUMENTS%") != -1:
+        docs = _proton_folder("documents", game)
         value = value.replace(
             "%DOCUMENTS%",
-            QStandardPaths.writableLocation(
+            docs
+            or QStandardPaths.writableLocation(
                 QStandardPaths.StandardLocation.DocumentsLocation
             ),
         )
     if value.find("%USERPROFILE%") != -1:
+        profile = _proton_folder("user_profile", game)
         value = value.replace(
             "%USERPROFILE%",
-            QStandardPaths.writableLocation(
+            profile
+            or QStandardPaths.writableLocation(
                 QStandardPaths.StandardLocation.HomeLocation
             ),
         )
@@ -220,19 +237,21 @@ class BasicGameMappings:
 
     @staticmethod
     def _default_documents_directory(game: mobase.IPluginGame):
+        docs = None
+        if sys.platform != "win32":
+            from . import proton_utils
+
+            docs = proton_utils.documents(
+                proton_utils.steam_ids(game),  # type: ignore
+                game.gameName(),
+            )
+        if not docs:
+            docs = QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.DocumentsLocation
+            )
         folders = [
-            "{}/My Games/{}".format(
-                QStandardPaths.writableLocation(
-                    QStandardPaths.StandardLocation.DocumentsLocation
-                ),
-                game.gameName(),
-            ),
-            "{}/{}".format(
-                QStandardPaths.writableLocation(
-                    QStandardPaths.StandardLocation.DocumentsLocation
-                ),
-                game.gameName(),
-            ),
+            "{}/My Games/{}".format(docs, game.gameName()),
+            "{}/{}".format(docs, game.gameName()),
         ]
         for folder in folders:
             qdir = QDir(folder)
