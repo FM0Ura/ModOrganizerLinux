@@ -10,28 +10,28 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d2-basic-games-design.md`](../supe
 
 ## 1. Plugin carregado
 
-- [ ] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, aparecem o "Python Proxy" e os plugins do `basic_games` (por exemplo "Game NieR:Automata", "Game Cyberpunk 2077" e "Baldur's Gate 3 Support Plugin" ou nome parecido).
-- [ ] No log (`logs/mo_interface.log`): nenhuma linha `failed to init python`; uma única linha dizendo que só os jogos da Steam são detectados no Linux (GOG, Epic, EA e Origin), não repetida a cada consulta.
+- [ ] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, aparecem o "Python Proxy" e os plugins do `basic_games`: "NieR:Automata Support Plugin", "Cyberpunk 2077 Support Plugin" e "Baldur's Gate 3 Plugin" (mais os "BG3 Tools: …", as três ferramentas do BG3).
+- [ ] No log (`logs/mo_interface.log`): nenhuma linha `failed to init python`; uma linha por loja ausente, cada uma uma só vez (não repetida a cada consulta): `GOG: only Steam games are detected on Linux`, `Epic Games: only Steam games are detected on Linux`, `EA Desktop: only Steam games are detected on Linux` e `Origin: only Steam games are detected on Linux`.
 
 ## 2. NieR:Automata
 
 - [ ] **Nova instância**: o NieR:Automata aparece na lista de jogos detectados (com o caminho da Steam); criar a instância.
 - [ ] Instalar um mod simples cujos arquivos vão na raiz do jogo (uma pasta com um `.txt` ou `.dll` de teste) e ativá-lo. Esperado: o mod aparece na lista e fica ativo.
-- [ ] Adicionar o executável do jogo (`NieRAutomata.exe`), se não existir, e **executar pelo MO2** (Proton com o VFS). Esperado: o jogo abre; o arquivo do mod é visto no `Data` virtual (por exemplo pelo log em `logs/run-*.log` ou pelo próprio mod, se for funcional); fechar o jogo e conferir que o mount some.
+- [ ] Escolher o executável do jogo (a lista de executáveis traz o `NieRAutomata.exe`, o binário do plugin) e **executar pelo MO2** (Proton com o VFS). Esperado: o jogo abre; o arquivo do mod é visto no `Data` virtual (por exemplo pelo log em `logs/run-NieRAutomata.log` ou pelo próprio mod, se for funcional); fechar o jogo e conferir que o mount some.
 
 ## 3. Cyberpunk 2077
 
 - [ ] **Nova instância**: o Cyberpunk 2077 aparece na lista; criar a instância.
-- [ ] Documentos e saves: **Configurações → Jogo** (ou o botão de pastas) e a aba **Saves**. Esperado: a pasta de saves aponta para `<prefixo>/Saved Games/CD Projekt Red/Cyberpunk 2077` (compatdata `1091500`) e a aba lista os saves do jogo, se houver; nenhuma pasta fora do prefixo (`~/Documents`, por exemplo). Se o prefixo não existisse, o log traria um aviso e as pastas seriam as do XDG.
+- [ ] Documentos e saves (o MO2 não mostra essas pastas numa tela; confira pelos saves): se o jogo já tem saves, a aba **Saves** da janela principal lista os mesmos arquivos que `ls "<prefixo>/Saved Games/CD Projekt Red/Cyberpunk 2077"` (`<prefixo>` com o compatdata `1091500`) e que nada é lido de `~/Documents` ou de pastas XDG. Sem saves, a aba fica vazia e o item vale só como "sem aviso": o log (`logs/mo_interface.log`) não tem a linha `Cyberpunk 2077: no Proton prefix (run the game once from Steam); using the folders of Linux for its documents and saves` (que só aparece quando o jogo nunca rodou pelo Proton e as pastas caem no XDG).
 - [ ] Instalar um mod de arquivo (com `archive/pc/mod/…`) e ativá-lo; executar o jogo pelo MO2. Esperado: o jogo abre e o mod é visto.
-- [ ] Opcional, REDmod: instalar um mod REDmod (pasta em `mods/`) e executar o jogo pelo MO2. Esperado: o deploy roda o `redMod.exe` por Proton e o `redMod` encontra a lista (`-modlist=Z:\…`): sem erro de arquivo não encontrado em `logs/run-*.log` e no log do `redMod`.
+- [ ] Opcional, REDmod: instalar um mod REDmod (pasta em `mods/`) e executar o jogo pelo executável "Cyberpunk 2077 (REDmod)" (o padrão: faz o deploy do REDmod, se for preciso, e inicia o jogo com `-modded`; com a configuração do plugin "Deploy redmod before game launch if necessary", ligada por padrão). Para só fazer o deploy, execute o executável "REDmod" (argumentos `deploy -reportProgress -force %modlist%`). Esperado: o `redMod.exe` roda por Proton e encontra a lista (`-modlist="Z:\…"`): sem erro de arquivo não encontrado em `logs/run-redMod.log` nem em `<pasta do jogo>/tools/redmod/bin/REDmodLog.txt`.
 
 ## 4. Baldur's Gate 3
 
 - [ ] **Nova instância**: o Baldur's Gate 3 aparece na lista; criar a instância. Os documentos ficam em `<prefixo>/AppData/Local/Larian Studios/Baldur's Gate 3` (compatdata `1086940`).
-- [ ] Instalar um mod `.pak` do Nexus (pelo `nxm://` ou arquivo) e ativá-lo. Esperado: o mod é instalado em `mods/` sem erro.
-- [ ] Pedir a ordem de carga (a ação que antes geraria o `modsettings.lsx`: ativar/mover o mod, ou o menu de ferramentas do BG3). Esperado: um aviso (uma só vez por sessão) dizendo que a ordem de carga do BG3 ainda não é gerada no Linux; o MO2 não trava e nada é baixado do GitHub nem executado (o `Divine.dll` não roda); o log traz o motivo.
-- [ ] Executar o jogo pelo MO2. Esperado: o jogo abre (sem o `modsettings.lsx` gerado, os mods não são aplicados pelo MO2).
+- [ ] Instalar um mod `.pak` do Nexus (pelo `nxm://` ou arquivo). Esperado: ao terminar a instalação aparece **uma vez por sessão** o diálogo de aviso "Baldur's Gate 3 Plugin - Load order" ("The load order (modsettings.lsx) is not generated on Linux yet: LSLib's Divine tool does not accept Unix paths. …"); o mod é instalado em `mods/` sem erro, nada é baixado do GitHub nem executado (o `Divine.dll` não roda) e o `logs/mo_interface.log` tem uma única linha de aviso `Baldur's Gate 3: the load order (modsettings.lsx) is not generated on Linux: LSLib's Divine does not accept Unix paths; the rest of the plugin works`. Ativar ou mover o mod não mostra nada.
+- [ ] Instalar um segundo `.pak` ou abrir **Ferramentas → BG3 Tools → Reparse Pak Metadata** (e **Check For LsLib Updates**). Esperado: nenhum segundo diálogo na mesma sessão (a linha do log também não se repete); o MO2 não trava. Fechando e abrindo o MO2, o aviso volta uma vez, na próxima instalação.
+- [ ] Executar o jogo pelo MO2 (o executável do BG3 em `bin/bg3.exe`). Esperado: o jogo abre sem novo diálogo (sem o `modsettings.lsx` gerado, os mods não são aplicados pelo MO2).
 - [ ] Opcional: colocar um `modsettings.lsx` feito à mão no perfil (`profiles/<perfil>/modsettings.lsx`) e executar o jogo pelo MO2. Esperado: o arquivo chega ao jogo em `<prefixo>/AppData/Local/Larian Studios/Baldur's Gate 3/PlayerProfiles/Public/modsettings.lsx`.
 
 ## 5. Outros jogos (opcional)

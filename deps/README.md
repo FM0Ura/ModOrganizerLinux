@@ -102,7 +102,7 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   the success file of the pip requirements (`mo2_python.cmake`) is touched with
   `cmake -E touch` on Linux. A `git subtree pull` of any of them must keep these (see the
   `deps/<name>: Linux:` commits).
-- **`basic_games`** (Python meta-plugin of about 80 games that are not Bethesda's, with
+- **`basic_games`** (Python meta-plugin of about 75 game modules that are not Bethesda's, with
   its pip requirements installed in `lib/`) carries Linux fixes that are not upstream:
   the stores are only asked for what Linux has. `steam_utils.find_games()` returns a lazy
   mapping of app ID to game folder whose queries call `mobase.utils.steamApp` (it cannot
