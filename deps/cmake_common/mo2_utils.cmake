@@ -365,11 +365,24 @@ function(mo2_add_lupdate TARGET)
 		set(lupdate_command ${lupdate} ${MO2_SOURCES} -ts ${MO2_TS_FILE})
 	else()
 		mo2_python_install_pyqt()
-		set(lupdate_command
-			${CMAKE_COMMAND}
-			-E env PYTHONPATH=${MO2_PYLIBS_DIR}
-			${MO2_PYLIBS_DIR}/bin/pylupdate${MO2_QT_VERSION_MAJOR}.exe
-			--ts "${MO2_TS_FILE}" ${translation_files})
+		if (WIN32)
+			set(lupdate_command
+				${CMAKE_COMMAND}
+				-E env PYTHONPATH=${MO2_PYLIBS_DIR}
+				${MO2_PYLIBS_DIR}/bin/pylupdate${MO2_QT_VERSION_MAJOR}.exe
+				--ts "${MO2_TS_FILE}" ${translation_files})
+		else()
+			# Linux: the pylupdate6 of the system (package python3-pyqt6-devel), next
+			# to the Python of the build or in /usr/bin first, so that one installed by
+			# pip in ~/.local/bin is not preferred
+			mo2_find_python_executable(_python_exe)
+			get_filename_component(_python_bin_dir "${_python_exe}" DIRECTORY)
+			find_program(MO2_PYLUPDATE pylupdate${MO2_QT_VERSION_MAJOR}
+				HINTS "${_python_bin_dir}" /usr/bin REQUIRED)
+			set(lupdate_command
+				${MO2_PYLUPDATE}
+				--ts "${MO2_TS_FILE}" ${translation_files})
+		endif()
 
 		add_dependencies("${TARGET}_lupdate" PyQt6)
 	endif()

@@ -3,12 +3,27 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-21
-**Fase atual:** 4c.3 — Ferramentas pelo VFS · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4c.2 (🟡 PR #5; teste manual pendente)
-**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`)
+**Fase atual:** 4d.1 — Plugins Python (runtime) · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4c.3 (🟡 implementação concluída; push, CI e teste manual pendentes)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4d.1 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-21-phase4d1-python-design.md`](docs/superpowers/specs/2026-10-21-phase4d1-python-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4d1-python.md`](docs/superpowers/plans/2026-10-21-phase4d1-python.md) · Checklist manual: [`docs/testing/phase4d1-manual-checklist.md`](docs/testing/phase4d1-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | Pacotes Python/pybind11/PyQt6 na imagem do container e `cmake_common` no Linux (versão do Python, PyQt6 e `pyuic6`/`pylupdate6` do sistema), com teste no `cmake-smoke` | ✅ | `03c99be`, `f74612c`, `1e17493` |
+| 2 | `plugin_python`: subtree, proxy (`dladdr`, `libpython` com `RTLD_GLOBAL`), runner e `mobase` no Linux, alvo no `build.sh` e teste de importação do `mobase`; o pybind11 3 exigiu uma correção do caster de holder em `shared_cpp_owner.h` | ✅ | subtree `plugin_python` (split `baf0920`), `87ca46e`, `bba44ba`, `33f4c0a` |
+| 3 | Runner isolado (`PyConfig` isolada e `sys.path` filtrado), testes de integração (inclusive o do isolamento, que prova `~/.local` e `PYTHONPATH` invisíveis) e o aviso no painel de diagnóstico quando o Python inicia mas não importa `mobase`/PyQt6 (pedido da revisão) | ✅ | `a2f64f0`, `c332833`, `41b5930`, `0e2ccb8` |
+| 4 | Os seis plugins Python (`preview_dds`, `form43_checker`, `script_extender_plugin_checker`, `tool_configurator`, `installer_wizard`, `fnistool`): subtrees (hashes em `deps/README.md`), alvos no `build.sh`, patches Linux e teste de carga | ✅ | seis subtrees, `cb2f180`, `1acfc27`, `d286b7f`, `d23e755`, `37fc47d`, `5681d61`, `25bb2d0`, `fd32632`, `99eacdd` |
+| 5 | Smoke: os plugins Python são carregados pelo aplicativo; fixture do BAIN com wizard | ✅ | `e0f150b` |
+| 6 | Documentação, checklist e ponto de controle de CI | ✅ README (seção "Plugins Python" e pacotes de build), checklist, ROADMAP e STATE; o push e o PR dependem da revisão final e da autorização do usuário | este commit |
+| 7 | Teste manual no Bazzite ([`docs/testing/phase4d1-manual-checklist.md`](docs/testing/phase4d1-manual-checklist.md)) | ⚪ pendente | — |
+| 8 | Correções da revisão final: no Linux o proxy carrega o `libpython` e o runner em tempo de execução (`dlopen`; o runner exporta `mo2_create_python_runner`), então um Python ausente vira o aviso do painel em vez de impedir a carga do proxy; o `build.sh --tests` confere que o `plugin_python.so` não depende de nenhum dos dois; `pyuic6`, `pylupdate6` e `sip-module` do sistema antes dos do `~/.local/bin`; checklist (fechar o MO2, box sem PyQt6, `sys.path` sob o `$HOME`) | ✅ | `a77d2b5`, `7ea9b1d`, `70ca1c2`, este commit |
 
 ## Fase 4c.3 — progresso
 
@@ -190,6 +205,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 4d.1: o branch `fase-4d1-python` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4d1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box, **que precisa dos pacotes `python3 python3-pyqt6`** (README, "Plugins Python"); depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4d1-manual-checklist.md`.
+
 Fase 4c.3: o branch `fase-4c3-ferramentas` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c3` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c3-manual-checklist.md`.
 
 Fase 4c.2: o branch `fase-4c2-pendencias` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c2-manual-checklist.md`.
@@ -208,12 +225,27 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Fase 4c.3: revisão final, push de `fase-4c3-ferramentas` e PR contra `fase-4c2-pendencias` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c3-manual-checklist.md`.
-2. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
-3. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
-4. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
-5. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
-6. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. Fase 4d.1: revisão final, push de `fase-4d1-python` e PR contra `fase-4c3-ferramentas` (com a autorização do usuário); conferir os dois CIs (Linux, com a imagem reconstruída com os pacotes novos; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4d1-manual-checklist.md`. Depois, a Fase 4d.2 (`basic_games`).
+2. Fase 4c.3: revisão final, push de `fase-4c3-ferramentas` e PR contra `fase-4c2-pendencias` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c3-manual-checklist.md`.
+3. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
+4. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
+5. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
+6. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
+7. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4d.1
+
+- Os plugins Python só funcionam onde o Python 3.14 e o PyQt6 do Fedora existem: o box `mo2-run` com `python3 python3-pyqt6`. O Python e o PyQt6 dentro do pacote ficam para o AppImage da Fase 5. Sem os pacotes (ou com outra versão do Python no box), o MO2 abre sem os plugins Python e o painel de diagnóstico mostra "Python could not be loaded" com o comando `sudo dnf install python3 python3-pyqt6`; se o próprio `libpython3.14` falta, o aviso diz também que o build espera o Python 3.14 (outra versão exige recompilar o MO2). O proxy carrega o `libpython` e o runner em tempo de execução, por isso o aviso aparece em vez de uma falha de carga do `plugin_python.so` (verificado na revisão final com um proxy descartável apontando para um `libpython` inexistente).
+- Pacotes Python RPM do box podem encobrir as dependências que um plugin fixa pelo `pip` na própria pasta: o `installer_wizard` acrescenta o seu `lib/` ao fim do `sys.path` (`site.addsitedir`), então um `python3-antlr4-runtime` ou `python3-chardet` instalado no box teria precedência. Hoje nenhum dos dois está no box; o `antlr4` do Fedora tem a mesma versão (4.13.2), o `chardet` não (6.0 contra 5.2.0 fixado pelo plugin).
+- Um locale C/POSIX (sem UTF-8) não é tratado nem testado (o proxy passa os caminhos ao Python como os bytes do sistema de arquivos, supostos UTF-8); o box usa `pt_BR.UTF-8`.
+- Não há teste automático de um fechamento limpo do MO2 com o Python carregado (o smoke encerra o MO2 por `SIGTERM`); é o passo manual do item 1 do checklist (fechar pelo menu, `crash.log` vazio).
+- O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*` e não enxerga `~/.local` nem `/usr/local`; plugins que dependam de pacotes do usuário não os acham (as dependências próprias de um plugin vão para a pasta dele, pelo `pip install --target`, e o build precisa de rede para isso).
+- Os patches dos plugins Python (fnistool, installer_wizard, script_extender_plugin_checker, tool_configurator) só são testados pelo carregamento (smoke); o comportamento em execução é coberto pelo checklist manual.
+- `KnownFolder` (módulo `mobase`) tem 10 pastas no Linux, as de `win32compat.h`; um plugin que use as demais recebe `AttributeError`.
+- O código Windows destes subtrees não é compilado no CI (o CI do Windows só compila `deps/modorganizer`).
+- Uma segunda inicialização do proxy depois de uma falha na inicialização do Python no mesmo processo volta sem o `mobase` (o desenho do upstream: "never re-initialize").
+- O `basic_games` não faz parte desta fase (Fase 4d.2).
+- Valem as limitações das Fases 1 a 4c.3.
 
 ## Limitações conhecidas da Fase 4c.3
 
@@ -238,7 +270,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 - A checagem de atributos de arquivo NTFS (oculto, sistema, comprimido, esparso) do `diagnose_basic` não existe no Linux: a opção `check_fileattributes` não é registrada.
 - O modo externo do `tool_inieditor` abre o INI com o `xdg-open` e ignora a opção "associated" (abrir × editar); sem `xdg-open` a falha só é registrada no log.
-- A pré-visualização de DDS fica indisponível até o plugin de pré-visualização DDS (Python, Fase 4d): o `preview_base` sempre pula `dds`.
+- ~~A pré-visualização de DDS fica indisponível até o plugin de pré-visualização DDS (Python, Fase 4d): o `preview_base` sempre pula `dds`.~~ Resolvido na Fase 4d.1 (`preview_dds`).
 - O `check_fnis` só vale para o Skyrim (LE) (`gameDependency("Skyrim")`, como no upstream) e fica inativo no Skyrim SE; só foi exercitado pelo teste de carga, e a execução do FNIS pelo Proton depende de o usuário usar o FNIS no Skyrim LE (item 7 do checklist, opcional).
 - Na primeira abertura do perfil com esta versão, os INIs do perfil que as versões anteriores criaram vazios (ou só com `[Launcher] bEnableFileSelection=1`) são substituídos por cópias dos INIs do prefixo (ou do INI padrão do jogo); um INI do perfil deixado vazio de propósito também é substituído.
 - `installer_omod` e `installer_fomod_csharp` (C++/CLI e .NET) e o `bsapacker` (Fase 4e) ficam de fora.
@@ -349,6 +381,13 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-21 | Fase 4c.3: escopo (decisão do usuário): ferramentas reais testadas no Skyrim SE; xEdit de outros jogos só com fixtures; spike antes da spec |
 | 2026-10-21 | Fase 4c.3 (abordagem A): programa com binário ou pasta de trabalho em mods/ roda do Data virtual também no Linux, por reescrita dos caminhos antes do spawn (sem relançar o MO2), só com VFS e com o mod do binário ativo; regra comum ao Windows em virtualizedpaths.h |
 | 2026-10-21 | Fase 4c.3 (testes da Task 3, falharam 7 de 30): no Linux o `GameGamebryo::parseSteamLocation()` passa a usar a descoberta da Steam (`steam::findApp`, sob `#ifndef _WIN32`), o que corrige a detecção do Starfield e torna detectáveis o Fallout 3 GOTY e o Fallout 76; Skyrim VR, Fallout 4 VR, Enderal, Fallout New Vegas e Enderal SE ganham um `identifyGamePath()` que também olha nas bibliotecas da Steam no Linux; no Enderal SE o `initializeProfile()` junta o AppData e a pasta do jogo com "/" no Linux (o Windows mantém a linha do upstream) |
+| 2026-10-21 | Fase 4d dividida em 4d.1 (runtime `plugin_python` e os seis plugins Python pequenos) e 4d.2 (`basic_games`, com a detecção pela Steam e pelo Proton), um PR cada, empilhados como na 4c: `fase-4d1-python` parte de `fase-4c3-ferramentas` |
+| 2026-10-21 | Fase 4d.1 (abordagem A, decisão do usuário): Python 3.14, pybind11 e PyQt6 do Fedora, na imagem do container e no box `mo2-run` (um só Qt no processo); o `pip` só instala dependências próprias de plugin na pasta do plugin. Além dos cinco pacotes previstos, o build precisa de `sip6` (gera o `sip.h` do `pybind11-qt`) e `gmock-devel` (testes do `plugin_python`); os pacotes foram instalados no box com o OK do usuário |
+| 2026-10-21 | Fase 4d.1: isolamento com `PyConfig_InitIsolatedConfig` e `sys.path` filtrado por `filterSysPath` à biblioteca padrão do sistema, ao `lib-dynload` e ao `<base_prefix>/lib64\|lib/python3.14/site-packages`, mais as pastas do MO2; no Fedora o `sysconfig` aponta o `platstdlib` para `/usr/local`, então as raízes saem de `sys.base_prefix` (achado da Task 3); o teste de integração prova que pacotes do `~/.local` e do `PYTHONPATH` ficam invisíveis |
+| 2026-10-21 | Fase 4d.1: o proxy carrega `libpython3.14.so.1.0` com `RTLD_GLOBAL` (os módulos de extensão do Fedora não se ligam ao `libpython`) e acha a pasta do plugin por `dladdr`; um Python que não carrega `mobase`/PyQt6 mostra "Python could not be loaded" com `sudo dnf install python3 python3-pyqt6` no painel de diagnóstico |
+| 2026-10-21 | Fase 4d.1 (revisão final): no Linux o proxy não se liga ao runner; abre o `libpython` (`RTLD_GLOBAL`) e `plugin_python/dlls/librunner.so` (`RTLD_LOCAL`) por `dlopen` e cria o runner pela fábrica `extern "C"` `mo2_create_python_runner`, sem nunca fechar os handles (o interpretador não pode ser finalizado); qualquer falha é o aviso `DLL_NOT_FOUND` do painel. O Windows continua com o `/DELAYLOAD` |
+| 2026-10-21 | Fase 4d.1: o pybind11 3 exigiu uma correção do caster de holder em `shared_cpp_owner.h`; o teste `test_filepath_wrappers` do upstream roda no Linux, com a versão de produto vazia esperada |
+| 2026-10-21 | Fase 4d.1, patches dos plugins: o `fnistool` passa `RedirectFiles` como `Z:\…`; o `installer_wizard` abre o script com o desktop e usa caminhos nativos no wizard; o `script_extender_plugin_checker` converte os caminhos Windows dos plugins lidos no log (casando `/home` e `/var/home`, sem diferenciar maiúsculas); o `tool_configurator` acha os INIs sem diferenciar maiúsculas; o `cmake_common` cria o arquivo de sucesso do pip com `cmake -E touch` |
 
 ## Pendências por fase
 
@@ -394,7 +433,7 @@ Itens menores encontrados nas revisões e adiados (listas completas nos ledgers 
 **Fase 4 (Ecossistema)**
 - Desenho `read64`/`readWinLong` + `static_assert` para substituir o guard de CI dos saves (o guard não vê `read(v)` deduzido nem grafias raras).
 - ~~`MO2_VFS_TIMEOUT_MS` também pode alongar o timeout: limitar a 30 s~~ (resolvido na Fase 4c.2, Task 1); `mo2-vfs`: stdin não-UTF-8 tratado como EOF, ~~`println!` do modo de limpeza entra em pânico com EPIPE~~ (resolvido na Fase 3), validar destino "/" em mapeamento de arquivo (hoje `expect()`), mapeamento de arquivo ignora sufixos de skip.
-- `plugin_python`: `cmake_common` exige Python 3.13 exato; ramo `pylupdate6.exe`.
+- ~~`plugin_python`: `cmake_common` exige Python 3.13 exato; ramo `pylupdate6.exe`.~~ Resolvido na Fase 4d.1 (Task 1: no Linux a versão vem do Python do sistema e `pyuic6`/`pylupdate6` vêm do `PATH`).
 - ~~Credenciais via keyring~~ (Fase 4a); mensagem amigável quando o MO2 foi aberto como root antes (`/tmp/qipc_*`).
 - Lixeira por ponto de montagem (`.Trash-$uid`).
 - Escrita de INI atômica e respeitando a codificação do arquivo; leitor de INI tratando seções repetidas como o Windows (o `#` não é comentário, como no Windows).

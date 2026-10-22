@@ -66,13 +66,14 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
      podman build -t mo2-linux-build -f build/Containerfile build/
      distrobox create --name mo2-run --image localhost/mo2-linux-build
      ```
-   - Ou uma imagem Fedora limpa com os mesmos pacotes do `build/Containerfile`:
+   - Ou uma imagem Fedora limpa, com os pacotes de execução do `build/Containerfile` e os do Python (para compilar, use a imagem do `build/Containerfile`):
      ```sh
      distrobox create --name mo2-run --image fedora:44
      distrobox enter mo2-run -- sudo dnf -y install --setopt=install_weak_deps=False \
          qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtwebsockets-devel \
          qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
-         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret
+         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret \
+         python3 python3-pyqt6
      ```
    - Se o box `mo2-run` foi criado com uma imagem anterior à Fase 4a: `distrobox enter mo2-run -- sudo dnf -y install libsecret` (para guardar os logins no Secret Service).
 2. Obtenha o artefato `mo2-linux-install`. Duas rotas:
@@ -125,11 +126,23 @@ Instale a ferramenta como mod (pelo MO2, a partir do arquivo baixado) e configur
 - **Pandora:** use o build do Nexus (no GitHub, o `..._win-x64_net.zip`), que traz o .NET; o zip que depende do .NET instalado não abre num prefixo sem o .NET 10. Na 5.0.0-beta o argumento `-o` é ignorado pelo próprio Pandora: a saída vai para o `overwrite`.
 - **xEdit de outros jogos** (FO4Edit, TES5Edit, FNVEdit...): o executável roda no prefixo do jogo da instância (ou no do campo "Steam AppID" do executável). O jogo precisa ter rodado uma vez pela Steam, para o prefixo existir e o registro `Installed Path`, onde o xEdit procura o jogo, ser gravado.
 
+### Plugins Python
+
+O MO2 usa o Python 3.14 e o PyQt6 do Fedora do box `mo2-run`. Num box criado antes da Fase 4d.1, instale os pacotes uma vez:
+
+    distrobox enter mo2-run -- sudo dnf install -y python3 python3-pyqt6
+
+Sem esses pacotes (ou com outra versão do Python no box), o MO2 abre sem os plugins Python e o ícone de notificações mostra o aviso do "Python Proxy" com esse comando.
+
+O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*`, e não enxerga pacotes do `~/.local` nem de `/usr/local`; só a biblioteca padrão e os pacotes do sistema do box, mais as pastas do próprio MO2. Plugins Python incluídos: pré-visualização de DDS, verificador do formato 43, verificador de plugins do script extender, Configurator (INIs), instalador de BAIN com wizard e FNIS. O `basic_games` vem na Fase 4d.2.
+
 ## Building
 
 The build environment is defined once, in [`build/Containerfile`](build/Containerfile)
 (Fedora 44: GCC, CMake, Ninja, Qt 6 incl. WebEngine/NetworkAuth/WebSockets, Boost, spdlog,
-fmt, lz4, zlib, gtest, fuse3, clang-tools-extra, Rust stable). CI uses the same file. If
+fmt, lz4, zlib, gtest, gmock, fuse3, clang-tools-extra, Rust stable, and, for the Python
+plugins, `python3-devel pybind11-devel python3-pyqt6 python3-pyqt6-devel python3-pip
+python3-pytest sip6`). CI uses the same file. If
 `fedora:44` is ever unavailable, use the latest stable Fedora tag and note it here.
 
 `build.sh` builds the application from `deps/modorganizer` (override with `MO2_SRC`).
@@ -153,6 +166,15 @@ Targets not ported yet are skipped by the default run and rejected with `--only`
 ```sh
 podman build -t mo2-linux-build -f build/Containerfile build/
 podman run --rm -v "$PWD/..:/work:Z" -w /work/ModOrganizerLinux mo2-linux-build ./build.sh --tests
+```
+
+Building in a Fedora 44 box that was not created from that image needs, besides the other
+dependencies, the Python packages `python3-devel pybind11-devel python3-pyqt6
+python3-pyqt6-devel python3-pip python3-pytest sip6` and `gmock-devel`:
+
+```sh
+distrobox enter mo2-run -- sudo dnf install -y python3-devel pybind11-devel python3-pyqt6 \
+    python3-pyqt6-devel python3-pip python3-pytest sip6 gmock-devel
 ```
 
 ### With distrobox (Bazzite)

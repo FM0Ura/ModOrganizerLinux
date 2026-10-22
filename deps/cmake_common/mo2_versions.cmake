@@ -31,7 +31,16 @@ unset(MO2_QT_VERSION_LIST)
 
 message(STATUS "[MO2] Qt version: ${MO2_QT_VERSION} (${MO2_QT_VERSION_MAJOR}, ${MO2_QT_VERSION_MINOR}, ${MO2_QT_VERSION_PATCH})")
 
-mo2_set_if_not_defined(MO2_PYTHON_VERSION "3.13")
+if (WIN32)
+	mo2_set_if_not_defined(MO2_PYTHON_VERSION "3.13")
+else()
+	# Linux: the Python of the system (Fedora), with the PyQt6 built against the same Qt
+	# as Mod Organizer (spec of Phase 4d.1, section 1.2)
+	if (NOT DEFINED MO2_PYTHON_VERSION)
+		find_package(Python REQUIRED COMPONENTS Interpreter)
+		set(MO2_PYTHON_VERSION "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
+	endif()
+endif()
 
 # TODO: there is no prebuilt for 6.7.3, so we stay on 6.7.1 for now
 if (MO2_QT_VERSION_MAJOR EQUAL 6 AND MO2_QT_VERSION_MINOR EQUAL 11)

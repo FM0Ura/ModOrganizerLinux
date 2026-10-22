@@ -29,6 +29,9 @@
 #    handler, spec of Phase 4a).
 #    Every plugin of bin/plugins/*.so must be logged as loaded by the application
 #    ("loaded plugin '...' from '<file>.so'") and none may log a load/initialisation failure.
+#    With the Python proxy installed (Phase 4d.1), Python must have started (no "failed to
+#    init python") and every Python plugin (bin/plugins/*.py, bin/plugins/*/__init__.py,
+#    but not plugin_python/ nor data/) must be logged as loaded from its file or folder.
 set -euo pipefail
 
 INSTALL="${1:?usage: $0 <install prefix>}"
@@ -210,6 +213,28 @@ main_window() {
         fail "a plugin failed to load (see above)"
     fi
     echo "all $(ls "$INSTALL"/bin/plugins/*.so | wc -l) plugins loaded"
+
+    # the Python plugins (Phase 4d.1): Python started, and every .py plugin of
+    # bin/plugins (and every plugin package, a folder with an __init__.py) was logged as
+    # loaded through the Python proxy ("loaded plugin '<name>@<version>' from '<file>'",
+    # with the file name of a simple plugin or the folder name of a package)
+    if [[ -e "$INSTALL/bin/plugins/plugin_python.so" ]]; then
+        ! grep -qF "failed to init python" "$instance"/logs/mo_interface.log "$out" ||
+            fail "Python did not start"
+        local py pyname missing_py=()
+        for py in "$INSTALL"/bin/plugins/*.py "$INSTALL"/bin/plugins/*/__init__.py; do
+            [[ -e $py ]] || continue
+            # not plugins: the proxy's own files and the data folders of the simple plugins
+            pyname="${py#"$INSTALL"/bin/plugins/}"
+            [[ $pyname == plugin_python/* || $pyname == data/* ]] && continue
+            pyname="${pyname%/__init__.py}"
+            grep -qF "from '$pyname'" "$instance"/logs/mo_interface.log ||
+                missing_py+=("$pyname")
+        done
+        ((${#missing_py[@]} == 0)) ||
+            fail "Python plugins not loaded by the application: ${missing_py[*]}"
+        echo "all Python plugins loaded"
+    fi
 
     # hermetic: nothing written in the real HOME. In CI (container HOME) the whole of
     # .config, .local and .cache is checked; elsewhere only the paths of the application

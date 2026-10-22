@@ -25,7 +25,9 @@ ALL_TARGETS=(
     7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
-    check_fnis tool_inieditor tool_inibakery
+    check_fnis tool_inieditor tool_inibakery plugin_python
+    preview_dds form43_checker script_extender_plugin_checker tool_configurator
+    installer_wizard fnistool
 )
 
 ONLY=()
@@ -103,6 +105,11 @@ build_cmake_smoke() {
     out="$("$BUILD_OUT/cmake-smoke/smoke_main")" || die "cmake-smoke executable failed"
     [[ $out == ok ]] || die "cmake-smoke printed '$out', expected 'ok'"
     log "cmake-smoke: $out"
+    [[ -f "$BUILD_OUT/cmake-smoke/form.py" ]] ||
+        die "cmake-smoke: pyuic6 did not generate form.py"
+    grep -q "class Ui_Form" "$BUILD_OUT/cmake-smoke/form.py" ||
+        die "cmake-smoke: form.py is not a pyuic6 output"
+    log "cmake-smoke: python ok"
 }
 
 # uibase is the plugin API / shared UI library; with --tests its GoogleTest suite runs
@@ -407,6 +414,64 @@ build_tool_inibakery() {
     cmake_build tool_inibakery "$ROOT/deps/tool_inibakery"
     check_plugins filemapper "$INSTALL/bin/plugins/libinibakery.so"
 }
+
+# plugin_python (Phase 4d.1): the Python proxy (bin/plugins/plugin_python.so), its runner
+# and the mobase module (bin/plugins/plugin_python/), with the system's Python 3.14 and
+# PyQt6; with --tests its suites run (the runner's GoogleTest suite, with the filter of
+# sys.path and the isolation from the user's packages, and the pytest suite of mobase),
+# the proxy must load and mobase must import in the system's Python; the proxy must not
+# need libpython nor the runner (it loads them at run time, so that a missing Python is
+# reported by the plugin instead of failing its load)
+build_plugin_python() {
+    cmake_build plugin_python "$ROOT/deps/plugin_python"
+    check_plugins plugin "$INSTALL/bin/plugins/plugin_python.so"
+    if [[ $TESTS == 1 ]]; then
+        local needed
+        needed="$(LC_ALL=C readelf -d "$INSTALL/bin/plugins/plugin_python.so" | grep NEEDED)" ||
+            die "plugin_python.so: readelf found no NEEDED entry"
+        if grep -E "libpython|librunner" <<<"$needed"; then
+            die "plugin_python.so needs libpython or librunner (above): it must load them at run time"
+        fi
+        LD_LIBRARY_PATH="$INSTALL/lib" python3 -I "$ROOT/tests/python-import/check_mobase.py" \
+            "$INSTALL" || die "mobase does not import"
+    fi
+}
+
+# the Python plugins of Mod Organizer 2.5 (Phase 4d.1), installed in bin/plugins: the DDS
+# preview, the Form 43 and script extender plugin checkers, the INI configurator, the
+# installer of BAIN archives with wizard scripts and the FNIS tool; with --tests each
+# must compile in the system's Python (python3 -m py_compile) after installation
+python_plugin() {
+    local target="$1"; shift
+    cmake_build "$target" "$ROOT/deps/$target"
+    [[ $TESTS == 1 ]] || return 0
+    # the compiled files go to a scratch folder: the installed plugins stay as installed
+    local f cache="$BUILD_OUT/$target/pycache"
+    for f in "$@"; do
+        [[ -e $INSTALL/bin/plugins/$f ]] || die "$target: $f is not installed"
+        if [[ -d $INSTALL/bin/plugins/$f ]]; then
+            python3 -I -X pycache_prefix="$cache" -m compileall -q "$INSTALL/bin/plugins/$f" >/dev/null ||
+                die "$target: $f does not compile"
+        else
+            python3 -I -X pycache_prefix="$cache" -m py_compile "$INSTALL/bin/plugins/$f" ||
+                die "$target: $f does not compile"
+        fi
+    done
+}
+build_preview_dds() { python_plugin preview_dds DDSPreview.py; }
+build_form43_checker() { python_plugin form43_checker Form43Checker.py; }
+build_script_extender_plugin_checker() {
+    python_plugin script_extender_plugin_checker ScriptExtenderPluginChecker.py
+}
+build_tool_configurator() { python_plugin tool_configurator pyCfg.py; }
+build_installer_wizard() {
+    python_plugin installer_wizard installer_wizard
+    # the interpreter of the wizard scripts is installed by pip (plugin-requirements.txt)
+    [[ $TESTS == 1 ]] || return 0
+    [[ -d $INSTALL/bin/plugins/installer_wizard/lib/wizard ]] ||
+        die "installer_wizard: the pip package bain-wizard-interpreter is not installed in lib/"
+}
+build_fnistool() { python_plugin fnistool FNISTool.py FNISPatches.py FNISToolReset.py; }
 
 # --- driver -----------------------------------------------------------------
 

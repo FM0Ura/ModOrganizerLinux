@@ -21,3 +21,14 @@ include(CTest)
 if (BUILD_TESTING)
 	add_subdirectory(unit)
 endif()
+
+# Python (Phase 4d.1): on Linux, cmake_common uses the system's Python and pyuic6
+if (NOT WIN32)
+	add_custom_target(smoke_python ALL)
+	mo2_python_uifiles(smoke_python FILES ${CMAKE_CURRENT_SOURCE_DIR}/python/form.ui)
+	find_package(Python REQUIRED COMPONENTS Interpreter)
+	if (NOT MO2_PYTHON_VERSION STREQUAL "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
+		message(FATAL_ERROR "MO2_PYTHON_VERSION is ${MO2_PYTHON_VERSION}, the system has "
+			"${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}")
+	endif()
+endif()
