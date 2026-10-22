@@ -1,5 +1,6 @@
 import json
 import shutil
+import sys
 import traceback
 import urllib.request
 import zipfile
@@ -29,6 +30,10 @@ class LSLibRetriever:
         }
 
     def download_lslib_if_missing(self, force: bool = False) -> bool:
+        if sys.platform != "win32":
+            # LSLib's Divine rejects every Unix path: nothing is downloaded or run
+            self._utils.warn_load_order_unavailable()
+            return False
         if not force and all(x.exists() for x in self._needed_lslib_files):
             return True
         try:

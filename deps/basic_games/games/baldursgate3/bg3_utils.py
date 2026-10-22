@@ -15,7 +15,12 @@ from PyQt6.QtCore import (
     qInfo,
     qWarning,
 )
-from PyQt6.QtWidgets import QApplication, QMainWindow, QProgressDialog
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QMessageBox,
+    QProgressDialog,
+)
 
 import mobase
 
@@ -73,6 +78,7 @@ class BG3Utils:
     def __init__(self, name: str):
         self.main_window = None
         self._name = name
+        self._load_order_warned = False
         from . import lslib_retriever, pak_parser
 
         self.lslib_retriever = lslib_retriever.LSLibRetriever(self)
@@ -189,6 +195,29 @@ class BG3Utils:
             "convert_yamls_to_json",
         } and hasattr(self, setting):
             delattr(self, setting)
+
+    def warn_load_order_unavailable(self) -> None:
+        # Linux: the load order is not generated (LSLib's Divine does not accept
+        # Unix paths); the user is told once per session
+        if self._load_order_warned:
+            return
+        self._load_order_warned = True
+        qWarning(
+            "Baldur's Gate 3: the load order (modsettings.lsx) is not generated on "
+            "Linux: LSLib's Divine does not accept Unix paths; the rest of the "
+            "plugin works"
+        )
+        QMessageBox.warning(
+            self.main_window,
+            self.tr("Baldur's Gate 3 Plugin - Load order"),
+            self.tr(
+                "The load order (modsettings.lsx) is not generated on Linux yet: "
+                "LSLib's Divine tool does not accept Unix paths.\n"
+                "Mods are installed and run normally. Manage the load order outside "
+                "Mod Organizer (for example with the game's own mod manager) or put "
+                "a modsettings.lsx in the profile folder by hand."
+            ),
+        )
 
     def construct_modsettings_xml(
         self,
