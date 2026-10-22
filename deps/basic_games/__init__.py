@@ -44,10 +44,12 @@ def createPlugins():
             module = importlib.import_module(".games." + module_p[:-3], __package__)
         except ImportError as e:
             print("Failed to import module {}: {}".format(module_p, e), file=sys.stderr)
-            continue  # Linux: not the plugins of the previous module again
+            if sys.platform != "win32":
+                continue  # Linux: not the plugins of the previous module again
         except Exception as e:
             print("Failed to import module {}: {}".format(module_p, e), file=sys.stderr)
-            continue
+            if sys.platform != "win32":
+                continue
 
         # Lookup game plugins:
         for name in dir(module):
