@@ -8,5 +8,5 @@ if (NOT WIN32)
 	# does not build them, so this target does
 	add_custom_target(plugin_python-tests ALL)
 	add_dependencies(plugin_python-tests runner-tests runner-isolation-tests
-		runner-failure-tests python-tests)
+		runner-failure-tests runner-sibling-tests python-tests)
 endif()
