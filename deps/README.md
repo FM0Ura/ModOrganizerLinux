@@ -113,7 +113,13 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   folder (`replace_variables()` and `_default_documents_directory()` in `basic_game.py`)
   into the Proton prefix of the game's Steam app ID (`<compatData>/pfx/drive_c/users/steamuser`),
   falling back to the XDG folders with a one-time warning when a Steam game has no
-  prefix. All of them run
+  prefix. In `games/baldursgate3`, `LSLibRetriever.download_lslib_if_missing()` (the one
+  gate of the load-order generation, the mod-installed hook and the "Check For LsLib
+  Updates" tool) returns `False` on Linux before any download or process, because LSLib's
+  `Divine` rejects every Unix path; `BG3Utils.warn_load_order_unavailable()` logs the
+  reason and tells the user once per session. In `games/game_cyberpunk2077.py`, the
+  `-modlist=...` argument of `redMod.exe` (run through Proton, and MO2 does not convert
+  the contents of arguments) is a `Z:\...` path (`windows_path()`). All of them run
   behind `if sys.platform == "win32": ... else: ...` or `if sys.platform != "win32":`
   (the Windows flow is the upstream one), except that the guarded `continue` of
   `createPlugins()` sits inside the existing `except` clauses. A `git subtree pull` must
