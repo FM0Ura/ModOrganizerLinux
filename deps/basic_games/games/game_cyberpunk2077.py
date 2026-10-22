@@ -2,6 +2,7 @@ import filecmp
 import json
 import re
 import shutil
+import sys
 import tempfile
 import textwrap
 from collections import Counter
@@ -60,6 +61,15 @@ class CyberpunkModDataChecker(BasicModDataChecker):
                 ],
             )
         )
+
+
+def windows_path(path: Path | str) -> str:
+    """The path as `redMod.exe` sees it: MO2 does not convert the contents of the
+    arguments, and on Linux the program runs through Proton, where the root of the
+    file system is the drive Z:"""
+    if sys.platform == "win32":
+        return str(path)
+    return "Z:" + str(path).replace("/", "\\")
 
 
 def time_from_seconds(s: int | float) -> str:
@@ -503,7 +513,9 @@ class Cyberpunk2077Game(BasicGame):
                     modlist,
                     _,
                 ) = self._modlist_files.update_modlist("redmod")
-                modlist_param = f'-modlist="{modlist_path}"' if modlist else ""
+                modlist_param = (
+                    f'-modlist="{windows_path(modlist_path)}"' if modlist else ""
+                )
                 args = f"{args[: m.start()]}{modlist_param}{args[m.end() :]}"
                 qInfo(f"Manual modlist deployment: replacing {m[0]}, new args = {args}")
                 self._check_redmod_result(
@@ -596,7 +608,7 @@ class Cyberpunk2077Game(BasicGame):
                 qInfo("Redmod order changed, recreate deployed files")
                 self._clean_deployed_redmod(modlist_path)
             qInfo(f"Deploying redmod with modlist: {modlist_path}")
-            args += f' -modlist="{modlist_path}"'
+            args += f' -modlist="{windows_path(modlist_path)}"'
         else:
             qInfo("Deploying redmod")
         redmod_binary = self._get_redmod_binary()
