@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -642,6 +643,16 @@ class BasicGame(mobase.IPluginGame):
         self._gamePath = str(path)
 
         path = Path(path)
+
+        if sys.platform != "win32":
+            # Linux: the Steam games cannot be listed (see steam_utils), so ask for
+            # the app IDs of this game and keep the one installed in the given path
+            real_path = os.path.realpath(path)
+            for steamid in self._mappings.steamAPPId.get():
+                steampath = BasicGame.steam_games.get(steamid)
+                if steampath and os.path.realpath(steampath) == real_path:
+                    self._mappings.steamAPPId.set_value(steamid)
+                    break
 
         # Check if we have a matching steam, GOG, Origin or EA Desktop id and set the
         # index accordingly:
