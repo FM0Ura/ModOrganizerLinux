@@ -8,32 +8,32 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d1-python-design.md`](../superpowe
 
 ## 1. Python carregado
 
-- [ ] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, o "Python Proxy" e os plugins Python ("DDS Preview Plugin", "Form 43 Plugin Checker", "Script Extender Plugin Load Checker", "Configurator", "BAIN Wizard Installer", "FNIS Integration Tool", "FNIS Patches Tool" e "FNIS Integration Tool Reset") aparecem habilitados.
-- [ ] No log (`logs/mo_interface.log`): nenhuma linha `failed to init python`.
-- [ ] Fechar o MO2 pelo menu (**File → Exit**; traduzido, **Arquivo → Sair**). Esperado: o MO2 fecha sem travar (`pgrep -x ModOrganizer` vazio) e o `logs/crash.log` da instância continua vazio (o MO2 cria um `crash.log` vazio ao iniciar; só um com conteúdo indica queda ao fechar com o Python carregado).
+- [x] Abrir o MO2. Esperado: nenhum aviso do "Python Proxy" no ícone de notificações; em **Configurações → Plugins**, o "Python Proxy" e os plugins Python ("DDS Preview Plugin", "Form 43 Plugin Checker", "Script Extender Plugin Load Checker", "Configurator", "BAIN Wizard Installer", "FNIS Integration Tool", "FNIS Patches Tool" e "FNIS Integration Tool Reset") aparecem habilitados.
+- [x] No log (`logs/mo_interface.log`): nenhuma linha `failed to init python`.
+- [x] Fechar o MO2 pelo menu (**File → Exit**; traduzido, **Arquivo → Sair**). Esperado: o MO2 fecha sem travar (`pgrep -x ModOrganizer` vazio) e o `logs/crash.log` da instância continua vazio (o MO2 cria um `crash.log` vazio ao iniciar; só um com conteúdo indica queda ao fechar com o Python carregado).
 
 ## 2. Pré-visualização de DDS
 
-- [ ] Na aba **Data**, abrir a pré-visualização de um `.dds` de um mod instalado (por exemplo, uma textura em `textures/`; duplo clique ou botão direito → Preview). Esperado: a textura aparece (canais, zoom), sem erro de OpenGL.
+- [x] Na aba **Data**, abrir a pré-visualização de um `.dds` de um mod instalado (por exemplo, uma textura em `textures/`; duplo clique ou botão direito → Preview). Esperado: a textura aparece (canais, zoom), sem erro de OpenGL.
 
 ## 3. Verificadores
 
-- [ ] Com um plugin `.esp` de formato 43 (Oldrim) ativo, se houver: o ícone de notificações mostra o aviso do "Form 43 Plugin Checker". Sem um, conferir só que não há erro do plugin no log.
-- [ ] "Script Extender Plugin Load Checker": depois de rodar o SKSE uma vez (Fase 3), sem erro no log; com uma DLL do SKSE que não carregou (opcional), o aviso aparece.
+- [x] Com um plugin `.esp` de formato 43 (Oldrim) ativo, se houver: o ícone de notificações mostra o aviso do "Form 43 Plugin Checker". Sem um, conferir só que não há erro do plugin no log.
+- [x] "Script Extender Plugin Load Checker": depois de rodar o SKSE uma vez (Fase 3), sem erro no log; com uma DLL do SKSE que não carregou (opcional), o aviso aparece.
 
 ## 4. Configurator
 
-- [ ] **Ferramentas → Configurator** (ou o nome que o menu mostrar). Esperado: abre com os INIs do perfil (`Skyrim.ini`, `SkyrimPrefs.ini`); alterar um valor, salvar, e o INI do perfil muda.
+- [x] **Ferramentas → Configurator** (ou o nome que o menu mostrar). Esperado: abre com os INIs do perfil (`Skyrim.ini`, `SkyrimPrefs.ini`); alterar um valor, salvar, e o INI do perfil muda.
 
 ## 5. Instalador BAIN com wizard
 
-- [ ] Compactar a fixture: `cd tests/fixtures/bain-wizard && 7z a /tmp/bain-wizard.7z ./*`. No MO2, **Instalar mod** com `/tmp/bain-wizard.7z`. Esperado: o diálogo do wizard pergunta "Choose the option"; escolher "Option B"; o mod instalado tem `core.txt` e `b.txt` (não `a.txt`).
+- [x] Compactar a fixture: `cd tests/fixtures/bain-wizard && 7z a /tmp/bain-wizard.7z ./*`. No MO2, **Instalar mod** com `/tmp/bain-wizard.7z`. Esperado: o diálogo do wizard pergunta "Choose the option"; escolher "Option B"; o mod instalado tem `core.txt` e `b.txt` (não `a.txt`).
 
 ## 6. Isolamento
 
 A prova automática é o teste `Isolation.UserPackagesAreInvisible` (ctest do `plugin_python`); aqui se confirma o mesmo no MO2 de verdade, com um plugin de teste descartável. `<pasta do build>` é o `install/` do worktree. Com o MO2 fechado:
 
-- [ ] Descobrir a pasta de pacotes do usuário do box e criar nela um pacote que não existe no box (o `$HOME` do box é o do host):
+- [x] Descobrir a pasta de pacotes do usuário do box e criar nela um pacote que não existe no box (o `$HOME` do box é o do host):
 
 ```sh
 SITE=$(distrobox enter mo2-run -- python3 -c 'import site; print(site.getusersitepackages())')
@@ -42,7 +42,7 @@ distrobox enter mo2-run -- python3 -c 'import mo2_isolation_probe; print("box py
 ```
 
   Esperado: a última linha imprime `box python sees it: 1` (o Python comum do box enxerga o pacote; sem isso o teste não prova nada).
-- [ ] Criar o plugin de teste e abrir o MO2 pelo box:
+- [x] Criar o plugin de teste e abrir o MO2 pelo box:
 
 ```sh
 cat > <pasta do build>/bin/plugins/isolation_probe.py <<'PY'
@@ -63,7 +63,7 @@ distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer
 ```
 
   Depois de o MO2 abrir (pode fechá-lo): `head -1 /tmp/mo2_isolation_probe.txt`. **Esperado: `invisible`.** Se mostrar `visible`, o isolamento falhou (reprove o item). O resto do arquivo é o `sys.path` do MO2: só a biblioteca padrão e o `site-packages` do sistema (`/usr/lib64/python3.14`, `/usr/lib/python3.14`) e as pastas do próprio build (`<pasta do build>/bin/plugins`, `<pasta do build>/bin/plugins/plugin_python/libs` e `<pasta do build>/bin/plugins/data`, e pastas dentro de `<pasta do build>/bin/plugins` que um plugin acrescente, como `installer_wizard/lib`), que podem estar sob o `$HOME` por causa do caminho do build. Nenhuma outra pasta sob o `$HOME` (`~/.local`, por exemplo) nem sob `/usr/local`. Se o arquivo não existir, o MO2 não chegou a iniciar ou o plugin de teste não foi carregado (confira o item 1).
-- [ ] Limpeza:
+- [x] Limpeza:
 
 ```sh
 rm -rf "$SITE/mo2_isolation_probe" <pasta do build>/bin/plugins/isolation_probe.py /tmp/mo2_isolation_probe.txt
@@ -75,7 +75,7 @@ rm -rf "$SITE/mo2_isolation_probe" <pasta do build>/bin/plugins/isolation_probe.
 
 ## 8. Regressão
 
-- [ ] SKSE inicia o jogo com os mods (Fase 3); LOOT ordena (4b); pré-visualização de `.txt`/imagens (4c.1).
+- [x] SKSE inicia o jogo com os mods (Fase 3); LOOT ordena (4b); pré-visualização de `.txt`/imagens (4c.1).
 
 ## 9. Box sem o PyQt6 (opcional)
 
