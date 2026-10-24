@@ -4,7 +4,9 @@
 #include <QDirIterator>
 #include <QApplication>
 #include <QDebug>
+#ifdef _WIN32
 #include "DirectXTex.h"
+#endif
 
 using namespace libbsarch;
 
@@ -99,6 +101,8 @@ namespace BsaPacker
 
 	void TextureArchiveBuilder::DDSCallback(bsa_archive_t, const wchar_t* file_path, bsa_dds_info_t* dds_info, void* context)
 	{
+		// on Linux, libbsarchpp reads the DDS headers itself and never calls this (spec of Phase 4e, section 3.3)
+#ifdef _WIN32
 		const auto& path = *static_cast<std::wstring*>(context) + L'/' + std::wstring(file_path);
 
 		auto image = std::make_unique<DirectX::ScratchImage>();
@@ -112,5 +116,6 @@ namespace BsaPacker
 		dds_info->width = static_cast<uint32_t>(info.width);
 		dds_info->height = static_cast<uint32_t>(info.height);
 		dds_info->mipmaps = static_cast<uint32_t>(info.mipLevels);
+#endif
 	}
 } // namespace BsaPacker
