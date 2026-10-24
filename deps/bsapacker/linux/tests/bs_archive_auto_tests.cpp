@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <stdexcept>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -125,4 +126,16 @@ TEST(BsArchiveAuto, SkyrimSERoundTrip)
 
   ASSERT_TRUE(fs::is_regular_file(archive));
   EXPECT_EQ(readWithLibbsarchpp(archive), looseFiles(root));
+}
+
+TEST(BsArchiveAuto, EmptyPackKeepsAnExistingArchive)
+{
+  TempDir dir;
+  const fs::path archive = dir.path() / "My Test Mod - Textures.ba2";
+  writeFile(archive, "an archive that was already there");
+
+  libbsarch::bs_archive_auto bsa(baFO4dds);
+  EXPECT_THROW(bsa.save_to_disk(archive), std::runtime_error);
+
+  EXPECT_EQ(readFile(archive), "an archive that was already there");
 }

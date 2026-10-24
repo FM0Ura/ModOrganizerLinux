@@ -47,7 +47,7 @@ namespace BsaPackerTests
 			.WillByDefault(Return(QDialog::DialogCode::Accepted));
 		// a named archive is needed for a mod DTO
 		ON_CALL(*naggyMockPackerDialog, SelectedPluginItem())
-			.WillByDefault(Return(QStringLiteral("plugin")));
+			.WillByDefault(Return(QStringLiteral("plugin.esp")));
 
 		auto result = sut.Create();
 

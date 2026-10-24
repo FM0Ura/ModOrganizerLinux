@@ -39,8 +39,9 @@ public:
   // DDS headers itself, so only the root directory (the context) is kept
   void set_dds_callback(bsa_file_dds_info_proc_t dds_function, const std::wstring& root_dir);
 
-  // writes the archive; on failure, logs the reason, removes the partial file and
-  // rethrows (std::runtime_error)
+  // writes the archive; with no files (or no archive type) throws std::runtime_error
+  // and touches nothing; if the writing fails, logs the reason, removes the partial file
+  // (not a file that was there before and that the writer never opened) and rethrows
   void save_to_disk(const std::filesystem::path& archive_path);
 
 private:

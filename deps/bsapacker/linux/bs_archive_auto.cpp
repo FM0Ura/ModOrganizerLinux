@@ -92,11 +92,21 @@ void bs_archive_auto::set_dds_callback(bsa_file_dds_info_proc_t, const std::wstr
 
 void bs_archive_auto::save_to_disk(const fs::path& archive_path)
 {
-  try {
-    if (m_files.empty()) {
-      throw std::runtime_error("no files to pack");
-    }
+  // nothing is written before these checks: they fail without touching the file, which
+  // may be an archive that was already there
+  if (m_files.empty()) {
+    qDebug().noquote() << QString("no files to pack into %1")
+                              .arg(QString::fromStdString(archive_path.string()));
+    throw std::runtime_error("no files to pack");
+  }
+  const libbsarchpp::ArchiveType type = toLibbsarchpp(m_type);
 
+  // a failure removes the partial file, but not a file that was there before and that
+  // the writer did not get to open
+  const bool existedBefore = fs::exists(archive_path);
+  bool writerCreated       = false;
+
+  try {
     std::vector<fs::path> fileList;
     fileList.reserve(m_files.size());
     for (const auto& file : m_files) {
@@ -109,8 +119,9 @@ void bs_archive_auto::save_to_disk(const fs::path& archive_path)
     // the full constructor: the 4-argument one of libbsarchpp 1.0.7 leaves the object
     // uninitialized (spec of Phase 4e, section 1.3); one thread, for a deterministic
     // archive
-    libbsarchpp::Bsa bsa(archive_path, toLibbsarchpp(m_type), fileList, ddsBasePath,
-                         m_compressed, m_shareData, false);
+    libbsarchpp::Bsa bsa(archive_path, type, fileList, ddsBasePath, m_compressed,
+                         m_shareData, false);
+    writerCreated = true;  // the constructor opened (truncated) the file
     for (const auto& file : m_files) {
       bsa.addFile(file.root_dir, file.path_on_disk);
     }
@@ -119,8 +130,10 @@ void bs_archive_auto::save_to_disk(const fs::path& archive_path)
     qWarning().noquote() << QString("failed to write archive %1: %2")
                                 .arg(QString::fromStdString(archive_path.string()))
                                 .arg(QString::fromStdString(e.what()));
-    std::error_code ec;
-    fs::remove(archive_path, ec);
+    if (!existedBefore || writerCreated) {
+      std::error_code ec;
+      fs::remove(archive_path, ec);
+    }
     throw;
   }
 }
