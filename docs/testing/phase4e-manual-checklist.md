@@ -28,7 +28,7 @@ Spec: [`../superpowers/specs/2026-10-24-phase4e-bsa-design.md`](../superpowers/s
 
 ## 4. Erros
 
-- [ ] Criar um mod vazio (na lista de mods, botão direito → **Create empty mod**, ou um mod sem nenhum arquivo) e rodar o BSA Packer nele. Esperado: nenhum `.bsa` criado, nenhuma queda, e o MO2 não lista nenhum arquivo como criado. Esse caso só aparece no log em nível de depuração (`no files to pack into <caminho>`); não há linha `failed to write archive` para ele (essa linha é de falhas de gravação, como disco cheio ou pasta sem permissão). Com `create_plugins` e `hide_loose_assets` ligados, o `.esp` vazio ainda é criado mesmo sem nenhum arquivo criado (é o comportamento do upstream, não um defeito): apague-o, ou apague o mod vazio.
+- [ ] Criar um mod vazio (na lista de mods, botão direito → **Create empty mod above**). O MO2 marca um mod sem arquivos como inválido, e o diálogo do BSA Packer só lista os mods válidos: antes de empacotar, botão direito no mod vazio → **Ignore missing data**. Rodar o BSA Packer e escolher o mod vazio. Esperado: nenhum `.bsa` criado, nenhuma queda, e o MO2 não lista nenhum arquivo como criado. Esse caso só aparece no log em nível de depuração (`no files to pack into <caminho>`); não há linha `failed to write archive` para ele (essa linha é de falhas de gravação, como disco cheio ou pasta sem permissão). Com `create_plugins` e `hide_loose_assets` ligados, o `.esp` vazio ainda é criado mesmo sem nenhum arquivo criado (é o comportamento do upstream, não um defeito): apague-o, ou apague o mod vazio.
 
 ## 5. Regressão
 
