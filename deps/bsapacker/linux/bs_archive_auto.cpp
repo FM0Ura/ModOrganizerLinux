@@ -11,7 +11,6 @@
 #include <cerrno>
 #include <cstring>
 #include <fstream>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <stdexcept>
@@ -58,16 +57,21 @@ namespace
     return fs::path(s);
   }
 
+  // in one read of the whole size, as the file is packed whole
   libbsarchpp::Buffer readFile(const fs::path& path)
   {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in) {
       throw std::runtime_error(std::string("could not open the file for reading: ") +
                                std::strerror(errno));
     }
-    libbsarchpp::Buffer data((std::istreambuf_iterator<char>(in)),
-                             std::istreambuf_iterator<char>());
-    if (in.bad()) {
+    const std::streamoff size = in.tellg();
+    if (size < 0) {
+      throw std::runtime_error("could not read the file");
+    }
+    libbsarchpp::Buffer data(static_cast<std::size_t>(size));
+    in.seekg(0);
+    if (!in.read(reinterpret_cast<char*>(data.data()), size)) {
       throw std::runtime_error("could not read the file");
     }
     return data;
@@ -75,12 +79,19 @@ namespace
 
   // the .bsa types (TES3 to SSE) get their names in lower case, as the games look them
   // up: for TES4 to SSE, libbsarchpp 1.0.7 hashes the extension in its own case
-  // (CreateHashTES4); it also takes a name without an extension for a folder that it
-  // cannot find (findFileRecordTES4), so such files are left out
+  // (CreateHashTES4)
   bool isBsa(libbsarchpp::ArchiveType type)
   {
     return type == libbsarchpp::TES3 || type == libbsarchpp::TES4 ||
            type == libbsarchpp::FO3 || type == libbsarchpp::SSE;
+  }
+
+  // TES4 to SSE: libbsarchpp takes a name without an extension for a folder that it
+  // cannot find (findFileRecordTES4), so such files are left out; TES3 packs them
+  bool needsExtension(libbsarchpp::ArchiveType type)
+  {
+    return type == libbsarchpp::TES4 || type == libbsarchpp::FO3 ||
+           type == libbsarchpp::SSE;
   }
 
   libbsarchpp::ArchiveType toLibbsarchpp(bsa_archive_type_t type)
@@ -152,16 +163,16 @@ void bs_archive_auto::save_to_disk(const fs::path& archive_path)
   }
   const libbsarchpp::ArchiveType type = toLibbsarchpp(m_type);
 
-  // the files to pack and their names in the archive: in a .bsa, in lower case, without
-  // the files that have no extension and with only the first of the names that differ
-  // in case alone
+  // the files to pack and their names in the archive: in a .bsa, in lower case, with
+  // only the first of the names that differ in case alone and (but in TES3) without the
+  // files that have no extension
   std::vector<std::pair<const disk_blob*, fs::path>> files;
   files.reserve(m_files.size());
   if (isBsa(type)) {
     std::unordered_set<std::string> names;
     for (const auto& file : m_files) {
       const fs::path name = toLower(file.path_in_archive);
-      if (!name.has_extension()) {
+      if (needsExtension(type) && !name.has_extension()) {
         qWarning().noquote() << QString("%1 is not packed into %2: it has no extension")
                                     .arg(toQString(file.path_on_disk))
                                     .arg(toQString(archive_path));

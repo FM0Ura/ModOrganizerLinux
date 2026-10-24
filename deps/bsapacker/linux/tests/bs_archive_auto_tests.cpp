@@ -375,11 +375,11 @@ TEST(BsArchiveAuto, CaseDuplicatesKeepTheFirst)
   }
 }
 
-// TES3 to SSE: libbsarchpp takes a name without an extension for a folder and cannot
+// TES4 to SSE: libbsarchpp takes a name without an extension for a folder and cannot
 // add it, so such files are left out instead of failing the whole archive
 TEST(BsArchiveAuto, FilesWithoutAnExtensionAreLeftOut)
 {
-  for (const auto type : {baTES3, baTES4, baFO3, baSSE}) {
+  for (const auto type : {baTES4, baFO3, baSSE}) {
     TempDir dir;
     const fs::path root = dir.path() / "mods" / "My Test Mod";
     writeFile(root / "meshes" / "a.nif", "nif data");
@@ -391,6 +391,22 @@ TEST(BsArchiveAuto, FilesWithoutAnExtensionAreLeftOut)
     const std::map<std::string, std::string> expected{{"meshes/a.nif", "nif data"}};
     EXPECT_EQ(readWithLibbsarchpp(archive), expected) << "type " << type;
   }
+}
+
+// TES3 (Morrowind) packs a name without an extension: it is kept, in lower case
+TEST(BsArchiveAuto, Tes3PacksFilesWithoutAnExtension)
+{
+  TempDir dir;
+  const fs::path root = dir.path() / "mods" / "My Test Mod";
+  writeFile(root / "meshes" / "a.nif", "nif data");
+  writeFile(root / "docs" / "LICENSE", "license");
+  const fs::path archive = dir.path() / "out.bsa";
+
+  EXPECT_NO_THROW(pack(root, baTES3, false, archive));
+
+  const std::map<std::string, std::string> expected{{"docs/license", "license"},
+                                                    {"meshes/a.nif", "nif data"}};
+  EXPECT_EQ(readWithLibbsarchpp(archive), expected);
 }
 
 // with only files without an extension, nothing is left: the empty pack

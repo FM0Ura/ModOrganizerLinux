@@ -40,8 +40,8 @@ public:
   void set_dds_callback(bsa_file_dds_info_proc_t dds_function, const std::wstring& root_dir);
 
   // writes the archive; a .bsa (TES3 to SSE) gets its names in lower case and leaves
-  // out, with a warning, the files without an extension and the files whose name differs
-  // from an earlier one only in case; with no files left (or no archive type) throws
+  // out, with a warning, the files whose name differs from an earlier one only in case
+  // and (but in TES3) the files without an extension; with no files left (or no archive type) throws
   // std::runtime_error and touches nothing; if the writing fails, logs the reason and
   // the file, removes the partial file (not a file that was there before and that the
   // writer never opened) and rethrows
