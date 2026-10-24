@@ -22,7 +22,7 @@ BUILD_OUT="$ROOT/build-out"
 # underscores). A target without such a function is "not implemented yet". An optional
 # function pre_<t> runs first, outside --allow-fail.
 ALL_TARGETS=(
-    7zip cmake_common cmake-smoke uibase archive dds-header bsatk esptk libloot lootcli
+    7zip cmake_common cmake-smoke uibase archive dds-header bsatk libbsarchpp esptk libloot lootcli
     mo2-vfs modorganizer game_bethesda installer_quick installer_manual installer_fomod
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
     check_fnis tool_inieditor tool_inibakery plugin_python
@@ -153,6 +153,16 @@ build_bsatk() {
 # esptk reads plugin headers; with --tests its GoogleTest suite runs against synthetic plugins.
 build_esptk() {
     cmake_build esptk "$ROOT/deps/esptk"
+}
+
+# libbsarchpp (Phase 4e) writes and reads BSA/BA2 archives; the bsapacker plugin links it
+# on Linux in place of libbsarch (Windows-only). The logic lives in
+# build/libbsarchpp/build-libbsarchpp.sh (source pinned to 1.0.7; it also installs the
+# boost-ext/di header that bsapacker needs); with --tests its tests that need no game
+# data run, and a consumer project checks the installed package.
+build_libbsarchpp() {
+    INSTALL="$INSTALL" BUILD_OUT="$BUILD_OUT" TESTS="$TESTS" \
+        "$ROOT/build/libbsarchpp/build-libbsarchpp.sh"
 }
 
 # libloot is LOOT's library (Rust, with a C++ wrapper), needed by the lootcli executable;
