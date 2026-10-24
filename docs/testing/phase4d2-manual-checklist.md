@@ -17,7 +17,7 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d2-basic-games-design.md`](../supe
 
 - [ ] **Nova instância**: o NieR:Automata aparece na lista de jogos detectados (com o caminho da Steam); criar a instância.
 - [ ] Instalar um mod simples cujos arquivos vão na raiz do jogo (uma pasta com um `.txt` ou `.dll` de teste) e ativá-lo. Esperado: o mod aparece na lista e fica ativo.
-- [ ] Escolher o executável do jogo (a lista de executáveis traz o `NieRAutomata.exe`, o binário do plugin) e **executar pelo MO2** (Proton com o VFS). Esperado: o jogo abre; o arquivo do mod é visto no `Data` virtual (por exemplo pelo log em `logs/run-NieRAutomata.log` ou pelo próprio mod, se for funcional); fechar o jogo e conferir que o mount some.
+- [ ] Escolher o executável do jogo (a lista de executáveis traz o `NieRAutomata.exe`, o binário do plugin) e **executar pelo MO2** (Proton com o VFS). Esperado: o jogo abre; com o jogo aberto, `ls "<pasta do jogo>"` (num terminal do host) mostra o arquivo do mod na raiz do jogo (o `logs/run-NieRAutomata.log` só traz a saída do Proton e não serve para isso; um mod funcional também vale); depois de fechar o jogo, o arquivo some da pasta (o mount some).
 
 ## 3. Cyberpunk 2077
 
@@ -30,15 +30,20 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d2-basic-games-design.md`](../supe
 
 - [ ] **Nova instância**: o Baldur's Gate 3 aparece na lista; criar a instância. Os documentos ficam em `<prefixo>/AppData/Local/Larian Studios/Baldur's Gate 3` (compatdata `1086940`).
 - [ ] Instalar um mod `.pak` do Nexus (pelo `nxm://` ou arquivo). Esperado: ao terminar a instalação aparece **uma vez por sessão** o diálogo de aviso "Baldur's Gate 3 Plugin - Load order" ("The load order (modsettings.lsx) is not generated on Linux yet: LSLib's Divine tool does not accept Unix paths. …"); o mod é instalado em `mods/` sem erro, nada é baixado do GitHub nem executado (o `Divine.dll` não roda) e o `logs/mo_interface.log` tem uma única linha de aviso `Baldur's Gate 3: the load order (modsettings.lsx) is not generated on Linux: LSLib's Divine does not accept Unix paths; the rest of the plugin works`. Ativar ou mover o mod não mostra nada.
-- [ ] Instalar um segundo `.pak` ou abrir **Ferramentas → BG3 Tools → Reparse Pak Metadata** (e **Check For LsLib Updates**). Esperado: nenhum segundo diálogo na mesma sessão (a linha do log também não se repete); o MO2 não trava. Fechando e abrindo o MO2, o aviso volta uma vez, na próxima instalação.
-- [ ] Executar o jogo pelo MO2 (o executável do BG3 em `bin/bg3.exe`). Esperado: o jogo abre sem novo diálogo (sem o `modsettings.lsx` gerado, os mods não são aplicados pelo MO2).
+- [ ] Instalar um segundo `.pak`. Esperado: nenhum segundo diálogo na mesma sessão (a linha do log também não se repete); o MO2 não trava. Fechando e abrindo o MO2, o aviso volta uma vez, no primeiro gatilho da nova sessão (uma instalação, a execução do jogo ou uma ferramenta do BG3), e depois não se repete.
+- [ ] Abrir **Ferramentas → BG3 Tools → Reparse Pak Metadata** e **Check For LsLib Updates**, mais de uma vez. Esperado: estas ferramentas mostram o diálogo de aviso **toda vez** que são usadas (mesmo já tendo avisado na sessão) e registram a linha no log a cada uso; nada é baixado nem executado e o MO2 não trava.
+- [ ] Executar o jogo pelo MO2 (o executável do BG3 em `bin/bg3.exe`). Esperado: o jogo abre; o diálogo de aviso aparece só se este for o primeiro gatilho da sessão (se já apareceu nesta sessão, não há novo diálogo); sem o `modsettings.lsx` gerado, os mods não são aplicados pelo MO2.
 - [ ] Opcional: colocar um `modsettings.lsx` feito à mão no perfil (`profiles/<perfil>/modsettings.lsx`) e executar o jogo pelo MO2. Esperado: o arquivo chega ao jogo em `<prefixo>/AppData/Local/Larian Studios/Baldur's Gate 3/PlayerProfiles/Public/modsettings.lsx`.
 
-## 5. Outros jogos (opcional)
+## 5. DLL proxy com `WINEDLLOVERRIDES` (opcional)
+
+- [ ] Mods que trazem uma DLL proxy (CET e RED4ext no Cyberpunk 2077, `version.dll`/`winmm.dll`; Script Extender do BG3, `DWrite.dll`; FAR no NieR:Automata, `dinput8.dll`) não carregam sozinhos no Linux: as bibliotecas forçadas são ignoradas e as opções de inicialização da Steam não valem. Em **Tools → Modify Executables…**, selecionar o executável do jogo e, no grupo **Proton**, na linha **Environment** (uma variável por linha), escrever `WINEDLLOVERRIDES=version,winmm=n,b` (Cyberpunk 2077), `WINEDLLOVERRIDES=DWrite=n,b` (BG3) ou `WINEDLLOVERRIDES=dinput8=n,b` (NieR:Automata); **OK**. Instalar o mod correspondente e executar o jogo pelo MO2. Esperado: o mod carrega (por exemplo, o CET abre a janela dele no Cyberpunk; o Script Extender cria o log dele no BG3); sem a variável, o mod não faz nada. Anotar o resultado: este passo valida o texto do README e do STATE.
+
+## 6. Outros jogos (opcional)
 
 - [ ] Um jogo do `basic_games` que o usuário tenha na Steam além dos três acima: a instância é criada e o jogo é detectado. Estes jogos são "detectados, não validados" (spec, limitações); anotar o que falhar.
 
-## 6. Regressão
+## 7. Regressão
 
 - [ ] Instância de Skyrim SE: SKSE inicia o jogo com os mods (Fase 3); os plugins Python da Fase 4d.1 (itens 1 a 5 do [checklist da 4d.1](phase4d1-manual-checklist.md)) continuam funcionando; LOOT ordena (4b).
 - [ ] Fechar o MO2 pelo menu (**Arquivo → Sair**): fecha sem travar e o `logs/crash.log` da instância continua vazio.
