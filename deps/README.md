@@ -122,13 +122,22 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   gate of the load-order generation, the mod-installed hook and the "Check For LsLib
   Updates" tool) returns `False` on Linux before any download or process, because LSLib's
   `Divine` rejects every Unix path; `BG3Utils.warn_load_order_unavailable()` logs the
-  reason and tells the user once per session. In `games/game_cyberpunk2077.py`, the
+  reason and tells the user once per session (the explicit "Check For LsLib Updates" and
+  "Reparse Pak Metadata" tools force it every time). In `games/game_cyberpunk2077.py`, the
   `-modlist=...` argument of `redMod.exe` (run through Proton, and MO2 does not convert
-  the contents of arguments) is a `Z:\...` path (`windows_path()`). All of them run
-  behind `if sys.platform == "win32": ... else: ...` or `if sys.platform != "win32":`
-  (the Windows flow is the upstream one), except that the guarded `continue` of
-  `createPlugins()` sits inside the existing `except` clauses. A `git subtree pull` must
-  keep them (see the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games
+  the contents of arguments) is a `Z:\...` path (`windows_path()`). The Windows
+  behaviour is the upstream one, but not every patch sits behind a platform branch. Most
+  run behind `if sys.platform == "win32": ... else: ...` or `if sys.platform != "win32":`
+  (`setGamePath()`, `download_lslib_if_missing()`, the BG3 tools, `windows_path()` for
+  the REDmod argument, the stores' `find_games()`). These are restructured or added
+  without a branch, with the same result on Windows: `replace_variables()` and
+  `_default_documents_directory()` in `basic_game.py` (they now compute the folder once,
+  around a Linux-only lookup that returns `None` on Windows); the store modules, which
+  import `functools`/`qInfo` and define `_only_steam_on_linux` unconditionally; BG3's
+  `warn_load_order_unavailable()` and `_load_order_warned`; and the guarded `continue` of
+  `createPlugins()`, which sits inside the existing `except` clauses. A
+  `git subtree pull` that touches these upstream functions will conflict, and must keep
+  the patches (see the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games
   --tests` runs `tests/basic-games` against the installed package.
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
