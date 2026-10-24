@@ -11,3 +11,8 @@ if(BUILD_TESTING)
 	enable_testing()
 	add_subdirectory(tests)
 endif()
+
+# Linux (spec of Phase 4e, section 3.4): the tests of the libbsarch replacement in linux/
+if(BUILD_TESTING AND NOT WIN32)
+	add_subdirectory(linux/tests)
+endif()
