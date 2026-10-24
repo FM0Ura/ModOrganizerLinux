@@ -39,9 +39,12 @@ public:
   // DDS headers itself, so only the root directory (the context) is kept
   void set_dds_callback(bsa_file_dds_info_proc_t dds_function, const std::wstring& root_dir);
 
-  // writes the archive; with no files (or no archive type) throws std::runtime_error
-  // and touches nothing; if the writing fails, logs the reason, removes the partial file
-  // (not a file that was there before and that the writer never opened) and rethrows
+  // writes the archive; a .bsa (TES3 to SSE) gets its names in lower case and leaves
+  // out, with a warning, the files without an extension and the files whose name differs
+  // from an earlier one only in case; with no files left (or no archive type) throws
+  // std::runtime_error and touches nothing; if the writing fails, logs the reason and
+  // the file, removes the partial file (not a file that was there before and that the
+  // writer never opened) and rethrows
   void save_to_disk(const std::filesystem::path& archive_path);
 
 private:

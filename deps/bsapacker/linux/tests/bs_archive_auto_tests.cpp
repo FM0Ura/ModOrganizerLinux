@@ -188,12 +188,14 @@ TEST_P(BsArchiveAutoFormat, RoundTrip)
   const Format& format = GetParam();
   TempDir dir;
   const fs::path root = dir.path() / "mods" / "My Test Mod";
+  // upper-case extensions too: the games look the names up in lower case
   if (format.textures) {
-    writeFile(root / "Textures" / "Armor" / "Iron" / "Cuirass.dds", makeDds());
+    writeFile(root / "Textures" / "Armor" / "Iron" / "Cuirass.DDS", makeDds());
     writeFile(root / "textures" / "sky.dds", makeDds());
   } else {
     writeFile(root / "Meshes" / "Armor" / "Iron" / "Cuirass.nif", std::string(8192, 'n'));
-    writeFile(root / "Textures" / "Armor" / "Iron" / "Cuirass.dds", makeDds());
+    writeFile(root / "Meshes" / "Foo.NIF", "nif data");
+    writeFile(root / "Textures" / "Armor" / "Iron" / "Cuirass.DDS", makeDds());
     writeFile(root / "scripts" / "test.pex", "pex data");
     writeFile(root / "sound" / "fx" / "hit.wav", "RIFF....WAVE");
   }
@@ -266,6 +268,53 @@ TEST(BsArchiveAuto, NonAsciiNamesRoundTrip)
   EXPECT_EQ(readWithLibbsarchpp(archive), looseFiles(root));
 }
 
+// the archives store names in Latin-1: a name outside it fails the archive, and the
+// error names the file
+TEST(BsArchiveAuto, NameOutsideLatin1FailsNamingTheFile)
+{
+  for (const auto type : {baSSE, baFO4}) {
+    TempDir dir;
+    const fs::path root = dir.path() / "mods" / "My Test Mod";
+    writeFile(root / "textures" / "a.dds", makeDds());
+    writeFile(root / "textures" / "b€.dds", makeDds());
+    const fs::path archive = dir.path() / "out.bsa";
+
+    try {
+      pack(root, type, true, archive);
+      ADD_FAILURE() << "no exception, type " << type;
+    } catch (const std::runtime_error& e) {
+      EXPECT_NE(std::string(e.what()).find("textures/b€.dds"), std::string::npos)
+          << e.what() << ", type " << type;
+    }
+    EXPECT_FALSE(fs::exists(archive)) << "type " << type;
+  }
+}
+
+// a file that cannot be read fails the archive, and the error names the file
+TEST(BsArchiveAuto, UnreadableFileFailsNamingTheFile)
+{
+  if (geteuid() == 0) {
+    GTEST_SKIP() << "root ignores the permissions of the file";
+  }
+  for (const auto type : {baSSE, baFO4}) {
+    TempDir dir;
+    const fs::path root = dir.path() / "mods" / "My Test Mod";
+    writeFile(root / "textures" / "a.dds", makeDds());
+    writeFile(root / "textures" / "b.dds", makeDds());
+    fs::permissions(root / "textures" / "b.dds", fs::perms::none);
+    const fs::path archive = dir.path() / "out.bsa";
+
+    try {
+      pack(root, type, true, archive);
+      ADD_FAILURE() << "no exception, type " << type;
+    } catch (const std::runtime_error& e) {
+      EXPECT_NE(std::string(e.what()).find("textures/b.dds"), std::string::npos)
+          << e.what() << ", type " << type;
+    }
+    EXPECT_FALSE(fs::exists(archive)) << "type " << type;
+  }
+}
+
 TEST(BsArchiveAuto, EmptyArchiveIsNotCreated)
 {
   TempDir dir;
@@ -302,4 +351,56 @@ TEST(BsArchiveAuto, EmptyPackKeepsAnExistingArchive)
   EXPECT_THROW(bsa.save_to_disk(archive), std::runtime_error);
 
   EXPECT_EQ(readFile(archive), "an archive that was already there");
+}
+
+// on a case-sensitive file system two files can differ only in case; the archive names
+// do not: the first one is packed and the others are left out
+TEST(BsArchiveAuto, CaseDuplicatesKeepTheFirst)
+{
+  for (const auto type : {baTES3, baTES4, baFO3, baSSE}) {
+    TempDir dir;
+    const fs::path root = dir.path() / "mods" / "My Test Mod";
+    writeFile(root / "Textures" / "a.dds", "first");
+    writeFile(root / "textures" / "A.DDS", "second");
+    const fs::path archive = dir.path() / "out.bsa";
+
+    libbsarch::bs_archive_auto bsa(type);
+    bsa.add_file_from_disk(libbsarch::disk_blob(root, root / "Textures" / "a.dds"));
+    bsa.add_file_from_disk(libbsarch::disk_blob(root, root / "textures" / "A.DDS"));
+    bsa.set_compressed(false);
+    EXPECT_NO_THROW(bsa.save_to_disk(archive)) << "type " << type;
+
+    const std::map<std::string, std::string> expected{{"textures/a.dds", "first"}};
+    EXPECT_EQ(readWithLibbsarchpp(archive), expected) << "type " << type;
+  }
+}
+
+// TES3 to SSE: libbsarchpp takes a name without an extension for a folder and cannot
+// add it, so such files are left out instead of failing the whole archive
+TEST(BsArchiveAuto, FilesWithoutAnExtensionAreLeftOut)
+{
+  for (const auto type : {baTES3, baTES4, baFO3, baSSE}) {
+    TempDir dir;
+    const fs::path root = dir.path() / "mods" / "My Test Mod";
+    writeFile(root / "meshes" / "a.nif", "nif data");
+    writeFile(root / "docs" / "LICENSE", "license");
+    const fs::path archive = dir.path() / "out.bsa";
+
+    EXPECT_NO_THROW(pack(root, type, true, archive)) << "type " << type;
+
+    const std::map<std::string, std::string> expected{{"meshes/a.nif", "nif data"}};
+    EXPECT_EQ(readWithLibbsarchpp(archive), expected) << "type " << type;
+  }
+}
+
+// with only files without an extension, nothing is left: the empty pack
+TEST(BsArchiveAuto, OnlyFilesWithoutAnExtensionIsAnEmptyPack)
+{
+  TempDir dir;
+  const fs::path root = dir.path() / "mods" / "My Test Mod";
+  writeFile(root / "docs" / "LICENSE", "license");
+  const fs::path archive = dir.path() / "out.bsa";
+
+  EXPECT_THROW(pack(root, baSSE, true, archive), std::runtime_error);
+  EXPECT_FALSE(fs::exists(archive));
 }
