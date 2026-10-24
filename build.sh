@@ -27,7 +27,7 @@ ALL_TARGETS=(
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
     check_fnis tool_inieditor tool_inibakery plugin_python
     preview_dds form43_checker script_extender_plugin_checker tool_configurator
-    installer_wizard fnistool basic_games
+    installer_wizard fnistool basic_games bsapacker
 )
 
 ONLY=()
@@ -494,6 +494,15 @@ build_basic_games() {
         PYTHONPATH="$INSTALL/bin/plugins/plugin_python/libs:$INSTALL/bin/plugins" \
         python3 -m pytest -p no:cacheprovider "$ROOT/tests/basic-games" -q ||
         die "basic_games tests failed"
+}
+
+# bsapacker (Phase 4e): the BSA Packer tool, which packs the loose files of a mod into
+# BSA/BA2 archives; on Linux it writes them with libbsarchpp (deps/bsapacker/linux,
+# in place of the Windows-only libbsarch); with --tests the upstream suite and the
+# round trips of the Linux archive writer run, and the plugin must load as a tool
+build_bsapacker() {
+    cmake_build bsapacker "$ROOT/deps/bsapacker"
+    check_plugins tool "$INSTALL/bin/plugins/libbsa_packer.so"
 }
 
 # --- driver -----------------------------------------------------------------
