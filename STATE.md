@@ -2,8 +2,8 @@
 
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
-**Última atualização:** 2026-10-21
-**Fase atual:** 4d.2 — `basic_games` · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4d.1 (🟡 implementação concluída; PR #7 aberto; teste manual pendente)
+**Última atualização:** 2026-10-24
+**Fase atual:** 4d.2 — `basic_games` · **Status:** 🟡 revisão final concluída; PR #8 aberto; teste manual pendente · **Anterior:** 4d.1 (🟡 PR #7, CI verde; teste manual pendente)
 **Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`). **Branch da Fase 4d.2:** `fase-4d2-basic-games` (a partir de `fase-4d1-python`; worktree `../ModOrganizerLinux-4d2`)
 
 ## Repositório
@@ -21,7 +21,7 @@ Spec: [`docs/superpowers/specs/2026-10-21-phase4d2-basic-games-design.md`](docs/
 | 3 | `basic_games`: subtree (hash em `deps/README.md`), alvo no `build.sh`, `find_games()` da Steam preguiçoso por app ID e as outras lojas vazias, teste com Steam falsa; a revisão pediu registrar o app ID da Steam que casa com o caminho do jogo no Linux, pular no Linux o módulo de jogo que falhou ao importar e nenhum bytecode na árvore | ✅ | subtree (split `f1207d6`), `899cab0`, `910f763`, `7de498f`, `e71dca9`, `397e408`, `5a800c3`, `5daa851`, `b886fec` |
 | 4 | Pastas do usuário (`%USERPROFILE%`, `%DOCUMENTS%` e a pasta de documentos padrão) no prefixo do Proton do app ID do jogo, com o fallback XDG e um aviso por jogo | ✅ | `11b3e5e`, `01b7b3b`, `bf250eb` |
 | 5 | Baldur's Gate 3 sem o LSLib (nada é baixado nem executado no Linux, com um aviso uma vez por sessão) e o `-modlist` do `redMod.exe` do Cyberpunk 2077 como caminho `Z:` | ✅ | `3bafae0`, `e08fd29`, `e438ed2`, `2d226ba` |
-| 6 | Documentação, checklist e ponto de controle de CI (inclui o merge de `fase-4d1-python` com a correção do CI da 4d.1 `742af0c`: plugin Python de arquivo único importa módulos vizinhos, a ordem de carga é a do sistema de arquivos; o CI do PR #7 falhara no `FNISPatches`, que importa o `FNISTool`) | ✅ README (seção "Plugins Python"), checklist, ROADMAP, STATE e as notas de `deps/README.md`; o push e o PR dependem da revisão final e da autorização do usuário | `8e888d6` (merge), este commit |
+| 6 | Documentação, checklist e ponto de controle de CI (inclui o merge de `fase-4d1-python` com a correção do CI da 4d.1 `742af0c`: plugin Python de arquivo único importa módulos vizinhos, a ordem de carga é a do sistema de arquivos; o CI do PR #7 falhara no `FNISPatches`, que importa o `FNISTool`) | ✅ README (seção "Plugins Python"), checklist, ROADMAP, STATE e as notas de `deps/README.md`. Revisão final do branch: 0 críticos, 1 importante (mods com DLL proxy precisam de `WINEDLLOVERRIDES`, agora documentado) e 10 menores; correções revisadas sem pendências; `./build.sh --tests` completo verde em `5d31789`; PR #8 contra `fase-4d1-python` (2026-10-24) | `8e888d6` (merge), `a7db81a`, correções `a7db81a..5d31789` (`5d31789` é o `[windows-ci]`) |
 | 7 | Teste manual no Bazzite ([`docs/testing/phase4d2-manual-checklist.md`](docs/testing/phase4d2-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4d.1 — progresso
@@ -219,17 +219,7 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
-Fase 4d.2: o branch `fase-4d2-basic-games` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4d2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box (com `python3 python3-pyqt6`, como na 4d.1; nenhum pacote novo), com NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 da Steam rodados ao menos uma vez (o prefixo do Proton precisa existir); depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4d2-manual-checklist.md`.
-
-Fase 4d.1: o branch `fase-4d1-python` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4d1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box, **que precisa dos pacotes `python3 python3-pyqt6`** (README, "Plugins Python"); depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4d1-manual-checklist.md`.
-
-Fase 4c.3: o branch `fase-4c3-ferramentas` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c3` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c3-manual-checklist.md`.
-
-Fase 4c.2: o branch `fase-4c2-pendencias` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde do PR, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c2-manual-checklist.md`.
-
-Fase 4c.1: o branch `fase-4c1-plugins` ainda não foi enviado; o pacote é a compilação local do worktree `../ModOrganizerLinux-4c1` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4c1-manual-checklist.md`.
-
-Fase 4b: o branch `fase-4b-loot` ainda não foi enviado, então o pacote é a compilação local (`./build.sh` na distrobox `mo2-run`, resultado em `install/`, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box; depois de um run Linux verde, o artefato `mo2-linux-install` desse run. Checklist em `docs/testing/phase4b-manual-checklist.md`.
+Fases 4b a 4d.2 (PRs #3 a #8, empilhados): um só build cobre todas, porque cada branch contém os anteriores. O pacote é a compilação local do worktree `../ModOrganizerLinux-4d2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box (com `python3 python3-pyqt6`); ou o artefato `mo2-linux-install` de um run Linux verde do PR #8 (restaure a permissão de execução de `bin/ModOrganizer` e `bin/mo2-vfs`). Ordem dos checklists: `docs/testing/phase4b-manual-checklist.md`, `phase4c1-…`, `phase4c2-…`, `phase4c3-…`, `phase4d1-…` e `phase4d2-…` (NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 rodados ao menos uma vez pela Steam, para o prefixo do Proton existir).
 
 (Fase 4a, já no `main`: checklist em `docs/testing/phase4a-manual-checklist.md`.)
 
@@ -241,14 +231,11 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. Fase 4d.2: revisão final, push de `fase-4d2-basic-games` e PR contra `fase-4d1-python` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4d2-manual-checklist.md`.
-2. Fase 4d.1: revisão final, push de `fase-4d1-python` e PR contra `fase-4c3-ferramentas` (com a autorização do usuário); conferir os dois CIs (Linux, com a imagem reconstruída com os pacotes novos; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4d1-manual-checklist.md`. Depois, a Fase 4e (BSA/BA2).
-3. Fase 4c.3: revisão final, push de `fase-4c3-ferramentas` e PR contra `fase-4c2-pendencias` (com a autorização do usuário); conferir os dois CIs (Linux e Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c3-manual-checklist.md`.
-4. Fase 4c.1: revisão final do branch, push de `fase-4c1-plugins` e PR contra `fase-4b-loot` (com a autorização do usuário); conferir os dois CIs (Linux com os nove `.so` carregando; Windows pelo `[windows-ci]`) e o teste manual com `docs/testing/phase4c1-manual-checklist.md`.
-5. Fase 4b: push e CIs (Linux e Windows) já verdes no PR #3 em 2026-10-20; resta o teste manual (item abaixo).
-6. Teste manual do usuário com `docs/testing/phase4b-manual-checklist.md`, **com o MO2 iniciado pelo box**. Só então o merge em `main` e a spec passa a "aprovada; implementada".
-7. Merges na ordem: PR #3 (4b) no `main`, depois o PR da 4c.1 (redirecionado ao `main`). A Fase 4c.2 (pendências da Fase 2 e INIs) está em `fase-4c2-pendencias` (worktree `../ModOrganizerLinux-4c2`), com o PR contra `fase-4c1-plugins` (com a autorização do usuário) e o checklist `docs/testing/phase4c2-manual-checklist.md`; depois, a 4c.3 (ferramentas pelo VFS).
-8. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+1. CI do PR #8 (Linux e Windows pelo `[windows-ci]`); os PRs #3 a #7 estão com os dois CIs verdes.
+2. Testes manuais do usuário, na ordem 4b → 4c.1 → 4c.2 → 4c.3 → 4d.1 → 4d.2, com o build da 4d.2 (seção acima) e **com o MO2 iniciado pelo box**.
+3. Merges no `main` na ordem PR #3 → #8, cada PR redirecionado ao `main` depois do merge do anterior; as specs passam a "aprovada; implementada".
+4. Fase 4e (criação de BSA/BA2) e Fase 5 (distribuição).
+5. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
 
 ## Limitações conhecidas da Fase 4d.2
 

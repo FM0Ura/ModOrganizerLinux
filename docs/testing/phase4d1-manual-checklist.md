@@ -14,7 +14,7 @@ Spec: [`../superpowers/specs/2026-10-21-phase4d1-python-design.md`](../superpowe
 
 ## 2. Pré-visualização de DDS
 
-- [ ] Na aba **Data**, abrir a pré-visualização de um `.dds` do mod `Mod2_Textures` (duplo clique ou botão direito → Preview). Esperado: a textura aparece (canais, zoom), sem erro de OpenGL.
+- [ ] Na aba **Data**, abrir a pré-visualização de um `.dds` de um mod instalado (por exemplo, uma textura em `textures/`; duplo clique ou botão direito → Preview). Esperado: a textura aparece (canais, zoom), sem erro de OpenGL.
 
 ## 3. Verificadores
 
