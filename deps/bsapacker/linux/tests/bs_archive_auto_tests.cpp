@@ -239,6 +239,21 @@ INSTANTIATE_TEST_SUITE_P(
                     Format{"SFdds", baSFdds, "ba2", true, false, true}),
     formatName);
 
+// set_compressed(true) has to shrink a compressible file, not only flag the archive
+TEST(BsArchiveAuto, CompressionShrinksTheArchive)
+{
+  TempDir dir;
+  const fs::path root = makeMod(dir.path());
+  for (const auto type : {baTES4, baFO3, baSSE, baFO4, baSF}) {
+    const fs::path compressed = dir.path() / ("compressed-" + std::to_string(type));
+    const fs::path stored     = dir.path() / ("stored-" + std::to_string(type));
+    pack(root, type, true, compressed);
+    pack(root, type, false, stored);
+    EXPECT_LT(fs::file_size(compressed), fs::file_size(stored) - 4096) << "type " << type;
+    EXPECT_EQ(readWithLibbsarchpp(compressed), looseFiles(root)) << "type " << type;
+  }
+}
+
 TEST(BsArchiveAuto, NonAsciiNamesRoundTrip)
 {
   TempDir dir;

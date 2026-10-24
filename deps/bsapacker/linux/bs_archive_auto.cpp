@@ -122,6 +122,14 @@ void bs_archive_auto::save_to_disk(const fs::path& archive_path)
     libbsarchpp::Bsa bsa(archive_path, type, fileList, ddsBasePath, m_compressed,
                          m_shareData, false);
     writerCreated = true;  // the constructor opened (truncated) the file
+
+    // libbsarchpp's zlib level starts at 0, which "compresses" into stored blocks: the
+    // archive is flagged compressed and no smaller. lz4 (SSE, SFdds) has its own default
+    if (type == libbsarchpp::TES4 || type == libbsarchpp::FO3 ||
+        type == libbsarchpp::FO4 || type == libbsarchpp::FO4dds ||
+        type == libbsarchpp::SF) {
+      bsa.setCompressionLevel(6);  // zlib's default level
+    }
     for (const auto& file : m_files) {
       bsa.addFile(file.root_dir, file.path_on_disk);
     }
