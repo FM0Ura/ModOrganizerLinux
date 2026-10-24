@@ -196,10 +196,11 @@ class BG3Utils:
         } and hasattr(self, setting):
             delattr(self, setting)
 
-    def warn_load_order_unavailable(self) -> None:
+    def warn_load_order_unavailable(self, force: bool = False) -> None:
         # Linux: the load order is not generated (LSLib's Divine does not accept
-        # Unix paths); the user is told once per session
-        if self._load_order_warned:
+        # Unix paths); the user is told once per session, unless the user asked
+        # for it with a tool of the menu (force)
+        if self._load_order_warned and not force:
             return
         self._load_order_warned = True
         qWarning(

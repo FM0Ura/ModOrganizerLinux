@@ -1,3 +1,5 @@
+import sys
+
 from .bg3_tool_plugin import BG3ToolPlugin
 from .icons import download
 
@@ -12,4 +14,8 @@ class BG3ToolCheckForLsLibUpdates(BG3ToolPlugin):
 
         game_plugin = self._organizer.managedGame()
         if isinstance(game_plugin, BG3Game):
+            if sys.platform != "win32":
+                # Linux: an explicit tool always tells why nothing happens
+                game_plugin.utils.warn_load_order_unavailable(force=True)
+                return
             game_plugin.utils.lslib_retriever.download_lslib_if_missing(True)
