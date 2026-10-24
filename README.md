@@ -21,7 +21,7 @@ remaining criterion is the manual run on Bazzite
 
 Done:
 
-- Plugins beyond the Bethesda games and the FOMOD installer: BAIN and bundle installers, previews (text, images, BSA contents), BSA extraction, the basic diagnostics, the FNIS check and the INI editor/bakery tools (Phase 4c.1).
+- Plugins beyond the Bethesda games and the FOMOD installer: BAIN and bundle installers, previews (text, images, BSA contents), BSA extraction, the basic diagnostics, the FNIS check and the INI editor/bakery tools (Phase 4c.1), and the BSA Packer (BSA/BA2 creation, Phase 4e).
 - `build.sh` builds the application and every dependency from a clean Fedora 44 container
   and installs `install/bin/ModOrganizer` (+ `plugins/`, `stylesheets/`, `tutorials/`,
   `translations/`, `resources/`) and `install/lib/`.
@@ -39,7 +39,7 @@ Done:
 Limitations of Phase 1:
 
 - Virtual file system (Phases 2 and 3): the `mo2-vfs` helper mounts the merged view while a program runs and unmounts when it ends. Windows programs (`.exe`, `.bat`) run through `umu-run` in the Proton prefix of their Steam game (Phase 3); `umu-launcher` must be installed on the host, and a game never run from Steam has no prefix yet. When Mod Organizer runs in a distrobox, the helper and the programs run on the host (through `distrobox-host-exec`), so programs that exist only inside the container cannot be run from Mod Organizer. A game and a tool cannot run at the same time in the same prefix.
-- LOOT sorts the plugins (lootcli with libloot 0.29.5, started through mo2-vfs; its data folder is the Flatpak LOOT's if there is one, else `~/.local/share/LOOT`). Creating BSA archives is unavailable, there is no auto-update.
+- LOOT sorts the plugins (lootcli with libloot 0.29.5, started through mo2-vfs; its data folder is the Flatpak LOOT's if there is one, else `~/.local/share/LOOT`). BSA/BA2 creation is the BSA Packer (Phase 4e, see "Criação de BSA/BA2" below); there is no auto-update.
 - `diagnose_basic` has no NTFS file-attribute check on Linux. DDS previews are unavailable until the DDS preview plugin (Python, Phase 4d): `preview_base` leaves `.dds` to it. The FNIS check (`check_fnis`) works for Skyrim (LE) only, as upstream; it is inactive for Skyrim SE.
 - Nexus and Steam logins are kept in the Secret Service (KWallet, GNOME Keyring); without one, only until Mod Organizer closes.
 - "My Games" and AppData point into the Proton prefix of the Steam game (`compatdata/<appid>/pfx`); a game without a prefix falls back to XDG folders.
@@ -73,9 +73,10 @@ O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox F
          qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtwebsockets-devel \
          qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
          fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret \
-         python3 python3-pyqt6
+         python3 python3-pyqt6 tbb
      ```
    - Se o box `mo2-run` foi criado com uma imagem anterior à Fase 4a: `distrobox enter mo2-run -- sudo dnf -y install libsecret` (para guardar os logins no Secret Service).
+   - Se foi criado antes da Fase 4e: `distrobox enter mo2-run -- sudo dnf -y install tbb` (o BSA Packer usa o `libtbb`; com a imagem do `build/Containerfile`, o `tbb-devel` já o instala).
 2. Obtenha o artefato `mo2-linux-install`. Duas rotas:
    - **Pelo navegador:** GitHub -> repositório `FM0Ura/ModOrganizerLinux` -> aba Actions ->
      workflow **Linux** -> último run verde do branch `main` ->
@@ -138,11 +139,15 @@ O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*`, e
 
 O `basic_games` traz o suporte da comunidade a cerca de 75 módulos de jogos que não são da Bethesda. No Linux ele só enxerga jogos da **Steam**: o MO2 acha o jogo instalado pelo app ID (nas bibliotecas da Steam do usuário), e GOG, Epic, EA e Origin não são detectados (o MO2 registra isso no log, uma vez). Os documentos, as configurações e os saves do jogo ficam no prefixo do Proton dele (`<biblioteca>/steamapps/compatdata/<app ID>/pfx/drive_c/users/steamuser/…`), então **rode o jogo uma vez pela Steam** antes de criar a instância, para o Proton criar o prefixo; sem prefixo, o MO2 usa as pastas XDG e avisa no log. Os jogos validados são NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3; os demais são detectados, mas não foram testados. No Baldur's Gate 3, a ordem de carga (`modsettings.lsx`) **ainda não é gerada no Linux**: o LSLib (`Divine.dll`) rejeita caminhos Unix. O MO2 avisa isso uma vez por sessão (ao instalar um mod ou executar o jogo; as ferramentas do BG3 avisam a cada uso); gere o arquivo por fora e coloque-o no perfil, e o MO2 o mapeia para o jogo. Mods que trazem uma DLL "proxy" (Cyberpunk 2077: CET e RED4ext, com `version.dll` e `winmm.dll`; Baldur's Gate 3: Script Extender, com `DWrite.dll`; NieR:Automata: FAR, com `dinput8.dll`) **não carregam sozinhos no Linux**: as bibliotecas forçadas (`executableForcedLoads`, e a opção `force_load_dlls` do plugin do BG3) são ignoradas, e o Wine prefere a própria DLL à da pasta do jogo. Como o MO2 inicia o jogo pelo Proton, as opções de inicialização da Steam também não valem. Em **Tools → Modify Executables…**, selecione o executável do jogo e, no grupo **Proton**, na linha **Environment**, escreva `WINEDLLOVERRIDES=<dll>=n,b` (sem o `.dll`; várias DLLs separadas por vírgula): `WINEDLLOVERRIDES=version,winmm=n,b` (Cyberpunk 2077), `WINEDLLOVERRIDES=DWrite=n,b` (Baldur's Gate 3) ou `WINEDLLOVERRIDES=dinput8=n,b` (NieR:Automata). O `basic_games` não precisa de pacote novo no box (o `dotnet-runtime-8.0`, se você o instalou para testar o LSLib, pode ser removido: `sudo dnf remove dotnet-runtime-8.0`).
 
+### Criação de BSA/BA2
+
+**Ferramentas → BSA Packer** empacota os arquivos soltos de um mod num `.bsa` (Morrowind, Oblivion, Fallout 3/NV, Skyrim, Skyrim SE) ou `.ba2` (Fallout 4 e Starfield, com as texturas num `… - Textures.ba2` à parte) na pasta do mod. Em **Configurações → Plugins → BSA Packer**: `create_plugins` cria o plugin vazio (`.esp`/`.esl`) que faz o jogo carregar o arquivo; `hide_loose_assets` esconde os arquivos soltos (as pastas viram `….mohidden`); `blacklisted_files` lista as extensões que ficam de fora; `compress_archives` comprime. É o plugin `bsapacker` do upstream: no Linux o arquivo é escrito pelo `libbsarchpp` (no Windows, pelo `libbsarch`, que só existe lá); o resultado é o mesmo formato, mas os arquivos LZ4 (Skyrim SE, Starfield) não são idênticos byte a byte aos do xEdit. O alvo da validação é o Skyrim SE (teste manual pendente); os demais jogos são suportados, não validados (só pelos testes automáticos). Um único arquivo acima de 4 GiB não é criado (o motivo vai para o log: `failed to write archive <caminho>: <mensagem>`). O `libbsa_packer.so` usa o `libtbb` do box (pacote `tbb`).
+
 ## Building
 
 The build environment is defined once, in [`build/Containerfile`](build/Containerfile)
 (Fedora 44: GCC, CMake, Ninja, Qt 6 incl. WebEngine/NetworkAuth/WebSockets, Boost, spdlog,
-fmt, lz4, zlib, gtest, gmock, fuse3, clang-tools-extra, Rust stable, and, for the Python
+fmt, lz4, zlib, gtest, gmock, gsl-lite, tbb, fuse3, clang-tools-extra, Rust stable, and, for the Python
 plugins, `python3-devel pybind11-devel python3-pyqt6 python3-pyqt6-devel python3-pip
 python3-pytest sip6`). CI uses the same file. If
 `fedora:44` is ever unavailable, use the latest stable Fedora tag and note it here.
@@ -172,11 +177,11 @@ podman run --rm -v "$PWD/..:/work:Z" -w /work/ModOrganizerLinux mo2-linux-build 
 
 Building in a Fedora 44 box that was not created from that image needs, besides the other
 dependencies, the Python packages `python3-devel pybind11-devel python3-pyqt6
-python3-pyqt6-devel python3-pip python3-pytest sip6` and `gmock-devel`:
+python3-pyqt6-devel python3-pip python3-pytest sip6`, `gmock-devel`, `gsl-lite-devel` and `tbb-devel`:
 
 ```sh
 distrobox enter mo2-run -- sudo dnf install -y python3-devel pybind11-devel python3-pyqt6 \
-    python3-pyqt6-devel python3-pip python3-pytest sip6 gmock-devel
+    python3-pyqt6-devel python3-pip python3-pytest sip6 gmock-devel gsl-lite-devel tbb-devel
 ```
 
 ### With distrobox (Bazzite)

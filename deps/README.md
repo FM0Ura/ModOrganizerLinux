@@ -140,6 +140,48 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   `git subtree pull` that touches these upstream functions will conflict, and must keep
   the patches (see the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games
   --tests` runs `tests/basic-games` against the installed package.
+- **`bsapacker`** (the BSA Packer tool, Phase 4e) carries Linux patches that are not
+  upstream, all inside `deps/bsapacker` (spec of Phase 4e, section 3; the subtree itself is
+  byte-identical to upstream `de1d783`). On Windows it keeps using `libbsarch`; on Linux:
+  - `linux/include/libbsarch/` (new): replacements of `libbsarch.h` and
+    `bs_archive_auto.hpp` with the names the sources use; `linux/bs_archive_auto.cpp` (new)
+    writes the archives with libbsarchpp (`build/libbsarchpp`, 1.0.7, static), through its
+    7-argument constructor only and on a single thread. Not taken from Kaedras's fork (its
+    wrapper never adds the files). A write failure logs `failed to write archive <path>:
+    <message>` (warning) and removes the partial file (only if the file did not exist before
+    or writing had started); packing with nothing to pack logs only at debug level
+    (`no files to pack into <path>`), creates nothing and keeps an existing archive of that
+    name. The zlib archive types (TES4, FO3, FO4, FO4dds, SF) get compression level 6,
+    because libbsarchpp's default level 0 writes stored blocks. Git checks these new
+    `linux/` files out with CRLF (the subtree's `.gitattributes`): harmless.
+  - `src/CMakeLists.txt`: the current Windows lines under `if (WIN32)`; on Linux,
+    libbsarchpp, `linux/`, no `BSArchive*.cpp`, and `CXX_VISIBILITY_PRESET default`
+    (`cmake_common` hides symbols, and only some upstream headers use `BSAPACKER_EXPORT`;
+    the test executable needs them to link).
+  - `CMakeLists.txt`: `linux/tests` (Linux only, with `BUILD_TESTING`; round trips of every
+    archive format, read back with libbsarchpp and, where it reads them, `bsatk`).
+  - `src/TextureArchiveBuilder.cpp`: `DirectXTex.h` and the body of `DDSCallback` under
+    `#ifdef _WIN32` (libbsarchpp reads the DDS headers).
+  - Test fixes that apply on every platform (`deps/bsapacker: tests:`):
+    `tests/MockOrganizer.h` follows the current `IOrganizer` (the upstream mock did not
+    compile against `deps/uibase`) and `tests/ModDtoFactoryFacts.cpp` (the New Vegas test
+    names its archive `plugin.esp`; upstream it fails on every platform).
+
+  libbsarchpp is not a subtree: `build/libbsarchpp/build-libbsarchpp.sh` (target
+  `libbsarchpp` of `build.sh`) downloads libbsarchpp 1.0.7 (`211a681`,
+  https://github.com/Kaedras/libbsarchpp) and boost-ext/di v1.3.2 (`20b6454`,
+  https://github.com/boost-ext/di, the header `boost/di.hpp` only) at pinned commits into
+  `build-out/libbsarchpp`. It builds the library static and PIC with its own
+  `config.cmake.in`: the package config libbsarchpp installs calls `find_dependency`
+  without including its macro and redefines `lz4::lz4`. Defects found in 1.0.7 and worked
+  around: the 4-argument create constructor leaves the object uninitialized (only the
+  7-argument one is used); the zlib compression level starts at 0 (see above);
+  `extractFileData` unlocks a lock that is held only when multithreaded (EPERM when reading
+  FO4dds/SFdds single-threaded; reading only, MO2 reads archives with `bsatk`). Its own
+  `Fast.*` tests are commented out upstream, and the `ctest` run excludes gtest's
+  uninstantiated-suite self-check (the per-game suites need game data). At run time
+  `libbsa_packer.so` needs `libtbb`, `liblz4`, `libz` and Qt6Concurrent of the box's system
+  Qt. A `git subtree pull` of `bsapacker` conflicts only where these files changed upstream.
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 

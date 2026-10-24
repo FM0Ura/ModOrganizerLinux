@@ -3,12 +3,24 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-24
-**Fase atual:** 4d.2 — `basic_games` · **Status:** 🟡 revisão final concluída; PR #8 aberto; teste manual pendente · **Anterior:** 4d.1 (🟡 PR #7, CI verde; teste manual pendente)
-**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`). **Branch da Fase 4d.2:** `fase-4d2-basic-games` (a partir de `fase-4d1-python`; worktree `../ModOrganizerLinux-4d2`)
+**Fase atual:** 4e — criação de BSA/BA2 (`bsapacker` com o `libbsarchpp`) · **Status:** 🟡 implementação concluída; push, CI e teste manual pendentes · **Anterior:** 4d.2 (🟡 PR #8, `basic_games`; teste manual pendente)
+**Branch principal:** `main` (Fases 1 a 4a; `fase-2-vfs-fuse`, `fase-3-steam-proton` e `fase-4a-nexus` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`). **Branch da Fase 4d.2:** `fase-4d2-basic-games` (a partir de `fase-4d1-python`; worktree `../ModOrganizerLinux-4d2`). **Branch da Fase 4e:** `fase-4e-bsa` (a partir de `fase-4d2-basic-games`; worktree `../ModOrganizerLinux-4e`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 4e — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md`](docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md) · Plano: [`docs/superpowers/plans/2026-10-24-phase4e-bsa.md`](docs/superpowers/plans/2026-10-24-phase4e-bsa.md) · Checklist manual: [`docs/testing/phase4e-manual-checklist.md`](docs/testing/phase4e-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | `libbsarchpp` 1.0.7 e `boost-ext/di` v1.3.2 no build (alvo `libbsarchpp`, `build/libbsarchpp/`, com um `config.cmake.in` próprio, porque o do upstream chama `find_dependency` sem incluir a macro e redefine o `lz4::lz4`); `gsl-lite-devel tbb-devel` na imagem do container; com `--tests`, os testes do `libbsarchpp` que não pedem jogo e um projeto consumidor que cria e reabre um arquivo | ✅ | `5707fcd` |
+| 2 | `bsapacker`: subtree (split `de1d783`, hash em `deps/README.md`), alvo no `build.sh`. Patches Linux em `deps/bsapacker`: `linux/include/libbsarch/` e `linux/bs_archive_auto.cpp` (o `libbsarch` sobre o `libbsarchpp`, só o construtor de 7 argumentos, uma thread), `src/CMakeLists.txt` (as linhas do Windows em `if (WIN32)`; no Linux, `libbsarchpp`, `linux/`, sem os `BSArchive*.cpp` e `CXX_VISIBILITY_PRESET default`, porque o `cmake_common` esconde os símbolos e só alguns cabeçalhos do upstream usam `BSAPACKER_EXPORT`, o que o executável de testes precisa para ligar), `CMakeLists.txt` (`linux/tests`) e `src/TextureArchiveBuilder.cpp` (DirectXTex e o corpo do `DDSCallback` em `#ifdef _WIN32`). Correções de teste que valem em toda plataforma: `MockOrganizer.h` segue o `IOrganizer` atual (o do upstream não compilava contra o `deps/uibase`) e o teste do New Vegas dá nome ao arquivo (`plugin.esp`; quebrado no upstream em qualquer plataforma). A revisão pediu que um arquivo já existente fique intacto quando nada é gravado | ✅ | subtree (`297fa8b`, `af27c2d`), `867aef3`, `4fff653`, `61fe90f`, `f22a1e8`, `c15cf37`, `40e3e85` |
+| 3 | Todos os formatos, DDS e erros: ida e volta do `bs_archive_auto` em TES3, TES4, FO3, SSE, FO4, FO4dds, SF e SFdds (comprimidos e sem compressão), lidos de volta pelo `libbsarchpp` e, onde ele lê, pelo `bsatk`; nomes não ASCII, pacote vazio e destino sem permissão. Achado: o `libbsarchpp` 1.0.7 começa o nível do zlib em 0 (blocos sem compressão), e o `bs_archive_auto` passou a usar o nível 6 nos tipos zlib | ✅ | `780d621`, `91df3e5` |
+| 4 | Documentação, checklist e ponto de controle de CI: README (seção "Criação de BSA/BA2" e pacotes do box), notas do `bsapacker` em `deps/README.md`, checklist, ROADMAP e STATE; `./build.sh --tests` completo verde em `91df3e5` + docs (`==> done`; `bsa_packer_tests` e `bsa_packer_linux_tests`: 50/50 no `ctest`, o plugin carrega no `plugin-load`, o smoke carrega os 30 plugins, e os testes ponta a ponta do VFS e do LOOT passam); o push e o PR dependem da autorização do usuário | ✅ | este commit e o `[windows-ci]` |
+| 5 | Teste manual no Bazzite ([`docs/testing/phase4e-manual-checklist.md`](docs/testing/phase4e-manual-checklist.md)) | ⚪ pendente | — |
 
 ## Fase 4d.2 — progresso
 
@@ -219,6 +231,8 @@ Spec: [`docs/superpowers/specs/2026-10-15-phase2-vfs-fuse-design.md`](docs/super
 
 ## Pacote para o teste manual
 
+Fase 4e (ainda sem PR): o pacote é o `install/` do worktree `../ModOrganizerLinux-4e` (`./build.sh` na distrobox `mo2-run`), que contém as Fases 4b a 4e, porque os branches são empilhados; o box precisa do pacote `tbb` (README). Checklist: `docs/testing/phase4e-manual-checklist.md`, depois de `phase4b-…` a `phase4d2-…`.
+
 Fases 4b a 4d.2 (PRs #3 a #8, empilhados): um só build cobre todas, porque cada branch contém os anteriores. O pacote é a compilação local do worktree `../ModOrganizerLinux-4d2` (`./build.sh` na distrobox `mo2-run`, resultado em `install/` do worktree, com o `mo2-vfs` em `install/bin/` e o `lootcli` em `install/bin/loot/`), iniciada pelo box (com `python3 python3-pyqt6`); ou o artefato `mo2-linux-install` de um run Linux verde do PR #8 (restaure a permissão de execução de `bin/ModOrganizer` e `bin/mo2-vfs`). Ordem dos checklists: `docs/testing/phase4b-manual-checklist.md`, `phase4c1-…`, `phase4c2-…`, `phase4c3-…`, `phase4d1-…` e `phase4d2-…` (NieR:Automata, Cyberpunk 2077 e Baldur's Gate 3 rodados ao menos uma vez pela Steam, para o prefixo do Proton existir).
 
 (Fase 4a, já no `main`: checklist em `docs/testing/phase4a-manual-checklist.md`.)
@@ -231,11 +245,24 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
-1. CI do PR #8 (Linux e Windows pelo `[windows-ci]`); os PRs #3 a #7 estão com os dois CIs verdes.
-2. Testes manuais do usuário, na ordem 4b → 4c.1 → 4c.2 → 4c.3 → 4d.1 → 4d.2, com o build da 4d.2 (seção acima) e **com o MO2 iniciado pelo box**.
-3. Merges no `main` na ordem PR #3 → #8, cada PR redirecionado ao `main` depois do merge do anterior; as specs passam a "aprovada; implementada".
-4. Fase 4e (criação de BSA/BA2) e Fase 5 (distribuição).
+1. CI do PR #8 (Linux e Windows pelo `[windows-ci]`); os PRs #3 a #7 estão com os dois CIs verdes. Fase 4e: push do branch `fase-4e-bsa` e PR contra `fase-4d2-basic-games`, com a autorização do usuário, e CI Linux e Windows (`[windows-ci]`) verdes.
+2. Testes manuais do usuário, na ordem 4b → 4c.1 → 4c.2 → 4c.3 → 4d.1 → 4d.2 → 4e, com o build da 4e (seção acima) e **com o MO2 iniciado pelo box**; o da 4e é `docs/testing/phase4e-manual-checklist.md`.
+3. Merges no `main` na ordem PR #3 → #8 (e o da 4e depois), cada PR redirecionado ao `main` depois do merge do anterior; as specs passam a "aprovada; implementada".
+4. Fase 5 (distribuição).
 5. Resolver a pendência de compilar os `deps/` com nossos patches no Windows.
+
+## Limitações conhecidas da Fase 4e
+
+- Só o Skyrim SE é o alvo da validação (teste manual pendente). Morrowind, Oblivion, Fallout 3/New Vegas, Skyrim LE, Fallout 4 e Starfield são suportados, não validados num jogo: só pelos testes automáticos de ida e volta.
+- Um arquivo acima de 4 GiB não é criado: o `libbsarchpp` recusa (o xEdit cria). O `bsapacker` já divide em vários arquivos acima de 2 GiB (4 GiB para texturas), então só um arquivo único maior que isso falha; o motivo vai para o log (`failed to write archive <caminho>: <mensagem>`, aviso), o arquivo parcial é apagado e o arquivo não é listado como criado.
+- Os arquivos LZ4 (Skyrim SE, Skyrim VR, Starfield com DDS) não são idênticos byte a byte aos do xEdit (o `libbsarchpp` usa um LZ4 atual); o jogo os lê.
+- Empacotar sem nada a empacotar (tudo na lista negra, pasta vazia, ou um mod do Fallout 4/Starfield sem texturas) não cria nada e só aparece no log em nível de depuração (`no files to pack into <caminho>`); um arquivo existente com esse nome é mantido.
+- O empacotamento usa uma thread (o modo com threads do `libbsarchpp` muda a ordem dos dados).
+- Defeitos do `libbsarchpp` 1.0.7 contornados (nenhuma issue aberta, decisão do usuário): o construtor de criação de 4 argumentos deixa o objeto sem inicializar (só o de 7 é usado); o nível do zlib começa em 0 (blocos sem compressão; o `bs_archive_auto` usa 6 nos tipos zlib); `extractFileData` destrava um lock que só é travado com threads (EPERM ao ler FO4dds/SFdds sem threads; só leitura, o MO2 lê com o `bsatk`, e os testes abrem o leitor com threads); o pacote CMake dele precisou de um `config.cmake.in` nosso. Os testes `Fast.*` do `libbsarchpp` estão comentados no upstream e o `ctest` dele exclui a verificação de suítes não instanciadas do gtest (as suítes por jogo pedem os dados do jogo).
+- Os arquivos novos de `deps/bsapacker/linux/` saem com CRLF no checkout, pelo `.gitattributes` do subtree (inofensivo).
+- O `libbsa_packer.so` precisa do `libtbb` (pacote `tbb`), do `liblz4`, do `libz` e do Qt6Concurrent do Qt do sistema do box.
+- No Windows o `bsapacker` continua no `libbsarch`; o código Windows do subtree não é compilado no CI (o CI do Windows só compila `deps/modorganizer`).
+- Valem as limitações das Fases 1 a 4d.2.
 
 ## Limitações conhecidas da Fase 4d.2
 
@@ -342,7 +369,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 - (Fase 1) Sem VFS: resolvido na Fase 2 para programas nativos e na Fase 3 para jogos Proton.
 - ~~"Executar" mostra aviso; jogos e ferramentas não iniciam~~ (resolvido na Fase 3; teste manual aprovado em 2026-10-18).
-- ~~Sem LOOT~~ (resolvido na Fase 4b), sem criação de BSA, sem atualização automática, sem plugins Python, ~~sem `nxm://`~~ (resolvido na Fase 4a, pendente do teste manual) (Fase 4/5).
+- ~~Sem LOOT~~ (resolvido na Fase 4b), ~~sem criação de BSA~~ (resolvido na Fase 4e, pendente do teste manual), sem atualização automática, sem plugins Python, ~~sem `nxm://`~~ (resolvido na Fase 4a, pendente do teste manual) (Fase 4/5).
 - ~~Logins do Nexus/Steam ficam só em memória (perdidos ao fechar)~~ (resolvido na Fase 4a: Secret Service; sem ele, só em memória).
 - ~~"My Games"/"AppData" apontam para pastas XDG~~ (Fase 3 leva para o prefixo do Proton; sem prefixo, volta às XDG).
 - Lixeira só funciona no mesmo sistema de arquivos da home; em outro disco a remoção falha sem apagar nada.
@@ -408,6 +435,12 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 | 2026-10-21 | Fase 4d.2, abordagem A (decisão do usuário): o `steam::findApp()` do `uibase` é exposto como `mobase.utils.steamApp` (só no Linux), o `find_games()` da Steam é preguiçoso (consulta por app ID, não lista) e `%USERPROFILE%`/`%DOCUMENTS%` apontam para o prefixo do Proton do app ID do jogo (fallback XDG com aviso, uma vez por jogo) |
 | 2026-10-21 | Fase 4d.2, spike do LSLib (Task 1) e adiamento (decisão do usuário): o `dotnet Divine.dll` falha no Linux (`TryToValidatePath` usa `System.Uri`, e um caminho Unix vira URI relativa: código 134 em toda ação), então a ordem de carga do BG3 fica para depois; no Linux o plugin do BG3 não baixa nem roda o LSLib e avisa o usuário uma vez por sessão; sem pacote novo (`dotnet-runtime-8.0` dispensável) |
 | 2026-10-21 | Fase 4d.2: as compilações usam um `TMPDIR` por worktree (`TMPDIR=/tmp/mo2t`); execuções de smoke simultâneas com o mesmo `TMPDIR` colidiam na memória compartilhada da instância única do Qt (o antigo "erro de SHM") |
+| 2026-10-24 | Fase 4e, escopo e abordagem A (decisão do usuário): o `bsapacker` do upstream por `git subtree`, com patches Linux nossos em `deps/bsapacker` (o port do Kaedras serve de referência, não de fonte: o wrapper dele nunca adiciona os arquivos ao `Bsa`, usa um ponteiro nulo no DDS e o `libbsarchpp` 1.0.7 tem o construtor de criação de 4 argumentos quebrado); `libbsarchpp` 1.0.7 estático dentro do plugin; todos os formatos do `bsapacker`, validados só no Skyrim SE; o Windows continua no `libbsarch`. Spec §1 |
+| 2026-10-24 | Fase 4e: nenhuma issue aberta no upstream (`Kaedras/*`, `ModOrganizer2/*`) pelos defeitos achados, decisão do usuário |
+| 2026-10-24 | Fase 4e: cabeçalhos de compatibilidade do `libbsarch` só no Linux (`deps/bsapacker/linux/include`), em vez de trocar os tipos nos ~30 fontes do upstream: o código Windows não muda e os patches nos fontes ficam em dois pontos (DirectXTex em `#ifdef _WIN32` e o CMake). Spec §3.1 |
+| 2026-10-24 | Fase 4e, revisão da Task 2: o `bs_archive_auto` do Linux só apaga o destino se ele não existia antes ou se o `libbsarchpp` já o tinha aberto (truncado); sem nada a empacotar lança antes de tocar em qualquer arquivo e registra só em nível de depuração, para não gerar aviso em cada pacote de Fallout 4/Starfield sem texturas |
+| 2026-10-24 | Fase 4e, Task 2: dois consertos de teste valem em toda plataforma e entram como `deps/bsapacker: tests:` (o `MockOrganizer` do upstream não compilava contra o `deps/uibase`; o teste do New Vegas falha no upstream em qualquer plataforma porque o diálogo falso não dá nome ao arquivo); nenhum teste foi excluído |
+| 2026-10-24 | Fase 4e, Task 3: o `bs_archive_auto` usa o nível 6 do zlib nos tipos TES4, FO3, FO4, FO4dds e SF, porque o padrão 0 do `libbsarchpp` 1.0.7 grava blocos sem compressão marcados como comprimidos |
 
 ## Pendências por fase
 

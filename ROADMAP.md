@@ -21,7 +21,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 4c.3 | Ferramentas pelo VFS | BodySlide, Nemesis/Pandora, xEdit de outros jogos | Ferramentas pelo VFS (critério 6) | 🟡 Em andamento |
 | 4d.1 | Plugins Python — runtime | `plugin_python` (pybind11 + Python 3.14 + PyQt6 do Fedora) + seis plugins (preview_dds, form43_checker, script_extender_plugin_checker, tool_configurator, installer_wizard, fnistool) | Todas as funcionalidades | 🟡 Em andamento |
 | 4d.2 | `basic_games` | Suporte a jogos da comunidade (`basic_games`) sobre o runtime da 4d.1 | Todas as funcionalidades | 🟡 Em andamento |
-| 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ⚪ Não iniciada |
+| 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | 🟡 Em andamento |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
 
 ## Fase 1 — Build nativo
@@ -86,12 +86,14 @@ Fase 4d.1 — Spec: [`docs/superpowers/specs/2026-10-21-phase4d1-python-design.m
 
 Fase 4d.2 — Spec: [`docs/superpowers/specs/2026-10-21-phase4d2-basic-games-design.md`](docs/superpowers/specs/2026-10-21-phase4d2-basic-games-design.md) · Plano: [`docs/superpowers/plans/2026-10-21-phase4d2-basic-games.md`](docs/superpowers/plans/2026-10-21-phase4d2-basic-games.md) · Checklist manual: [`docs/testing/phase4d2-manual-checklist.md`](docs/testing/phase4d2-manual-checklist.md)
 
+Fase 4e — Spec: [`docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md`](docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md) · Plano: [`docs/superpowers/plans/2026-10-24-phase4e-bsa.md`](docs/superpowers/plans/2026-10-24-phase4e-bsa.md) · Checklist manual: [`docs/testing/phase4e-manual-checklist.md`](docs/testing/phase4e-manual-checklist.md)
+
 - (4d.1) `plugin_python` (pybind11 + Python 3.14 e PyQt6 do sistema) e os seis plugins Python pequenos (DDS, formato 43, script extender, Configurator, BAIN com wizard, FNIS).
 - (4d.2) `basic_games` (os jogos definidos em Python), com a detecção pela Steam e pelo Proton; a ordem de carga do Baldur's Gate 3 (LSLib) fica para quando o LSLib aceitar caminhos Unix.
 - (4b) `lootcli` nativo (libloot) → ordenação com LOOT.
 - (4a) Handler `nxm://` (`.desktop` + `xdg-mime`) → downloads pelo site do Nexus.
 - (4c.1) Demais plugins C++ (BAIN, bundle, previews, extração de BSA, diagnósticos, FNIS, INI); (4c.3) ferramentas pelo VFS; detecção completa de jogos via `steam/`.
-- (4e) Criação de BSA/BA2 com alternativa nativa ao `libbsarch`.
+- (4e) Criação de BSA/BA2: o `bsapacker` do upstream com o `libbsarchpp` no Linux (o `libbsarch` é só Windows).
 - (4a) Armazenamento seguro de credenciais (Nexus/Steam) via Secret Service/keyring.
 
 ## Fase 5 — Distribuição
