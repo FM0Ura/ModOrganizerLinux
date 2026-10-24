@@ -15,13 +15,13 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 2 | VFS FUSE | Processo auxiliar Rust `mo2-vfs` + integração no `VfsConnector` | Testes de integração passando; "Executar" de um programa Linux nativo mostra a visão virtual montada | ✅ Concluída (2026-10-17) |
 | 3 | Steam/Proton | Descoberta de jogos e prefixos; execução de `.exe` via Proton com VFS montado | Skyrim SE + SKSE rodando com mods | ✅ Concluída (2026-10-18) |
 | 4a | Nexus + `nxm://` + keyring | Login do Nexus lembrado (Secret Service); MO2 registra-se como handler de `nxm://`; downloads pelo site do Nexus | Baixar e instalar mod do Nexus por `nxm://`, inclusive FOMOD (critério 3) | ✅ Concluída (2026-10-18) |
-| 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | 🟡 Em andamento |
-| 4c.1 | Plugins C++ restantes | installer_bain, installer_bundle, preview_base, preview_bsa, bsa_extractor, diagnose_basic, check_fnis, tool_inieditor, tool_inibakery | Todas as funcionalidades | 🟡 Em andamento |
-| 4c.2 | Pendências da Fase 2 | as 6 pendências adiadas do teste manual e da revisão final da Fase 2 | — | 🟡 Em andamento |
-| 4c.3 | Ferramentas pelo VFS | BodySlide, Nemesis/Pandora, xEdit de outros jogos | Ferramentas pelo VFS (critério 6) | 🟡 Em andamento |
-| 4d.1 | Plugins Python — runtime | `plugin_python` (pybind11 + Python 3.14 + PyQt6 do Fedora) + seis plugins (preview_dds, form43_checker, script_extender_plugin_checker, tool_configurator, installer_wizard, fnistool) | Todas as funcionalidades | 🟡 Em andamento |
-| 4d.2 | `basic_games` | Suporte a jogos da comunidade (`basic_games`) sobre o runtime da 4d.1 | Todas as funcionalidades | 🟡 Em andamento |
-| 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | 🟡 Em andamento |
+| 4b | LOOT | `lootcli` nativo com libloot, masterlist, `plugins.txt` no prefixo | Ordenação com LOOT (critério 4) | ✅ Concluída (2026-10-24) |
+| 4c.1 | Plugins C++ restantes | installer_bain, installer_bundle, preview_base, preview_bsa, bsa_extractor, diagnose_basic, check_fnis, tool_inieditor, tool_inibakery | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
+| 4c.2 | Pendências da Fase 2 | as 6 pendências adiadas do teste manual e da revisão final da Fase 2 | — | ✅ Concluída (2026-10-24; o item 3 do teste manual, helper travado, falhou e ficou para depois da Fase 5) |
+| 4c.3 | Ferramentas pelo VFS | BodySlide, Nemesis/Pandora, xEdit de outros jogos | Ferramentas pelo VFS (critério 6) | ✅ Concluída (2026-10-24) |
+| 4d.1 | Plugins Python — runtime | `plugin_python` (pybind11 + Python 3.14 + PyQt6 do Fedora) + seis plugins (preview_dds, form43_checker, script_extender_plugin_checker, tool_configurator, installer_wizard, fnistool) | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
+| 4d.2 | `basic_games` | Suporte a jogos da comunidade (`basic_games`) sobre o runtime da 4d.1 | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
+| 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
 | 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
 
 ## Fase 1 — Build nativo
