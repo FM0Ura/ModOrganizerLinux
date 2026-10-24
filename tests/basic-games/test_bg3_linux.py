@@ -80,3 +80,33 @@ def test_other_executables_do_not_warn(bg3, qt_messages):
     game, _, calls, boxes = bg3
     assert game.utils.construct_modsettings_xml(exec_path="/tools/other.exe") is True
     assert boxes == [] and calls == []
+
+
+def test_the_explicit_tools_always_tell_why_nothing_happens(bg3, qt_messages):
+    from basic_games.games.baldursgate3.plugins import createPlugins
+
+    game, _, calls, boxes = bg3
+    organizer = MagicMock()
+    organizer.managedGame.return_value = game
+    tools = {t.sub_name: t for t in createPlugins()}
+    for name in ("Check For LsLib Updates", "Reparse Pak Metadata"):
+        tools[name].init(organizer)
+
+    # the automatic trigger already told the user in this session
+    game.utils.on_mod_installed(MagicMock())
+    assert len(boxes) == 1
+
+    # each use of a tool shows the dialog again (and logs the reason)
+    for name in ("Check For LsLib Updates", "Reparse Pak Metadata") * 2:
+        before = len(boxes)
+        tools[name].display()
+        assert len(boxes) == before + 1, name
+
+    assert calls == []
+    logged = [m for m in qt_messages if "load order" in m and "Linux" in m]
+    assert len(logged) == 5
+
+    # the automatic triggers stay silent after that
+    game.utils.on_mod_installed(MagicMock())
+    game.utils.construct_modsettings_xml(exec_path="/g/bin/bg3.exe")
+    assert len(boxes) == 5
