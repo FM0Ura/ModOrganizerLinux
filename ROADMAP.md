@@ -102,6 +102,23 @@ Fase 4e — Spec: [`docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md`](do
 - CI de release, separação de símbolos de depuração, documentação de usuário.
 - Atualização automática.
 
+## Depois da Fase 5 — correções dos testes manuais de 2026-10-24
+
+Decisão do usuário: corrigir depois da Fase 5. Detalhes e diagnóstico em [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase) ("Testes manuais de 2026-10-24").
+
+- Queda ao reiniciar o MO2 pela segunda vez no mesmo processo (trocar ou criar instância): `aboutToQuit` emitido a cada reinício apaga duas vezes o contexto OpenGL de reserva do QtWebEngine.
+- Queda em `TutorialControl::lockUI` (tutorial).
+- Helper travado (4c.2, item 3): a interface trava num `statx` dentro do mount.
+- Baldur's Gate 3: versão nativa não reconhecida; save com acento no nome não gravado pelo MO2; ordem de carga sem o LSLib.
+- Foco do jogo no KDE Wayland (hoje, uma regra de janela do KWin).
+- Log do `mo2-vfs` cheio de `ioctl` não implementados.
+- Pandora (janela) e BodySlide (prévia preta): diagnosticar.
+- NieR:Automata: reconhecer a estrutura dos mods (proposta ao upstream).
+
+## Melhorias sem fase definida
+
+- Ícones dos executáveis: ler o ícone do recurso PE do `.exe` (`RT_GROUP_ICON`/`RT_ICON`), como já se lê a versão (`details::readPeVersionInfo`); hoje o `iconForExecutable` do Linux (`uibase`) devolve o ícone genérico `application-x-executable` do tema, e a lista do **Run** mostra o mesmo ícone para todos os programas (teste manual de 2026-10-24).
+
 ## Fora de escopo (por enquanto)
 
 - Steam Deck / modo Gaming.
