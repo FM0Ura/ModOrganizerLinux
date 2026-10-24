@@ -141,13 +141,13 @@ O `basic_games` traz o suporte da comunidade a cerca de 75 módulos de jogos que
 
 ### Criação de BSA/BA2
 
-**Ferramentas → BSA Packer** empacota os arquivos soltos de um mod num `.bsa` (Morrowind, Oblivion, Fallout 3/NV, Skyrim, Skyrim SE) ou `.ba2` (Fallout 4 e Starfield, com as texturas num `… - Textures.ba2` à parte) na pasta do mod. Em **Configurações → Plugins → BSA Packer**: `create_plugins` cria o plugin vazio (`.esp`/`.esl`) que faz o jogo carregar o arquivo; `hide_loose_assets` esconde os arquivos soltos (as pastas viram `….mohidden`); `blacklisted_files` lista as extensões que ficam de fora; `compress_archives` comprime. É o plugin `bsapacker` do upstream: no Linux o arquivo é escrito pelo `libbsarchpp` (no Windows, pelo `libbsarch`, que só existe lá); o resultado é o mesmo formato, mas os arquivos LZ4 (Skyrim SE, Skyrim VR e as texturas do Starfield; os arquivos principais do Starfield usam zlib) não são idênticos byte a byte aos do xEdit. O alvo da validação é o Skyrim SE (teste manual pendente); os demais jogos são suportados, não validados (só pelos testes automáticos). Um único arquivo acima de 4 GiB não é criado (o motivo vai para o log: `failed to write archive <caminho>: <mensagem>`). O `libbsa_packer.so` usa o `libtbb` do box (pacote `tbb`).
+**Ferramentas → BSA Packer** empacota os arquivos soltos de um mod num `.bsa` (Morrowind, Oblivion, Fallout 3, Fallout: New Vegas, Skyrim, Enderal, Skyrim SE e Enderal SE) ou `.ba2` (Fallout 4 e Starfield, com as texturas num `… - Textures.ba2` à parte) na pasta do mod. Para os outros jogos (as edições VR, os jogos do `basic_games`) a ferramenta não grava nenhum arquivo, mas, com `create_plugins`/`hide_loose_assets` ligados, o upstream ainda cria o plugin e esconde as pastas. Em **Configurações → Plugins → BSA Packer**: `create_plugins` cria o plugin vazio (`.esp`/`.esl`) que faz o jogo carregar o arquivo; `hide_loose_assets` esconde os arquivos soltos (as pastas viram `….mohidden`); `blacklisted_files` deveria listar as extensões que ficam de fora, mas com o valor padrão não é aplicado (defeito do upstream, em toda plataforma: o `ArchiveBuilderHelper.cpp` separa a lista por espaços, e o padrão e a descrição usam `;`), então esses arquivos também entram no arquivo (e, com `hide_loose_assets`, ainda voltam soltos ao lugar); `compress_archives` comprime. É o plugin `bsapacker` do upstream: no Linux o arquivo é escrito pelo `libbsarchpp` (no Windows, pelo `libbsarch`, que só existe lá); o resultado é o mesmo formato, mas os arquivos LZ4 (Skyrim SE, Enderal SE e as texturas do Starfield; os arquivos principais do Starfield usam zlib) não são idênticos byte a byte aos do xEdit. Num `.bsa`, os nomes são gravados em minúsculas, como o jogo os procura; um arquivo sem extensão (por exemplo `docs/LICENSE`) fica de fora, e de dois arquivos cujos nomes só diferem em maiúsculas e minúsculas só o primeiro entra (os dois casos com um aviso no log). O alvo da validação é o Skyrim SE (teste manual pendente); os demais jogos são suportados, não validados (só pelos testes automáticos). Um único arquivo acima de 4 GiB não é criado (o motivo vai para o log: `failed to write archive <caminho>: <mensagem>`). O `libbsa_packer.so` usa o `libtbb` do box (pacote `tbb`).
 
 ## Building
 
 The build environment is defined once, in [`build/Containerfile`](build/Containerfile)
 (Fedora 44: GCC, CMake, Ninja, Qt 6 incl. WebEngine/NetworkAuth/WebSockets, Boost, spdlog,
-fmt, lz4, zlib, gtest, gmock, gsl-lite, tbb, fuse3, clang-tools-extra, Rust stable, and, for the Python
+fmt, lz4, zlib, gtest, gmock, gsl-lite, tbb, openssl, fuse3, clang-tools-extra, Rust stable, and, for the Python
 plugins, `python3-devel pybind11-devel python3-pyqt6 python3-pyqt6-devel python3-pip
 python3-pytest sip6`). CI uses the same file. If
 `fedora:44` is ever unavailable, use the latest stable Fedora tag and note it here.
@@ -177,11 +177,13 @@ podman run --rm -v "$PWD/..:/work:Z" -w /work/ModOrganizerLinux mo2-linux-build 
 
 Building in a Fedora 44 box that was not created from that image needs, besides the other
 dependencies, the Python packages `python3-devel pybind11-devel python3-pyqt6
-python3-pyqt6-devel python3-pip python3-pytest sip6`, `gmock-devel`, `gsl-lite-devel` and `tbb-devel`:
+python3-pyqt6-devel python3-pip python3-pytest sip6`, `gmock-devel`, `gsl-lite-devel`, `tbb-devel` and `openssl-devel`
+(the `libbsarchpp` tests need OpenSSL):
 
 ```sh
 distrobox enter mo2-run -- sudo dnf install -y python3-devel pybind11-devel python3-pyqt6 \
-    python3-pyqt6-devel python3-pip python3-pytest sip6 gmock-devel gsl-lite-devel tbb-devel
+    python3-pyqt6-devel python3-pip python3-pytest sip6 gmock-devel gsl-lite-devel tbb-devel \
+    openssl-devel
 ```
 
 ### With distrobox (Bazzite)

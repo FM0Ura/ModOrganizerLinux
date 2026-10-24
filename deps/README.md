@@ -44,7 +44,7 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `installer_wizard` | https://github.com/ModOrganizer2/modorganizer-installer_wizard | `master` (`d38019a994a42609376975227201531007cba9ae`) | 2025-05-29 |
 | `fnistool` | https://github.com/ModOrganizer2/modorganizer-fnistool | `master` (`6cd125da7494450f77dfbafb61a8294088f9a8fb`) | 2026-06-03 |
 | `basic_games` | https://github.com/ModOrganizer2/modorganizer-basic_games | `master` (`f1207d6398fbb4adda281f2bd5c563105391baaf`) | 2026-10-05 |
-| `bsapacker` | https://github.com/ModOrganizer2/modorganizer-bsapacker | `master` (`de1d783fbbec6b58f87cbd99b40b7ac89a78adf1`) | 2026-10-24 |
+| `bsapacker` | https://github.com/ModOrganizer2/modorganizer-bsapacker | `master` (`de1d783fbbec6b58f87cbd99b40b7ac89a78adf1`) | 2025-05-29 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`
