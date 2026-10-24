@@ -7,6 +7,10 @@
 
 #include "known_folders.h"
 
+#ifndef _WIN32
+#include <uibase/linux/steam.h>
+#endif
+
 namespace py = pybind11;
 using namespace MOBase;
 
@@ -34,6 +38,27 @@ namespace mo2::python {
                 return r.isEmpty() ? py::none{} : py::cast(r);
             },
             py::arg("known_folder"));
+
+#ifndef _WIN32
+        // Linux: the installed Steam game with this app ID, from the files of the
+        // Steam client (uibase, Phase 3); None if it is not installed
+        m.def(
+            "steamApp",
+            [](QString appId) -> py::object {
+                const auto app = MOBase::steam::findApp(appId);
+                if (!app) {
+                    return py::none();
+                }
+                py::dict d;
+                d["appId"]      = app->appId;
+                d["root"]       = app->root;
+                d["library"]    = app->library;
+                d["gamePath"]   = app->gamePath;
+                d["compatData"] = app->compatData;
+                return d;
+            },
+            py::arg("app_id"));
+#endif
 
         m.def("getFileVersion", wrap_for_filepath(&MOBase::getFileVersion),
               py::arg("filepath"));

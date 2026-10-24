@@ -43,6 +43,7 @@ baseline `1316300c059f9dc6eddbdd19c57d3415a1779fee`.
 | `tool_configurator` | https://github.com/ModOrganizer2/modorganizer-tool_configurator | `master` (`22b6243ea47b4e28ee788d3b184db42489c7d4dc`) | 2026-05-21 |
 | `installer_wizard` | https://github.com/ModOrganizer2/modorganizer-installer_wizard | `master` (`d38019a994a42609376975227201531007cba9ae`) | 2025-05-29 |
 | `fnistool` | https://github.com/ModOrganizer2/modorganizer-fnistool | `master` (`6cd125da7494450f77dfbafb61a8294088f9a8fb`) | 2026-06-03 |
+| `basic_games` | https://github.com/ModOrganizer2/modorganizer-basic_games | `master` (`f1207d6398fbb4adda281f2bd5c563105391baaf`) | 2026-10-05 |
 | `modorganizer` | https://github.com/ModOrganizer2/modorganizer | `master` (`4ba22f0d8b6f9e08e44008b8395cd774551b4ebe`) | 2026-10-05 |
 
 The date is the upstream commit date. `git log -1 --grep 'git-subtree-dir: deps/<name>$'`
@@ -86,6 +87,11 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   it loads `libpython` and `plugin_python/dlls/librunner.so` with `dlopen` (the runner
   exports `mo2_create_python_runner`), so that a missing Python is reported by the
   plugin; `build.sh --tests` checks that neither is `NEEDED` by `plugin_python.so`.
+  On Linux only (`#ifndef _WIN32`), `mobase.utils.steamApp(app_id)` exposes
+  `MOBase::steam::findApp()` of uibase to Python (a dict with `appId`, `root`, `library`,
+  `gamePath` and `compatData`, or `None` when the app is not installed); `basic_games` is
+  the user. It sits in `src/mobase/wrappers/utils.cpp`, with its pytest in
+  `tests/python/test_steam.py` (`deps/plugin_python: Linux: mobase.utils.steamApp`).
 - **`fnistool`**, **`installer_wizard`**, **`script_extender_plugin_checker`** and
   **`tool_configurator`** (Python plugins) carry Linux fixes that are not upstream, each
   in `if sys.platform == "win32": ... else: ...`: `fnistool` passes `RedirectFiles` as a
@@ -96,6 +102,43 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   the success file of the pip requirements (`mo2_python.cmake`) is touched with
   `cmake -E touch` on Linux. A `git subtree pull` of any of them must keep these (see the
   `deps/<name>: Linux:` commits).
+- **`basic_games`** (Python meta-plugin of about 75 game modules that are not Bethesda's, with
+  its pip requirements installed in `lib/`) carries Linux fixes that are not upstream:
+  the stores are only asked for what Linux has. `steam_utils.find_games()` returns a lazy
+  mapping of app ID to game folder whose queries call `mobase.utils.steamApp` (it cannot
+  be listed, so `items()` is empty), `find_steam_path()` returns `None`; `gog_utils`,
+  `epic_utils`, `origin_utils` and `eadesktop_utils` return `{}` and log once that only
+  Steam games are detected; `winreg` is imported only on Windows (also in
+  `games/game_oblivion_remaster.py`, whose `getLootPath()` returns `None`); and, on
+  Linux only, `createPlugins()` skips a game module that failed to import instead of
+  registering the classes of the previous one again, and `BasicGame.setGamePath()`
+  records which of the game's Steam app IDs is installed in the given path (the Windows
+  code iterates the list of Steam games, which Linux cannot produce). The new
+  `proton_utils.py` resolves `%USERPROFILE%`, `%DOCUMENTS%` and the default documents
+  folder (`replace_variables()` and `_default_documents_directory()` in `basic_game.py`)
+  into the Proton prefix of the game's Steam app ID (`<compatData>/pfx/drive_c/users/steamuser`),
+  falling back to the XDG folders with a one-time warning when a Steam game has no
+  prefix. In `games/baldursgate3`, `LSLibRetriever.download_lslib_if_missing()` (the one
+  gate of the load-order generation, the mod-installed hook and the "Check For LsLib
+  Updates" tool) returns `False` on Linux before any download or process, because LSLib's
+  `Divine` rejects every Unix path; `BG3Utils.warn_load_order_unavailable()` logs the
+  reason and tells the user once per session (the explicit "Check For LsLib Updates" and
+  "Reparse Pak Metadata" tools force it every time). In `games/game_cyberpunk2077.py`, the
+  `-modlist=...` argument of `redMod.exe` (run through Proton, and MO2 does not convert
+  the contents of arguments) is a `Z:\...` path (`windows_path()`). The Windows
+  behaviour is the upstream one, but not every patch sits behind a platform branch. Most
+  run behind `if sys.platform == "win32": ... else: ...` or `if sys.platform != "win32":`
+  (`setGamePath()`, `download_lslib_if_missing()`, the BG3 tools, `windows_path()` for
+  the REDmod argument, the stores' `find_games()`). These are restructured or added
+  without a branch, with the same result on Windows: `replace_variables()` and
+  `_default_documents_directory()` in `basic_game.py` (they now compute the folder once,
+  around a Linux-only lookup that returns `None` on Windows); the store modules, which
+  import `functools`/`qInfo` and define `_only_steam_on_linux` unconditionally; BG3's
+  `warn_load_order_unavailable()` and `_load_order_warned`; and the guarded `continue` of
+  `createPlugins()`, which sits inside the existing `except` clauses. A
+  `git subtree pull` that touches these upstream functions will conflict, and must keep
+  the patches (see the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games
+  --tests` runs `tests/basic-games` against the installed package.
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 
