@@ -14,10 +14,10 @@ Spec: [`../superpowers/specs/2026-10-20-phase4c2-pendencias-design.md`](../super
 
 ## 1. Sem tela
 
-- [ ] Por SSH (sem exportar as variáveis da sessão gráfica):
+- [x] Por SSH (sem exportar as variáveis da sessão gráfica):
   `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer; echo "saída $?"`.
   Esperado: a mensagem `Mod Organizer needs a graphical session, ...` e `saída 1`; nenhum
-  "has crashed" nem backtrace.
+  "has crashed" nem backtrace. (Resultado: OK - saída 1).
 
 ## 2. Arquivos (BSA/BA2) no INI certo
 
@@ -26,11 +26,11 @@ O Skyrim SE não tem invalidação de arquivos no MO2 (o plugin do jogo não reg
 grava o INI. Com ele, o item só confere a leitura; a gravação no INI com outra caixa é
 coberta pelo `test_profile_inis_linux.cpp` (`deps/game_bethesda/tests`).
 
-- [ ] Com o Skyrim SE, no perfil com **INIs por perfil desligados** (**Profiles...** ->
+- [x] Com o Skyrim SE, no perfil com **INIs por perfil desligados** (**Profiles...** ->
   "Use profile-specific Game INI Files" desmarcado): abrir o perfil, olhar a aba
   **Archives** e executar o jogo uma vez pelo MO2.
   Esperado: no prefixo (`.../steamapps/compatdata/489830/pfx/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition/`)
-  **não** aparece um `skyrim.ini` minúsculo ao lado do `Skyrim.ini`: `ls` nessa pasta.
+  **não** aparece um `skyrim.ini` minúsculo ao lado do `Skyrim.ini`: `ls` nessa pasta. (Resultado: OK - apenas Skyrim.ini e SkyrimPrefs.ini presentes).
 - [ ] (Opcional) Gravação, com um jogo que tenha invalidação e esteja instalado: Fallout 4
   (o mais simples), Skyrim LE, Oblivion ou Fallout 3/New Vegas. Com o Fallout 4, em
   **Profiles...**, ligar e desligar **Automatic Archive Invalidation**.
@@ -48,7 +48,7 @@ enquanto o VFS está ativo), e ativar ou instalar um mod também não. Só um no
 **Run** (ou o **Sort** do LOOT) pede um `update` ao helper; por isso o item destrava a
 interface com **Unlock** e executa um segundo programa.
 
-- [ ] Executar o SKSE (ou o **Shell VFS** da Fase 2) pelo MO2. Com ele aberto, num terminal
+- [ ] **FALHOU** (Marcado a pedido do usuário para prosseguir). Executar o SKSE (ou o **Shell VFS** da Fase 2) pelo MO2. Com ele aberto, num terminal
   do host: `pkill -STOP -x mo2-vfs`.
 - [ ] No MO2, clicar em **Unlock** no aviso "Mod Organizer is locked while the application
   is running." e executar (**Run**) um segundo programa (ou **Sort** do LOOT).
@@ -76,7 +76,7 @@ interface com **Unlock** e executa um segundo programa.
 
 ## 4. Regressão rápida
 
-- [ ] Skyrim SE + SKSE com mods pelo "Executar" (**Run**); o LOOT ordena; fechar o jogo
+- [x] Skyrim SE + SKSE com mods pelo "Executar" (**Run**); o LOOT ordena; fechar o jogo
   desmonta (`findmnt -n -o TARGET,FSTYPE,SOURCE | grep mo2-vfs` vazio).
 
 **Ao terminar:** registre aqui o resultado de cada item e, em "Observações", o que precisou de correção.
@@ -90,3 +90,7 @@ interface com **Unlock** e executa um segundo programa.
 5. A **versão do build** (commit).
 
 ## Observações
+- Item 1 (Sem tela): aprovado via terminal, saída código 1 sem travamentos ou backtrace.
+- Item 2 (Case-insensitive INIs): aprovado, sem arquivos minúsculos duplicados no prefixo.
+- Item 3 (Helper travado): marcado como falhou a pedido do usuário para prosseguir aos próximos testes.
+- Item 4 (Regressão rápida): aprovado.
