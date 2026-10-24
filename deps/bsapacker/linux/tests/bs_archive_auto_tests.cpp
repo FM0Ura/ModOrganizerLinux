@@ -4,16 +4,21 @@
 #include <libbsarch/bs_archive_auto.hpp>
 #include <libbsarchpp/Bsa.h>
 
+#include <bsatk/bsatk.h>
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <stdexcept>
 #include <string>
+
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -106,7 +111,9 @@ void pack(const fs::path& root, bsa_archive_type_t type, bool compressed,
 // relative path -> content, as libbsarchpp reads the archive back
 std::map<std::string, std::string> readWithLibbsarchpp(const fs::path& archive)
 {
-  libbsarchpp::Bsa bsa(archive);
+  // multithreaded: libbsarchpp 1.0.7 unlocks a mutex it holds only in that mode when it
+  // extracts a compressed FO4/SF file, and throws EPERM otherwise (Bsa.cpp, extractFileData)
+  libbsarchpp::Bsa bsa(archive, true);
   std::map<std::string, std::string> files;
   for (const auto& name : bsa.getFileList()) {
     const auto data = bsa.extractFileData(name);
@@ -115,17 +122,159 @@ std::map<std::string, std::string> readWithLibbsarchpp(const fs::path& archive)
   return files;
 }
 
+// a DXT1 texture of 64x64 pixels, one mip level: a legacy DDS header (128 bytes) and
+// 2048 bytes of blocks
+std::string makeDds()
+{
+  std::string dds(128, '\0');
+  auto put = [&dds](std::size_t offset, uint32_t value) {
+    std::memcpy(dds.data() + offset, &value, sizeof(value));
+  };
+  std::memcpy(dds.data(), "DDS ", 4);
+  put(4, 124);                                // header size
+  put(8, 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000);  // CAPS|HEIGHT|WIDTH|PIXELFORMAT|LINEARSIZE
+  put(12, 64);                                // height
+  put(16, 64);                                // width
+  put(20, 2048);                              // linear size
+  put(28, 1);                                 // mip levels
+  put(76, 32);                                // pixel format size
+  put(80, 0x4);                               // DDPF_FOURCC
+  std::memcpy(dds.data() + 84, "DXT1", 4);
+  put(108, 0x1000);                           // DDSCAPS_TEXTURE
+  for (int i = 0; i < 2048; ++i) {
+    dds.push_back(static_cast<char>(i * 7));
+  }
+  return dds;
+}
+
+struct Format
+{
+  const char* name;
+  bsa_archive_type_t type;
+  const char* extension;
+  bool textures;     // FO4dds/SFdds: only DDS files, header rebuilt by the archive
+  bool bsatkReads;   // bsatk is an independent reader of this format (spec §5.3)
+  bool compressible;
+};
+
+std::string formatName(const testing::TestParamInfo<Format>& info)
+{
+  return info.param.name + std::string(info.param.compressible ? "" : "_Stored");
+}
+
+// relative path -> content, as bsatk extracts the archive
+std::map<std::string, std::string> readWithBsatk(const fs::path& archive, const fs::path& out)
+{
+  // bsatk creates the folders of the archive, but not the output folder itself
+  fs::create_directories(out);
+  BSA::Archive bsa;
+  const auto read = bsa.read(archive, true);
+  if (read != BSA::ERROR_NONE) {
+    throw std::runtime_error("bsatk could not read the archive: " + std::to_string(read));
+  }
+  if (bsa.extractAll(out, [](int, std::string) { return true; }) != BSA::ERROR_NONE) {
+    throw std::runtime_error("bsatk could not extract the archive");
+  }
+  return looseFiles(out);
+}
+
 }  // namespace
 
-TEST(BsArchiveAuto, SkyrimSERoundTrip)
+class BsArchiveAutoFormat : public testing::TestWithParam<Format>
+{};
+
+TEST_P(BsArchiveAutoFormat, RoundTrip)
+{
+  const Format& format = GetParam();
+  TempDir dir;
+  const fs::path root = dir.path() / "mods" / "My Test Mod";
+  if (format.textures) {
+    writeFile(root / "Textures" / "Armor" / "Iron" / "Cuirass.dds", makeDds());
+    writeFile(root / "textures" / "sky.dds", makeDds());
+  } else {
+    writeFile(root / "Meshes" / "Armor" / "Iron" / "Cuirass.nif", std::string(8192, 'n'));
+    writeFile(root / "Textures" / "Armor" / "Iron" / "Cuirass.dds", makeDds());
+    writeFile(root / "scripts" / "test.pex", "pex data");
+    writeFile(root / "sound" / "fx" / "hit.wav", "RIFF....WAVE");
+  }
+  const auto expected   = looseFiles(root);
+  const fs::path archive = dir.path() / (std::string("out.") + format.extension);
+
+  pack(root, format.type, format.compressible, archive);
+  ASSERT_TRUE(fs::is_regular_file(archive));
+
+  const auto packed = readWithLibbsarchpp(archive);
+  ASSERT_EQ(packed.size(), expected.size());
+  for (const auto& [path, content] : expected) {
+    ASSERT_TRUE(packed.contains(path)) << path;
+    if (format.textures) {
+      // the archive keeps the DDS information, not the header: the pixel data must match
+      ASSERT_GE(packed.at(path).size(), 2048u) << path;
+      EXPECT_EQ(packed.at(path).substr(packed.at(path).size() - 2048),
+                content.substr(content.size() - 2048))
+          << path;
+    } else {
+      EXPECT_EQ(packed.at(path), content) << path;
+    }
+  }
+
+  if (format.bsatkReads) {
+    EXPECT_EQ(readWithBsatk(archive, dir.path() / "bsatk"), expected);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    Formats, BsArchiveAutoFormat,
+    testing::Values(Format{"TES3", baTES3, "bsa", false, false, false},
+                    Format{"TES4", baTES4, "bsa", false, true, true},
+                    Format{"TES4", baTES4, "bsa", false, true, false},
+                    Format{"FO3", baFO3, "bsa", false, true, true},
+                    Format{"FO3", baFO3, "bsa", false, true, false},
+                    Format{"SSE", baSSE, "bsa", false, true, true},
+                    Format{"SSE", baSSE, "bsa", false, true, false},
+                    Format{"FO4", baFO4, "ba2", false, true, true},
+                    Format{"FO4", baFO4, "ba2", false, true, false},
+                    Format{"FO4dds", baFO4dds, "ba2", true, false, true},
+                    Format{"SF", baSF, "ba2", false, false, true},
+                    Format{"SFdds", baSFdds, "ba2", true, false, true}),
+    formatName);
+
+TEST(BsArchiveAuto, NonAsciiNamesRoundTrip)
 {
   TempDir dir;
-  const fs::path root    = makeMod(dir.path());
-  const fs::path archive = dir.path() / "My Test Mod.bsa";
+  const fs::path root = dir.path() / "mods" / "Café";
+  writeFile(root / "textures" / "café" / "ação.dds", makeDds());
+  const fs::path archive = dir.path() / "out.bsa";
+
   pack(root, baSSE, true, archive);
 
-  ASSERT_TRUE(fs::is_regular_file(archive));
   EXPECT_EQ(readWithLibbsarchpp(archive), looseFiles(root));
+}
+
+TEST(BsArchiveAuto, EmptyArchiveIsNotCreated)
+{
+  TempDir dir;
+  const fs::path archive = dir.path() / "out.bsa";
+  libbsarch::bs_archive_auto bsa(baSSE);
+
+  EXPECT_THROW(bsa.save_to_disk(archive), std::runtime_error);
+  EXPECT_FALSE(fs::exists(archive));
+}
+
+TEST(BsArchiveAuto, UnwritableTargetLeavesNoFile)
+{
+  if (geteuid() == 0) {
+    GTEST_SKIP() << "root ignores the permissions of the target directory";
+  }
+  TempDir dir;
+  const fs::path root = makeMod(dir.path());
+  const fs::path target = dir.path() / "readonly";
+  fs::create_directories(target);
+  fs::permissions(target, fs::perms::owner_read | fs::perms::owner_exec);
+  const fs::path archive = target / "out.bsa";
+
+  EXPECT_THROW(pack(root, baSSE, true, archive), std::runtime_error);
+  EXPECT_FALSE(fs::exists(archive));
 }
 
 TEST(BsArchiveAuto, EmptyPackKeepsAnExistingArchive)
