@@ -17,17 +17,17 @@ Spec: [`../superpowers/specs/2026-10-24-phase4e-bsa-design.md`](../superpowers/s
 
 ## 2. Empacotar
 
-- [ ] **Ferramentas → BSA Packer**, escolher o mod de teste, OK. Esperado: a janela "Writing Archive" e depois "Created archive(s): <mod>.bsa"; na pasta do mod: `<mod>.bsa` e `<mod>.esp` (plugin vazio); as pastas soltas renomeadas para `<pasta>.mohidden` (menos os arquivos da lista negra, como `.txt`, que voltam ao lugar).
-- [ ] Aba **Archives**: o `<mod>.bsa` aparece; aba **Data**: os arquivos do mod aparecem vindos do BSA; pré-visualizar um `.dds` e um `.txt`/imagem de dentro do BSA (pré-visualização da 4c.1/4d.1) mostra o conteúdo.
-- [ ] BSA Extractor (4c.1): numa cópia do mod (ou depois de reinstalar o mod de teste), extrair o `<mod>.bsa` criado; os arquivos extraídos são iguais aos originais (`cmp` com os da lista anotada).
+- [ ] **Ferramentas → BSA Packer**. No diálogo "BSA Packer", em "Choose a mod to pack:" escolher o mod de teste; em "Choose a name for the packed archive:" a lista traz os plugins que o mod já tem (com a extensão trocada por `.bsa`) e, no fim, `<new filename>.bsa`: o OK só habilita depois de selecionar um item da lista. Selecionar `<new filename>.bsa` e OK; o prompt "Archive name (no file extension):" vem com o nome do mod; confirmar com o nome padrão (`<mod>`) ou escolher outro (`<nome>` abaixo). Esperado: a janela "Writing Archive" e depois "Created archive(s):" com `<nome>.bsa`; na pasta do mod: `<nome>.bsa` e `<nome>.esp` (plugin vazio); as pastas soltas renomeadas para `<pasta>.mohidden` (menos os arquivos da lista negra, como `.txt`, que voltam ao lugar).
+- [ ] Aba **Archives**: o `<nome>.bsa` aparece; aba **Data**: os arquivos do mod aparecem vindos do BSA; pré-visualizar um `.dds` e um `.txt`/imagem de dentro do BSA (pré-visualização da 4c.1/4d.1) mostra o conteúdo.
+- [ ] BSA Extractor (4c.1): numa cópia do mod (ou depois de reinstalar o mod de teste), extrair o `<nome>.bsa` criado; os arquivos extraídos são iguais aos originais (`cmp` com os da lista anotada).
 
 ## 3. No jogo
 
-- [ ] Ativar o `<mod>.esp` na aba de plugins e executar o Skyrim SE (ou SKSE) pelo MO2. Esperado: o jogo abre e carrega um save sem queda; com uma textura trocada de verdade no mod, ela aparece no jogo (vinda do BSA, já que os arquivos soltos estão `.mohidden`).
+- [ ] Ativar o `<nome>.esp` na aba de plugins e executar o Skyrim SE (ou SKSE) pelo MO2. Esperado: o jogo abre e carrega um save sem queda; com uma textura trocada de verdade no mod, ela aparece no jogo (vinda do BSA, já que os arquivos soltos estão `.mohidden`).
 
 ## 4. Erros
 
-- [ ] Rodar o BSA Packer num mod cujos arquivos estão todos na lista negra (por exemplo, só `.txt`). Esperado: nenhum `.bsa` criado, nenhuma queda, e o MO2 não lista nenhum arquivo como criado. Esse caso só aparece no log em nível de depuração (`no files to pack into <caminho>`); não há linha `failed to write archive` para ele (essa linha é de falhas de gravação, como disco cheio ou pasta sem permissão).
+- [ ] Rodar o BSA Packer num mod cujos arquivos estão todos na lista negra (por exemplo, só `.txt`). Esperado: nenhum `.bsa` criado, nenhuma queda, e o MO2 não lista nenhum arquivo como criado. Esse caso só aparece no log em nível de depuração (`no files to pack into <caminho>`); não há linha `failed to write archive` para ele (essa linha é de falhas de gravação, como disco cheio ou pasta sem permissão). Com `create_plugins` e `hide_loose_assets` ligados, o `.esp` vazio ainda é criado e as pastas soltas ainda ficam `.mohidden` mesmo sem nenhum arquivo criado (é o comportamento do upstream, não um defeito): desfaça pelas instruções do fim deste arquivo.
 
 ## 5. Regressão
 
