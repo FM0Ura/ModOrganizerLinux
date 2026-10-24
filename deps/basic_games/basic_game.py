@@ -31,6 +31,15 @@ def _proton_folder(which: str, game: BasicGame) -> str | None:
     return getattr(proton_utils, which)(ids, game.gameName())
 
 
+def _same_file(first: Path | str, second: Path | str) -> bool:
+    """Linux: whether two paths are the same directory, even through a bind mount
+    (False if one of them does not exist)."""
+    try:
+        return os.path.samefile(first, second)
+    except OSError:
+        return False
+
+
 def replace_variables(value: str, game: BasicGame) -> str:
     """Replace special paths in the given value."""
 
@@ -666,10 +675,15 @@ class BasicGame(mobase.IPluginGame):
         if sys.platform != "win32":
             # Linux: the Steam games cannot be listed (see steam_utils), so ask for
             # the app IDs of this game and keep the one installed in the given path
+            # (samefile: a bind mount, like /home and /var/home in the box, is not
+            # a link that realpath resolves)
             real_path = os.path.realpath(path)
             for steamid in self._mappings.steamAPPId.get():
                 steampath = BasicGame.steam_games.get(steamid)
-                if steampath and os.path.realpath(steampath) == real_path:
+                if steampath and (
+                    os.path.realpath(steampath) == real_path
+                    or _same_file(steampath, path)
+                ):
                     self._mappings.steamAPPId.set_value(steamid)
                     break
 
