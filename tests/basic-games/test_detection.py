@@ -93,6 +93,25 @@ def test_the_steam_app_id_follows_a_path_set_by_hand(steam):
     assert linked.steamAPPId() == "1091500" and linked.is_steam()
 
 
+def test_the_steam_app_id_follows_a_bind_mount_of_the_game(steam, monkeypatch):
+    from basic_games.basic_game import BasicGame
+
+    BasicGame.steam_games = _load_basic_games_steam()
+    # the box's /home and /var/home are bind mounts, which realpath does not unify:
+    # the same directory under another spelling (a link here, with realpath blind to it)
+    monkeypatch.setattr("os.path.realpath", lambda p, **k: str(p))
+    other_spelling = steam.parent / "other-spelling"
+    other_spelling.symlink_to(steam / "steamapps/common/Cyberpunk 2077")
+    game = _load_basic_games()["Cyberpunk2077Game"].__class__()
+    game.setGamePath(other_spelling)
+    assert game.steamAPPId() == "1091500" and game.is_steam()
+
+    # a path that does not exist is no match and no error
+    missing = _load_basic_games()["Cyberpunk2077Game"].__class__()
+    missing.setGamePath(steam / "steamapps/common/Missing")
+    assert not missing.is_steam()
+
+
 def test_every_game_module_imports_on_linux(steam, capsys):
     import basic_games
 
