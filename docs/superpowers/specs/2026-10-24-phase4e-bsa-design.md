@@ -91,7 +91,7 @@ No Windows, o `TextureArchiveBuilder` passa um callback que lê largura, altura 
 
 ## 5. Testes
 
-1. **`libbsarchpp`** (no `build-libbsarchpp.sh`, com `LIBBSARCHPP_TESTING=ON` e as suítes por jogo desligadas: `TESTS_*_ENABLE=OFF`): `Misc`, `Hash`, `GSL`, `CreateArchive` e `Fast.*` (arquivos pequenos do próprio repositório para TES3, TES4, FO3, SSE, FO4, FO4dds e SF).
+1. **`libbsarchpp`** (no `build-libbsarchpp.sh`, com `LIBBSARCHPP_TESTING=ON` e as suítes por jogo desligadas: `TESTS_*_ENABLE=OFF`): `Misc`, `Hash`, `GSL` e `CreateArchive` (os `Fast.*`, com os arquivos pequenos do repositório, estão comentados no `tests.cpp` da 1.0.7; a criação em cada formato fica com o §5.3).
 2. **Testes do upstream do `bsapacker`** (`tests/`, gtest/gmock, `bsa_packer_tests`) compilados e rodados no Linux.
 3. **Teste nosso de ida e volta** (`deps/bsapacker/linux/tests/`, só no Linux): o `bs_archive_auto` do Linux empacota uma árvore temporária (pastas aninhadas, maiúsculas e minúsculas, arquivos comprimíveis e um já comprimido, um `.dds` real gerado no teste) em cada tipo (TES3, TES4, FO3, SSE, FO4, FO4dds, SF, SFdds), com e sem compressão onde o formato permite; reabre o arquivo (`libbsarchpp::Bsa(path)`) e confere a lista de arquivos e o conteúdo byte a byte. Para TES4, FO3, SSE e FO4, reabre também pelo **`bsatk`** (o leitor do MO2 na pré-visualização e no BSA Extractor) e confere a lista e o conteúdo extraído. Mais: erro de gravação (pasta de destino sem permissão) lança e não deixa arquivo parcial.
 4. **Smoke:** o `libbsa_packer.so` carrega e o "BSA Packer" está entre os plugins carregados.
