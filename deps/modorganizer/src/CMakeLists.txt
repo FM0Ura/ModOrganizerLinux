@@ -231,6 +231,18 @@ if (NOT WIN32)
 	if (NOT _organizer_version)
 		message(FATAL_ERROR "no VER_FILEVERSION_STR in version.rc")
 	endif()
+	# the release builds (build.sh with MO2_VERSION) set the version of the port,
+	# 2.5.2.N; that is never a prerelease
+	set(MO2_VERSION_OVERRIDE "" CACHE STRING
+		"version of Mod Organizer instead of the one in version.rc")
+	if (MO2_VERSION_OVERRIDE)
+		if (NOT MO2_VERSION_OVERRIDE MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$")
+			message(FATAL_ERROR
+				"MO2_VERSION_OVERRIDE '${MO2_VERSION_OVERRIDE}' is not X.Y.Z or X.Y.Z.N")
+		endif()
+		set(_organizer_version "${MO2_VERSION_OVERRIDE}")
+		set(_organizer_prerelease 0)
+	endif()
 	target_compile_definitions(organizer_datatree PUBLIC
 		MO2_VERSION_STRING="${_organizer_version}"
 		MO2_VERSION_PRERELEASE=${_organizer_prerelease})
