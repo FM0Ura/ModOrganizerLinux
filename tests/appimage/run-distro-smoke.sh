@@ -19,6 +19,8 @@
 #   the AppDir's Python and PyQt6 (tests/appimage/pyrun.c, qt-https-check.py).
 # QtWebEngine runs as root in the container, hence MO2's smoke adds --no-sandbox.
 #
+# MO2_CONTAINER_ENGINE (podman or docker) overrides the choice of the engine (CI uses docker).
+#
 # pyrun (the AppDir has libpython but no interpreter) is compiled once, in the build
 # image (MO2_BUILD_IMAGE, localhost/mo2-linux-build:phase5 by default) or with the gcc
 # of the host, into MO2_PYRUN_DIR (a temporary directory by default); MO2_PYRUN names a
@@ -35,7 +37,8 @@ fail() { echo "distro smoke test FAILED: $*" >&2; exit 1; }
 [[ -f $APPIMAGE ]] || fail "$APPIMAGE not found"
 APPIMAGE="$(cd "$(dirname "$APPIMAGE")" && pwd)/$(basename "$APPIMAGE")"
 
-if command -v podman >/dev/null; then CE=podman
+if [[ -n ${MO2_CONTAINER_ENGINE:-} ]]; then CE=$MO2_CONTAINER_ENGINE
+elif command -v podman >/dev/null; then CE=podman
 elif command -v docker >/dev/null; then CE=docker
 else fail "neither podman nor docker found"; fi
 

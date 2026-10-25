@@ -1,0 +1,167 @@
+name: Linux release
+
+# Builds the AppImage (spec of Phase 5, sections 3.5 and 5.2): the application with its
+# tests in the build container, build/appimage/build-appimage.sh, the AppImage in a clean
+# container of every distribution of tests/appimage/distros.txt.
+#
+# - Push of a tag v2.5.2.N: builds and creates a DRAFT release (never published here;
+#   publishing is a manual step after the checklist, docs/testing/phase5-manual-checklist.md).
+# - workflow_dispatch: the same with the version input; a draft release only if create_draft.
+# - Push whose head commit message contains "[appimage-ci]": builds as 2.5.2.0, uploads
+#   the files as a run artifact and creates no release. Not run on other pushes: the
+#   build, the three container smoke tests and the AppImage take long (Actions minutes).
+on:
+  push:
+    tags: ['v*']
+    branches: ['**']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, four numbers (e.g. 2.5.2.1); the draft release is v<version>'
+        required: true
+        type: string
+      create_draft:
+        description: 'Create a draft release (otherwise only the run artifact)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write # gh release create --draft
+
+jobs:
+  appimage:
+    if: >-
+      github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') ||
+      contains(github.event.head_commit.message, '[appimage-ci]')
+    # a later push must not cancel a build that is making a release
+    concurrency:
+      group: release-linux-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve the version
+        id: ver
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_TYPE: ${{ github.ref_type }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_DRAFT: ${{ inputs.create_draft }}
+        run: |
+          set -euo pipefail
+          draft=false
+          if [[ $EVENT == workflow_dispatch ]]; then
+              version="$INPUT_VERSION"
+              draft="$INPUT_DRAFT"
+          elif [[ $REF_TYPE == tag ]]; then
+              version="${REF#refs/tags/v}"
+              draft=true
+          else
+              version=2.5.2.0 # [appimage-ci]: artifacts only
+          fi
+          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::version '$version' is not four dot-separated numbers (tag v2.5.2.N)"
+              exit 1
+          fi
+          echo "MO2_VERSION=$version" >> "$GITHUB_ENV"
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+          echo "Version $version, draft release: $draft"
+
+      - name: Check out superproject
+        uses: actions/checkout@v7
+        with:
+          path: ModOrganizerLinux
+
+      - name: Guard against platform-sized save reads
+        run: ModOrganizerLinux/scripts/check-save-reads.sh
+
+      # cached by the hash of build/Containerfile (.github/actions/build-image)
+      - name: Build container image
+        uses: ./ModOrganizerLinux/.github/actions/build-image
+
+      - name: Cache libloot
+        uses: actions/cache@v6
+        with:
+          path: ModOrganizerLinux/build-out/libloot
+          key: libloot-${{ hashFiles('ModOrganizerLinux/build/libloot/build-libloot.sh', 'ModOrganizerLinux/build/Containerfile') }}
+
+      # the same as linux.yml, with the version of the release in the binary and in
+      # the self-update. The test of the self-update (tests/selfupdate-e2e) runs in
+      # linux.yml: it offers a fake v2.5.2.2, so it needs an install built as 2.5.2.
+      - name: Build and test
+        run: |
+          docker run --rm --device /dev/fuse --cap-add SYS_ADMIN \
+            --security-opt apparmor:unconfined -e MO2_REQUIRE_FUSE=1 -e MO2_SMOKE_STRICT_HOME=1 \
+            -e MO2_VERSION \
+            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+            mo2-linux-build ./build.sh --tests
+
+      # also runs scripts/check-appdir.sh on the AppDir, before the AppImage is made
+      - name: Build the AppImage
+        run: |
+          mkdir -p appimage-out
+          docker run --rm -e MO2_VERSION \
+            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+            mo2-linux-build build/appimage/build-appimage.sh /work/ModOrganizerLinux/install /work/appimage-out
+          cd appimage-out
+          sha256sum -c SHA256SUMS
+          ls -l
+
+      # pyrun runs the AppDir's Python (libpython 3.14, not the runner's)
+      - name: Compile pyrun in the build image
+        run: |
+          mkdir -p "$RUNNER_TEMP/pyrun"
+          docker run --rm -v "$GITHUB_WORKSPACE/ModOrganizerLinux/tests/appimage:/src:ro" \
+            -v "$RUNNER_TEMP/pyrun:/out" mo2-linux-build \
+            sh -c 'gcc -o /out/pyrun /src/pyrun.c $(pkg-config --cflags --libs python3-embed)'
+
+      - name: Smoke test in a clean container of each distribution
+        env:
+          MO2_CONTAINER_ENGINE: docker
+        run: |
+          MO2_PYRUN="$RUNNER_TEMP/pyrun/pyrun" \
+            ModOrganizerLinux/tests/appimage/run-distro-smoke.sh \
+            "appimage-out/ModOrganizer-$MO2_VERSION-x86_64.AppImage" --all
+
+      - name: Upload the release files
+        uses: actions/upload-artifact@v7
+        with:
+          name: ModOrganizer-${{ env.MO2_VERSION }}-x86_64
+          path: |
+            appimage-out/ModOrganizer-${{ env.MO2_VERSION }}-x86_64.AppImage
+            appimage-out/ModOrganizer-${{ env.MO2_VERSION }}-x86_64.AppImage.zsync
+            appimage-out/ModOrganizer-${{ env.MO2_VERSION }}-x86_64.debug.tar.zst
+            appimage-out/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+      # always --draft: a release is published by hand after the manual checklist.
+      # --target keeps the tag where the draft was built if it does not exist yet
+      - name: Create the draft release
+        if: steps.ver.outputs.draft == 'true'
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<NOTES
+          Mod Organizer $MO2_VERSION for Linux (AppImage).
+
+          Download \`ModOrganizer-$MO2_VERSION-x86_64.AppImage\`, make it executable and run it
+          (or add it with Gear Lever); an installed AppImage updates itself from here.
+          \`SHA256SUMS\` has the checksums, \`*.debug.tar.zst\` the debug symbols for crash
+          reports (see the troubleshooting guide), \`*.AppImage.zsync\` is the delta
+          update information.
+
+          Needs a desktop with the graphics libraries of the distribution installed; Steam,
+          Proton and umu-run are not bundled. See the README for the tested distributions.
+          NOTES
+          cd appimage-out
+          gh release create "v$MO2_VERSION" --repo "$GITHUB_REPOSITORY" --draft \
+            --target "$GITHUB_SHA" --title "Mod Organizer $MO2_VERSION (Linux)" \
+            --notes-file ../release-notes.md \
+            "ModOrganizer-$MO2_VERSION-x86_64.AppImage" \
+            "ModOrganizer-$MO2_VERSION-x86_64.AppImage.zsync" \
+            "ModOrganizer-$MO2_VERSION-x86_64.debug.tar.zst" \
+            SHA256SUMS
