@@ -1,214 +1,178 @@
-# ModOrganizerLinux
+<a id="readme-top"></a>
 
-Superproject for a native Linux port of [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer).
-The goal is a Mod Organizer 2 that runs natively on Linux (Bazzite is the reference
-platform) and manages mods for Steam games running through Proton, while the application
-keeps building on Windows against the upstream `uibase`.
+<div align="center">
 
-This repository holds the build scripts, CI, documentation, the application
-(`deps/modorganizer`) and the upstream dependencies, all vendored under
-[`deps/`](deps/README.md) with `git subtree`.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&height=200&section=header&text=Mod%20Organizer%202%20for%20Linux&fontSize=44&fontAlignY=35&animation=fadeIn" width="100%" alt="Mod Organizer 2 for Linux"/>
 
-- Design specification: [docs/superpowers/specs/2026-10-14-mo2-linux-port-design.md](docs/superpowers/specs/2026-10-14-mo2-linux-port-design.md)
-- Vendored dependencies and their pinned versions: [deps/README.md](deps/README.md)
-- Updating a dependency: `scripts/update-dep.sh <name> <ref>`
+<p><b>The Mod Organizer 2 mod manager as a native Linux AppImage, for Steam games running through Proton.</b></p>
 
-## Working games
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/FM0Ura/ModOrganizerLinux?style=for-the-badge&include_prereleases)](https://github.com/FM0Ura/ModOrganizerLinux/releases)
+[![Linux CI](https://img.shields.io/github/actions/workflow/status/FM0Ura/ModOrganizerLinux/linux.yml?style=for-the-badge&label=linux%20ci)](https://github.com/FM0Ura/ModOrganizerLinux/actions)
+[![Last commit](https://img.shields.io/github/last-commit/FM0Ura/ModOrganizerLinux?style=for-the-badge)](https://github.com/FM0Ura/ModOrganizerLinux/commits)
+
+**English** · [Português](README.pt-BR.md)
+
+[Releases](https://github.com/FM0Ura/ModOrganizerLinux/releases) · [User guide](docs/user/en/install.md) · [Report bug](https://github.com/FM0Ura/ModOrganizerLinux/issues/new)
+
+</div>
+
+<br>
+
+<details>
+<summary><b>📋 Table of Contents</b></summary>
+
+- [📖 About](#-about)
+- [✨ Features](#-features)
+- [🧰 Tech Stack](#-tech-stack)
+- [🚀 Getting Started](#-getting-started)
+- [🔄 Updating](#-updating)
+- [🎮 Working games](#-working-games)
+- [🐛 Known issues](#-known-issues)
+- [🤝 Contributing](#-contributing)
+- [📝 License](#-license)
+
+</details>
+
+## 📖 About
+
+[Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer) is the mod manager that keeps
+a game's folder clean by showing the game a virtual, merged view of your mods. This is a
+native Linux port: it manages mods for Steam games running through Proton, and it ships as a
+single AppImage, so you download it and run it, with no container or build environment.
+Bazzite is the reference desktop. The Windows build keeps building from the same source
+against the upstream `uibase`.
+
+<!-- TODO: add a screenshot of the main window (docs/assets/main-window.png) -->
+
+## ✨ Features
+
+- 📦 **One file** — an AppImage with its own Qt, QtWebEngine, Python and libraries
+- 🔀 **Virtual file system** — mods merged for the game through FUSE, nothing written to the game folder
+- 🧩 **Plugins** — the Bethesda games, FOMOD, BAIN and bundle installers, previews, the INI tools, the Python plugins and about 75 community games (`basic_games`)
+- 📋 **LOOT** — plugin sorting with libloot
+- 🌐 **Nexus Mods** — login kept in the Secret Service (KWallet, GNOME Keyring) and `nxm://` links
+- 🧳 **BSA/BA2** — archive creation with the BSA Packer
+- 🔄 **Self-updating** — from the GitHub releases, or through Gear Lever
+
+## 🧰 Tech Stack
+
+<p align="center">
+  <img src="https://skillicons.dev/icons?i=cpp,cmake,qt,rust,python,linux&theme=dark" alt="C++, CMake, Qt, Rust, Python, Linux" />
+</p>
+
+C++ and Qt 6 (the application), Rust (the `mo2-vfs` FUSE helper), Python 3.14 with PyQt6
+(plugins), packed as an AppImage on Fedora 44.
+
+## 🚀 Getting Started
+
+### Requirements
+
+- A 64-bit Linux desktop with **glibc 2.43 or newer**
+- Steam with Proton, `umu-run` and FUSE 3, which are **not** bundled
+  ([host dependencies](docs/user/en/install.md#host-dependencies))
+
+### Tested distributions
+
+Every release is started in a clean container of each of these (up to the main window); the
+real game is tested on Bazzite.
+
+| Distribution | glibc |
+|---|---|
+| Bazzite (reference desktop) | 2.43 |
+| Fedora 44 | 2.43 |
+| Arch Linux (rolling) | rolling |
+| Ubuntu 26.04 LTS | 2.43 |
+
+Ubuntu 24.04 is too old (glibc 2.39).
+
+### Installation
+
+Download `ModOrganizer-<version>-x86_64.AppImage` (about 253 MB) from the
+[releases page](https://github.com/FM0Ura/ModOrganizerLinux/releases).
+
+**With Gear Lever** (Bazzite): open the file in Gear Lever, then **Unlock** and **Move to the app menu**.
+
+**Directly:**
+
+```bash
+chmod +x ModOrganizer-2.5.2.1-x86_64.AppImage
+./ModOrganizer-2.5.2.1-x86_64.AppImage
+```
+
+> [!TIP]
+> Run the game once from Steam before creating the instance, so Proton creates its prefix.
+> Never run Mod Organizer as root.
+
+More in the [installation guide](docs/user/en/install.md) and
+[first steps](docs/user/en/first-steps.md).
+
+### Host dependencies
+
+Mod Organizer opens and manages mods without them; **Run** needs them, and Mod Organizer
+tells you what is missing.
+
+| Program | For |
+|---|---|
+| Steam with Proton | the game and its prefix |
+| `umu-run` ([umu-launcher](https://github.com/Open-Wine-Components/umu-launcher)) | running Windows programs in the prefix |
+| FUSE 3 (`fusermount3`) | the virtual folder of the mods |
+
+Install commands per distribution: [Host dependencies](docs/user/en/install.md#host-dependencies).
+
+## 🔄 Updating
+
+- **Inside Mod Organizer:** with *Check for updates* on, an update button appears when a new
+  release exists. It downloads, verifies the SHA-256 against the release's `SHA256SUMS`,
+  replaces the file in place and restarts. It waits while a program started by Mod
+  Organizer is running.
+- **Gear Lever or AppImageUpdate:** the AppImage carries update information, so only the
+  changed part is downloaded.
+
+Details: [Updating](docs/user/en/updating.md).
+
+## 🎮 Working games
 
 | Game | Status |
 |------|--------|
 | Skyrim Special Edition (Steam + Proton) | Working: mods through the virtual file system, SKSE, LOOT and SSEEdit, checked in the manual tests on Bazzite. |
-| Cyberpunk 2077 (Steam + Proton) | Working: mods through the virtual file system, checked manually on Bazzite. CET and RED4ext need `WINEDLLOVERRIDES` (see "Plugins Python" below). |
+| Cyberpunk 2077 (Steam + Proton) | Working: mods through the virtual file system, checked manually on Bazzite. CET and RED4ext need `WINEDLLOVERRIDES` ([how](docs/user/en/games.md#proxy-dlls-wine-dll-overrides)). |
 | NieR:Automata (Steam + Proton) | Working: mods through the virtual file system, checked manually on Bazzite. Every mod goes through the manual installer (the plugin, as upstream, does not recognize mod layouts). |
 
 Every other game is only detected (the Bethesda plugins and the about 75 games of
-`basic_games`) and has **not** been validated yet. Baldur's Gate 3 has been tried and has
-known gaps (no load order on Linux yet, and, run through Mod Organizer, a save whose name has an accent was not written);
-see "Plugins Python" below.
+`basic_games`) and has **not** been validated yet. Tools that run through the
+virtual file system: SKSE, LOOT, SSEEdit, and BodySlide, Nemesis and Pandora installed as mods
+(the last two have display glitches; [Games and tools](docs/user/en/games.md)).
 
-## Phase 1 status
+## 🐛 Known issues
 
-Phase 1 (native build, no virtual file system yet) is complete in code and CI; the
-remaining criterion is the manual run on Bazzite
-([docs/testing/phase1-manual-checklist.md](docs/testing/phase1-manual-checklist.md), in Portuguese).
+- **Game without keyboard focus on KDE Wayland:** a KWin window rule for `steam_app_.*` fixes it ([how](docs/user/en/troubleshooting.md#the-game-does-not-get-keyboard-focus-kde-wayland)).
+- **Baldur's Gate 3** has been tried and has gaps: no load order on Linux yet, and a save whose name has an accent was not written ([details](docs/user/en/troubleshooting.md#baldurs-gate-3)).
+- On hosts that are not Fedora-based, the built-in web view does not trust certificate authorities you added to the system store.
+- Crash? [Report it with a backtrace](docs/user/en/troubleshooting.md#reporting-a-crash) (`coredumpctl` and the release's debug symbols).
 
-Done:
+All of it: [Troubleshooting](docs/user/en/troubleshooting.md).
 
-- Plugins beyond the Bethesda games and the FOMOD installer: BAIN and bundle installers, previews (text, images, BSA contents), BSA extraction, the basic diagnostics, the FNIS check and the INI editor/bakery tools (Phase 4c.1), and the BSA Packer (BSA/BA2 creation, Phase 4e).
-- `build.sh` builds the application and every dependency from a clean Fedora 44 container
-  and installs `install/bin/ModOrganizer` (+ `plugins/`, `stylesheets/`, `tutorials/`,
-  `translations/`, `resources/`) and `install/lib/`.
-- Linux CI builds everything, runs the unit tests, the plugin-load harness and a headless
-  smoke test of the application, and uploads `install/` as the artifact `mo2-linux-install`.
-- Windows CI (builds the application against upstream `uibase`) runs only for commits whose message
-  contains `[windows-ci]`, or on manual dispatch. It builds `deps/modorganizer` against the dependencies
-  of upstream `master` (via `mob`), **not** against our patched copies in `deps/` (`uibase`,
-  `archive`, `bsatk`, `esptk`, `cmake_common`, `game_bethesda`, installers). Those patches have
-  only been checked for Windows by an `unifdef -D_WIN32` review (the Windows view of each file
-  is unchanged) and have never been compiled on Windows. Next phase: a `mob` run that overrides
-  the dependencies with our subtrees.
-- Performance baseline: [benchmarks/results/2026-10-phase1-baseline.md](benchmarks/results/2026-10-phase1-baseline.md).
+## 🤝 Contributing
 
-Limitations of Phase 1:
+Building from source, the CI, how a release is cut and the variables for development and
+tests are in [docs/dev/building.md](docs/dev/building.md). The plan of the port is in
+[ROADMAP.md](ROADMAP.md) and the current state in [STATE.md](STATE.md) (both in
+Portuguese). Open an issue before a large change.
 
-- Virtual file system (Phases 2 and 3): the `mo2-vfs` helper mounts the merged view while a program runs and unmounts when it ends. Windows programs (`.exe`, `.bat`) run through `umu-run` in the Proton prefix of their Steam game (Phase 3); `umu-launcher` must be installed on the host, and a game never run from Steam has no prefix yet. When Mod Organizer runs in a distrobox, the helper and the programs run on the host (through `distrobox-host-exec`), so programs that exist only inside the container cannot be run from Mod Organizer. A game and a tool cannot run at the same time in the same prefix.
-- LOOT sorts the plugins (lootcli with libloot 0.29.5, started through mo2-vfs; its data folder is the Flatpak LOOT's if there is one, else `~/.local/share/LOOT`). BSA/BA2 creation is the BSA Packer (Phase 4e, see "Criação de BSA/BA2" below); there is no auto-update.
-- `diagnose_basic` has no NTFS file-attribute check on Linux. DDS previews are unavailable until the DDS preview plugin (Python, Phase 4d): `preview_base` leaves `.dds` to it. The FNIS check (`check_fnis`) works for Skyrim (LE) only, as upstream; it is inactive for Skyrim SE.
-- Nexus and Steam logins are kept in the Secret Service (KWallet, GNOME Keyring); without one, only until Mod Organizer closes.
-- "My Games" and AppData point into the Proton prefix of the Steam game (`compatdata/<appid>/pfx`); a game without a prefix falls back to XDG folders.
-- Steam auto-detection covers `~/.local/share/Steam`, `~/.steam/steam`, Flatpak Steam and the
-  extra libraries listed in `libraryfolders.vdf`; otherwise give the game path by hand.
-- No Python plugins until Phase 4d. `nxm://` links: Mod Organizer registers itself as the handler (a desktop file in `~/.local/share/applications`) when no other program handles them; Settings → Nexus forces it.
-- RAR extraction is verified manually only (no automated fixture).
-- "Remove mod" / "remove download" send files to the trash only when the instance is on the same
-  filesystem as the home trash (`~/.local/share/Trash`). On another disk the operation fails
-  safely with "failed to delete" and nothing is deleted.
-- No AppImage yet (Phase 5): the binary links against the system Qt 6, so it must run in a
-  Fedora 44 environment (see below), not directly on the Bazzite host.
+## 📝 License
 
-## Rodando no Bazzite (pt-BR)
+Distributed under the GNU General Public License v3.0, like upstream Mod Organizer 2. See
+[`LICENSE`](LICENSE) for details.
 
-O binário usa o Qt 6 do Fedora 44; no Bazzite ele roda dentro de um distrobox Fedora 44
-(AppImage só na Fase 5). Passo a passo:
+---
 
-1. Crie o distrobox, de um destes dois jeitos.
-   - Com a mesma imagem do CI (recomendado):
-     ```sh
-     git clone https://github.com/FM0Ura/ModOrganizerLinux.git && cd ModOrganizerLinux
-     git checkout main
-     podman build -t mo2-linux-build -f build/Containerfile build/
-     distrobox create --name mo2-run --image localhost/mo2-linux-build
-     ```
-   - Ou uma imagem Fedora limpa, com os pacotes de execução do `build/Containerfile` e os do Python (para compilar, use a imagem do `build/Containerfile`):
-     ```sh
-     distrobox create --name mo2-run --image fedora:44
-     distrobox enter mo2-run -- sudo dnf -y install --setopt=install_weak_deps=False \
-         qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtwebsockets-devel \
-         qt6-qtnetworkauth-devel qt6-qtdeclarative-devel boost-devel spdlog-devel \
-         fmt-devel lz4-devel zlib-devel fuse3-devel qt6-qtwayland libsecret \
-         python3 python3-pyqt6 tbb
-     ```
-   - Se o box `mo2-run` foi criado com uma imagem anterior à Fase 4a: `distrobox enter mo2-run -- sudo dnf -y install libsecret` (para guardar os logins no Secret Service).
-   - Se foi criado antes da Fase 4e: `distrobox enter mo2-run -- sudo dnf -y install tbb` (o BSA Packer usa o `libtbb`; com a imagem do `build/Containerfile`, o `tbb-devel` já o instala).
-2. Obtenha o artefato `mo2-linux-install`. Duas rotas:
-   - **Pelo navegador:** GitHub -> repositório `FM0Ura/ModOrganizerLinux` -> aba Actions ->
-     workflow **Linux** -> último run verde do branch `main` ->
-     seção Artifacts -> `mo2-linux-install` (é preciso estar logado no GitHub). O download é
-     um zip; extraia (só nesta rota):
-     ```sh
-     mkdir -p ~/mo2-phase1 && unzip ~/Downloads/mo2-linux-install.zip -d ~/mo2-phase1
-     ```
-   - **Pelo terminal**, com o `gh` autenticado (ele já extrai os arquivos):
-     ```sh
-     gh run download <id do run> -R FM0Ura/ModOrganizerLinux -n mo2-linux-install -D ~/mo2-phase1
-     ```
-3. Nas duas rotas, o artefato perde a permissão de execução; restaure:
-   ```sh
-   chmod +x ~/mo2-phase1/bin/ModOrganizer
-   ```
-4. Rode dentro do distrobox:
-   ```sh
-   distrobox enter mo2-run -- ~/mo2-phase1/bin/ModOrganizer
-   ```
-   `QT_QPA_PLATFORM` não é necessário em um desktop (só para execução sem tela). Se a janela
-   não aparecer no Wayland, tente
-   `distrobox enter mo2-run -- env QT_QPA_PLATFORM=xcb ~/mo2-phase1/bin/ModOrganizer`.
-   Por SSH, exporte antes as variáveis da sessão da área de trabalho (`WAYLAND_DISPLAY`,
-   `XDG_SESSION_TYPE`, `XDG_RUNTIME_DIR`, `DISPLAY`, `XAUTHORITY`); sem tela, o MO2 avisa
-   ("needs a graphical session") e sai.
+<div align="center">
 
-Problemas na abertura: nunca rode o MO2 como root/`sudo`; se ele travar logo depois de escolher
-a instância, use `env QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu` antes do binário (e, em placa
-NVIDIA, crie o distrobox com `--nvidia`); se aparecer "SHM error ... permission denied", remova
-os `/tmp/qipc_*_mo*` deixados por uma execução anterior como root. Detalhes no checklist.
+Made by **[FM0Ura](https://github.com/FM0Ura)**. Based on [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer).
 
-Alternativa: compilar você mesmo. Isso só funciona no distrobox criado com a imagem do
-`build/Containerfile` (a rota `fedora:44` + `dnf` acima não tem gcc, cmake, ninja nem Rust).
-O código do app já vem neste repositório, em `deps/modorganizer`:
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-```sh
-distrobox enter mo2-run -- ./build.sh        # gera install/bin/ModOrganizer
-```
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&height=100&section=footer" width="100%" alt=""/>
 
-Depois siga o [checklist manual](docs/testing/phase1-manual-checklist.md).
-
-### Ferramentas (BodySlide, Nemesis, Pandora, xEdit)
-
-Instale a ferramenta como mod (pelo MO2, a partir do arquivo baixado) e configure o executável pelo `.exe` **dentro da pasta do mod** (botão de executáveis → binário em `mods/<mod>/...`). Como no Windows, o MO2 roda um programa de dentro de `mods/` a partir do lugar correspondente no `Data` virtual (`mods/Nemesis/Nemesis_Engine/x.exe` → `<jogo>/Data/Nemesis_Engine/x.exe`), então ferramentas que precisam estar no `Data`, como o Nemesis, funcionam. Isso vale só para execuções com o sistema de arquivos virtual (o padrão do "Executar"), e o mod precisa estar ativo no perfil; desativado, o programa roda da pasta do mod (aviso no log).
-
-- **Nemesis e BodySlide:** sem argumentos. O que eles geram vai para o `overwrite` (mova para um mod depois, como no Windows).
-- **Pandora:** use o build do Nexus (no GitHub, o `..._win-x64_net.zip`), que traz o .NET; o zip que depende do .NET instalado não abre num prefixo sem o .NET 10. Na 5.0.0-beta o argumento `-o` é ignorado pelo próprio Pandora: a saída vai para o `overwrite`.
-- **xEdit de outros jogos** (FO4Edit, TES5Edit, FNVEdit...): o executável roda no prefixo do jogo da instância (ou no do campo "Steam AppID" do executável). O jogo precisa ter rodado uma vez pela Steam, para o prefixo existir e o registro `Installed Path`, onde o xEdit procura o jogo, ser gravado.
-
-### Plugins Python
-
-O MO2 usa o Python 3.14 e o PyQt6 do Fedora do box `mo2-run`. Num box criado antes da Fase 4d.1, instale os pacotes uma vez:
-
-    distrobox enter mo2-run -- sudo dnf install -y python3 python3-pyqt6
-
-Sem esses pacotes (ou com outra versão do Python no box), o MO2 abre sem os plugins Python e o ícone de notificações mostra o aviso do "Python Proxy" com esse comando.
-
-O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*`, e não enxerga pacotes do `~/.local` nem de `/usr/local`; só a biblioteca padrão e os pacotes do sistema do box, mais as pastas do próprio MO2. Plugins Python incluídos: pré-visualização de DDS, verificador do formato 43, verificador de plugins do script extender, Configurator (INIs), instalador de BAIN com wizard, FNIS e o `basic_games`.
-
-O `basic_games` traz o suporte da comunidade a cerca de 75 módulos de jogos que não são da Bethesda. No Linux ele só enxerga jogos da **Steam**: o MO2 acha o jogo instalado pelo app ID (nas bibliotecas da Steam do usuário), e GOG, Epic, EA e Origin não são detectados (o MO2 registra isso no log, uma vez). Os documentos, as configurações e os saves do jogo ficam no prefixo do Proton dele (`<biblioteca>/steamapps/compatdata/<app ID>/pfx/drive_c/users/steamuser/…`), então **rode o jogo uma vez pela Steam** antes de criar a instância, para o Proton criar o prefixo; sem prefixo, o MO2 usa as pastas XDG e avisa no log. Dos jogos do `basic_games`, estão validados o Cyberpunk 2077 e o NieR:Automata (os jogos funcionais estão em "Working games", no topo); o Baldur's Gate 3 foi experimentado e tem lacunas conhecidas, e os demais são detectados, mas não foram testados. No Baldur's Gate 3, a ordem de carga (`modsettings.lsx`) **ainda não é gerada no Linux**: o LSLib (`Divine.dll`) rejeita caminhos Unix. O MO2 avisa isso uma vez por sessão (ao instalar um mod ou executar o jogo; as ferramentas do BG3 avisam a cada uso); gere o arquivo por fora e coloque-o no perfil, e o MO2 o mapeia para o jogo. Mods que trazem uma DLL "proxy" (Cyberpunk 2077: CET e RED4ext, com `version.dll` e `winmm.dll`; Baldur's Gate 3: Script Extender, com `DWrite.dll`; NieR:Automata: FAR, com `dinput8.dll`) **não carregam sozinhos no Linux**: as bibliotecas forçadas (`executableForcedLoads`, e a opção `force_load_dlls` do plugin do BG3) são ignoradas, e o Wine prefere a própria DLL à da pasta do jogo. Como o MO2 inicia o jogo pelo Proton, as opções de inicialização da Steam também não valem. Em **Tools → Modify Executables…**, selecione o executável do jogo e, no grupo **Proton**, na linha **Environment**, escreva `WINEDLLOVERRIDES=<dll>=n,b` (sem o `.dll`; várias DLLs separadas por vírgula): `WINEDLLOVERRIDES=version,winmm=n,b` (Cyberpunk 2077), `WINEDLLOVERRIDES=DWrite=n,b` (Baldur's Gate 3) ou `WINEDLLOVERRIDES=dinput8=n,b` (NieR:Automata). O `basic_games` não precisa de pacote novo no box (o `dotnet-runtime-8.0`, se você o instalou para testar o LSLib, pode ser removido: `sudo dnf remove dotnet-runtime-8.0`).
-
-### Criação de BSA/BA2
-
-**Ferramentas → BSA Packer** empacota os arquivos soltos de um mod num `.bsa` (Morrowind, Oblivion, Fallout 3, Fallout: New Vegas, Skyrim, Enderal, Skyrim SE e Enderal SE) ou `.ba2` (Fallout 4 e Starfield, com as texturas num `… - Textures.ba2` à parte) na pasta do mod. Para os outros jogos (as edições VR, os jogos do `basic_games`) a ferramenta não grava nenhum arquivo nem plugin, mas, com `hide_loose_assets` ligado, o upstream ainda esconde as pastas. Em **Configurações → Plugins → BSA Packer**: `create_plugins` cria o plugin vazio (`.esp`/`.esl`) que faz o jogo carregar o arquivo (no Morrowind, nenhum: o upstream não cria plugin para ele); `hide_loose_assets` esconde os arquivos soltos (as pastas viram `….mohidden`); `blacklisted_files` deveria listar as extensões que ficam de fora, mas com o valor padrão não é aplicado (defeito do upstream, em toda plataforma: o `ArchiveBuilderHelper.cpp` separa a lista por espaços, e o padrão e a descrição usam `;`), então esses arquivos também entram no arquivo (e, com `hide_loose_assets`, ainda voltam soltos ao lugar); `compress_archives` comprime. É o plugin `bsapacker` do upstream: no Linux o arquivo é escrito pelo `libbsarchpp` (no Windows, pelo `libbsarch`, que só existe lá); o resultado é o mesmo formato, mas os arquivos LZ4 (Skyrim SE, Enderal SE e as texturas do Starfield; os arquivos principais do Starfield usam zlib) não são idênticos byte a byte aos do xEdit. Num `.bsa`, os nomes são gravados em minúsculas, como o jogo os procura; fora do Morrowind, um arquivo sem extensão (por exemplo `docs/LICENSE`) fica de fora, e de dois arquivos cujos nomes só diferem em maiúsculas e minúsculas só o primeiro entra (os dois casos com um aviso no log). O alvo da validação é o Skyrim SE (teste manual pendente); os demais jogos são suportados, não validados (só pelos testes automáticos). Um único arquivo acima de 4 GiB não é criado (o motivo vai para o log: `failed to write archive <caminho>: <mensagem>`). O `libbsa_packer.so` usa o `libtbb` do box (pacote `tbb`).
-
-## Building
-
-The build environment is defined once, in [`build/Containerfile`](build/Containerfile)
-(Fedora 44: GCC, CMake, Ninja, Qt 6 incl. WebEngine/NetworkAuth/WebSockets, Boost, spdlog,
-fmt, lz4, zlib, gtest, gmock, gsl-lite, tbb, openssl, fuse3, clang-tools-extra, Rust stable, and, for the Python
-plugins, `python3-devel pybind11-devel python3-pyqt6 python3-pyqt6-devel python3-pip
-python3-pytest sip6`). CI uses the same file. If
-`fedora:44` is ever unavailable, use the latest stable Fedora tag and note it here.
-
-`build.sh` builds the application from `deps/modorganizer` (override with `MO2_SRC`).
-It builds into `build-out/` and installs into
-`install/`:
-
-```sh
-./build.sh                          # all implemented targets, in dependency order
-./build.sh --only uibase --tests    # one or more targets (repeatable), with ctest
-./build.sh --list                   # targets in build order
-```
-
-The `mo2-vfs` target builds the Rust FUSE virtual file system (`mo2-vfs/`) into
-`install/bin/mo2-vfs`; its tests need `/dev/fuse` and `fusermount3` (they are skipped
-without them, and fail with `MO2_REQUIRE_FUSE=1`, as in CI).
-
-Targets not ported yet are skipped by the default run and rejected with `--only`.
-
-### With podman or docker
-
-```sh
-podman build -t mo2-linux-build -f build/Containerfile build/
-podman run --rm -v "$PWD/..:/work:Z" -w /work/ModOrganizerLinux mo2-linux-build ./build.sh --tests
-```
-
-Building in a Fedora 44 box that was not created from that image needs, besides the other
-dependencies, the Python packages `python3-devel pybind11-devel python3-pyqt6
-python3-pyqt6-devel python3-pip python3-pytest sip6`, `gmock-devel`, `gsl-lite-devel`, `tbb-devel` and `openssl-devel`
-(the `libbsarchpp` tests need OpenSSL):
-
-```sh
-distrobox enter mo2-run -- sudo dnf install -y python3-devel pybind11-devel python3-pyqt6 \
-    python3-pyqt6-devel python3-pip python3-pytest sip6 gmock-devel gsl-lite-devel tbb-devel \
-    openssl-devel
-```
-
-### With distrobox (Bazzite)
-
-```sh
-podman build -t mo2-linux-build -f build/Containerfile build/
-distrobox create --name mo2-build --image localhost/mo2-linux-build
-distrobox enter mo2-build -- ./build.sh --tests
-```
-
-### Local environment
-
-No container is required: any environment that provides the dependencies listed in the
-Containerfile works. `build.sh` respects `CC`, `CXX` and `CMAKE_PREFIX_PATH` from the
-environment (it prepends `install/` to `CMAKE_PREFIX_PATH`).
+</div>

@@ -1,0 +1,37 @@
+# Jogos e ferramentas que funcionam
+
+**Português** · [English](../en/games.md) · Anterior: [Atualização](updating.md) · Próximo: [Problemas conhecidos](troubleshooting.md)
+
+## Jogos que funcionam
+
+| Jogo | Situação |
+|------|----------|
+| Skyrim Special Edition (Steam + Proton) | Funciona: mods pelo sistema de arquivos virtual, SKSE, LOOT e SSEEdit, conferidos nos testes manuais no Bazzite. |
+| Cyberpunk 2077 (Steam + Proton) | Funciona: mods pelo sistema de arquivos virtual, conferido à mão no Bazzite. CET e RED4ext precisam de `WINEDLLOVERRIDES` (veja abaixo, em "Plugins Python"). |
+| NieR:Automata (Steam + Proton) | Funciona: mods pelo sistema de arquivos virtual, conferido à mão no Bazzite. Todo mod passa pelo instalador manual (o plugin, como no upstream, não reconhece a estrutura dos mods). |
+
+Todos os outros jogos só são detectados (os plugins da Bethesda e os cerca de 75 jogos do
+`basic_games`) e **não** foram validados. O Baldur's Gate 3 foi experimentado e tem lacunas
+conhecidas (veja [Problemas conhecidos](troubleshooting.md#baldurs-gate-3)).
+
+## Ferramentas (BodySlide, Nemesis, Pandora, xEdit)
+
+Instale a ferramenta como mod (pelo MO2, a partir do arquivo baixado) e configure o executável pelo `.exe` **dentro da pasta do mod** (botão de executáveis → binário em `mods/<mod>/...`). Como no Windows, o MO2 roda um programa de dentro de `mods/` a partir do lugar correspondente no `Data` virtual (`mods/Nemesis/Nemesis_Engine/x.exe` → `<jogo>/Data/Nemesis_Engine/x.exe`), então ferramentas que precisam estar no `Data`, como o Nemesis, funcionam. Isso vale só para execuções com o sistema de arquivos virtual (o padrão do "Executar"), e o mod precisa estar ativo no perfil; desativado, o programa roda da pasta do mod (aviso no log).
+
+- **Nemesis e BodySlide:** sem argumentos. O que eles geram vai para o `overwrite` (mova para um mod depois, como no Windows).
+- **Pandora:** use o build do Nexus (no GitHub, o `..._win-x64_net.zip`), que traz o .NET; o zip que depende do .NET instalado não abre num prefixo sem o .NET 10. Na 5.0.0-beta o argumento `-o` é ignorado pelo próprio Pandora: a saída vai para o `overwrite`.
+- **xEdit de outros jogos** (FO4Edit, TES5Edit, FNVEdit...): o executável roda no prefixo do jogo da instância (ou no do campo "Steam AppID" do executável). O jogo precisa ter rodado uma vez pela Steam, para o prefixo existir e o registro `Installed Path`, onde o xEdit procura o jogo, ser gravado.
+
+## Plugins Python
+
+O MO2 usa o Python 3.14 e o PyQt6 **de dentro do AppImage**; não há nada para instalar. (Quem roda um build do CI num box, e não o AppImage, veja "Python no box" em [docs/dev/building.md](../../dev/building.md#python-no-box).)
+
+O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*`, e não enxerga pacotes do `~/.local` nem de `/usr/local`; só a biblioteca padrão e os pacotes do Python do próprio AppImage, mais as pastas do próprio MO2. Plugins Python incluídos: pré-visualização de DDS, verificador do formato 43, verificador de plugins do script extender, Configurator (INIs), instalador de BAIN com wizard, FNIS e o `basic_games`.
+
+O `basic_games` traz o suporte da comunidade a cerca de 75 módulos de jogos que não são da Bethesda. No Linux ele só enxerga jogos da **Steam**: o MO2 acha o jogo instalado pelo app ID (nas bibliotecas da Steam do usuário), e GOG, Epic, EA e Origin não são detectados (o MO2 registra isso no log, uma vez). Os documentos, as configurações e os saves do jogo ficam no prefixo do Proton dele (`<biblioteca>/steamapps/compatdata/<app ID>/pfx/drive_c/users/steamuser/…`), então **rode o jogo uma vez pela Steam** antes de criar a instância, para o Proton criar o prefixo; sem prefixo, o MO2 usa as pastas XDG e avisa no log. Dos jogos do `basic_games`, estão validados o Cyberpunk 2077 e o NieR:Automata (os jogos funcionais estão em "Jogos que funcionam", no topo); o Baldur's Gate 3 foi experimentado e tem lacunas conhecidas, e os demais são detectados, mas não foram testados. No Baldur's Gate 3, a ordem de carga (`modsettings.lsx`) **ainda não é gerada no Linux**: o LSLib (`Divine.dll`) rejeita caminhos Unix. O MO2 avisa isso uma vez por sessão (ao instalar um mod ou executar o jogo; as ferramentas do BG3 avisam a cada uso); gere o arquivo por fora e coloque-o no perfil, e o MO2 o mapeia para o jogo. Mods que trazem uma DLL "proxy" (Cyberpunk 2077: CET e RED4ext, com `version.dll` e `winmm.dll`; Baldur's Gate 3: Script Extender, com `DWrite.dll`; NieR:Automata: FAR, com `dinput8.dll`) **não carregam sozinhos no Linux**: as bibliotecas forçadas (`executableForcedLoads`, e a opção `force_load_dlls` do plugin do BG3) são ignoradas, e o Wine prefere a própria DLL à da pasta do jogo. Como o MO2 inicia o jogo pelo Proton, as opções de inicialização da Steam também não valem. Em **Tools → Modify Executables…**, selecione o executável do jogo e, no grupo **Proton**, na linha **Environment**, escreva `WINEDLLOVERRIDES=<dll>=n,b` (sem o `.dll`; várias DLLs separadas por vírgula): `WINEDLLOVERRIDES=version,winmm=n,b` (Cyberpunk 2077), `WINEDLLOVERRIDES=DWrite=n,b` (Baldur's Gate 3) ou `WINEDLLOVERRIDES=dinput8=n,b` (NieR:Automata). O `basic_games` não precisa de nenhum pacote novo (o `dotnet-runtime-8.0`, se você o instalou para testar o LSLib, pode ser removido: `sudo dnf remove dotnet-runtime-8.0`).
+
+## Criação de BSA/BA2
+
+**Ferramentas → BSA Packer** empacota os arquivos soltos de um mod num `.bsa` (Morrowind, Oblivion, Fallout 3, Fallout: New Vegas, Skyrim, Enderal, Skyrim SE e Enderal SE) ou `.ba2` (Fallout 4 e Starfield, com as texturas num `… - Textures.ba2` à parte) na pasta do mod. Para os outros jogos (as edições VR, os jogos do `basic_games`) a ferramenta não grava nenhum arquivo nem plugin, mas, com `hide_loose_assets` ligado, o upstream ainda esconde as pastas. Em **Configurações → Plugins → BSA Packer**: `create_plugins` cria o plugin vazio (`.esp`/`.esl`) que faz o jogo carregar o arquivo (no Morrowind, nenhum: o upstream não cria plugin para ele); `hide_loose_assets` esconde os arquivos soltos (as pastas viram `….mohidden`); `blacklisted_files` deveria listar as extensões que ficam de fora, mas com o valor padrão não é aplicado (defeito do upstream, em toda plataforma: o `ArchiveBuilderHelper.cpp` separa a lista por espaços, e o padrão e a descrição usam `;`), então esses arquivos também entram no arquivo (e, com `hide_loose_assets`, ainda voltam soltos ao lugar); `compress_archives` comprime. É o plugin `bsapacker` do upstream: no Linux o arquivo é escrito pelo `libbsarchpp` (no Windows, pelo `libbsarch`, que só existe lá); o resultado é o mesmo formato, mas os arquivos LZ4 (Skyrim SE, Enderal SE e as texturas do Starfield; os arquivos principais do Starfield usam zlib) não são idênticos byte a byte aos do xEdit. Num `.bsa`, os nomes são gravados em minúsculas, como o jogo os procura; fora do Morrowind, um arquivo sem extensão (por exemplo `docs/LICENSE`) fica de fora, e de dois arquivos cujos nomes só diferem em maiúsculas e minúsculas só o primeiro entra (os dois casos com um aviso no log). O alvo da validação é o Skyrim SE (teste manual pendente); os demais jogos são suportados, não validados (só pelos testes automáticos). Um único arquivo acima de 4 GiB não é criado (o motivo vai para o log: `failed to write archive <caminho>: <mensagem>`). O `libbsa_packer.so` usa o `libtbb`, que já vem no AppImage.
+
+Próximo: [Problemas conhecidos](troubleshooting.md).
