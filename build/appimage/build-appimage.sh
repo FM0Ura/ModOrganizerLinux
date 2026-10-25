@@ -25,8 +25,9 @@
 # its plugins and resources next to itself): usr/bin/{ModOrganizer,mo2-vfs,loot/,
 # plugins/,...}, usr/lib/{libuibase.so,...,Qt,libstdc++.so.6,libgcc_s.so.1},
 # usr/lib/python3.14 (the standard library, PyQt6 in its site-packages) with
-# usr/lib/libpython3.14.so.1.0, usr/plugins (Qt), usr/libexec/QtWebEngineProcess and
-# usr/share/licenses/ModOrganizer. Every ELF finds its libraries through an
+# usr/lib/libpython3.14.so.1.0, usr/plugins (Qt), usr/libexec/QtWebEngineProcess (a
+# wrapper of QtWebEngineProcess.real, next to it, and mo2-hostlibs.sh, which AppRun
+# sources too) and usr/share/licenses/ModOrganizer. Every ELF finds its libraries through an
 # $ORIGIN-relative RUNPATH, without any environment (scripts/check-appdir.sh, run
 # before the AppImage is made, checks it).
 set -euo pipefail
@@ -320,6 +321,11 @@ rm -rf "$APPDIR/apprun-hooks" "$APPDIR/AppRun.wrapped"
 install -m 755 "$HERE/AppRun" "$APPDIR/AppRun"
 
 [[ -x $APPDIR/usr/libexec/QtWebEngineProcess ]] || die "QtWebEngineProcess was not deployed"
+# QtWebEngineProcess behind its wrapper, which uses the host's libstdc++ when AppRun
+# does (mo2-hostlibs.sh, sourced by both)
+mv "$APPDIR/usr/libexec/QtWebEngineProcess" "$APPDIR/usr/libexec/QtWebEngineProcess.real"
+install -m 755 "$HERE/QtWebEngineProcess" "$APPDIR/usr/libexec/QtWebEngineProcess"
+install -m 644 "$HERE/mo2-hostlibs.sh" "$APPDIR/usr/libexec/mo2-hostlibs.sh"
 [[ -d $APPDIR/usr/plugins/platforms ]] || die "the Qt platform plugins were not deployed"
 
 # --- libstdc++ and libgcc_s (AppRun prefers the host's when newer), dlopen modules --
@@ -357,7 +363,7 @@ QT_LIBEXECS="$($QMAKE -query QT_INSTALL_LIBEXECS)"
 {
     find "$APPDIR/usr/lib" -maxdepth 1 -type f -printf '/usr/lib64/%f\n'
     find "$APPDIR/usr/plugins" -type f -printf "$QT_PLUGINS/%P\n"
-    find "$APPDIR/usr/libexec" -type f -printf "$QT_LIBEXECS/%f\n"
+    find "$APPDIR/usr/libexec" -type f -printf "$QT_LIBEXECS/%f\n" | sed 's/\.real$//'
     find "$APPDIR/usr/lib/python$PYTHON_VERSION" -path "$SITE" -prune -o -type f -printf "$PYLIB/%P\n"
     find "$SITE/PyQt6" -type f -printf "$PYQT6/%P\n"
 } | while IFS= read -r path; do

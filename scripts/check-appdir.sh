@@ -19,10 +19,14 @@
 #     (/usr/lib64/python*, /usr/lib/python*), or a symbolic link is absolute;
 # (d) AppRun is not byte-identical to build/appimage/AppRun, or apprun-hooks/ or
 #     AppRun.wrapped exist (linuxdeploy's wrapper, whose hooks change the environment:
-#     AppRun may change LD_LIBRARY_PATH only, see there).
+#     AppRun may change LD_LIBRARY_PATH only, see there);
+# (e) usr/libexec/QtWebEngineProcess and usr/libexec/mo2-hostlibs.sh are not
+#     byte-identical to those of build/appimage, or usr/libexec/QtWebEngineProcess.real
+#     is not an executable ELF.
 set -euo pipefail
 
-APPRUN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/build/appimage/AppRun"
+SOURCES="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/build/appimage"
+APPRUN="$SOURCES/AppRun"
 
 (($# == 2)) || { echo "usage: $0 <AppDir> <max-glibc>" >&2; exit 2; }
 APPDIR="$(cd "$1" && pwd)"
@@ -120,6 +124,19 @@ for wrapper in apprun-hooks AppRun.wrapped; do
     [[ ! -e $APPDIR/$wrapper && ! -L $APPDIR/$wrapper ]] ||
         problem "$wrapper exists (the AppRun wrapper of linuxdeploy)"
 done
+
+# (e) the wrapper of QtWebEngineProcess
+for f in QtWebEngineProcess mo2-hostlibs.sh; do
+    if [[ ! -f $APPDIR/usr/libexec/$f ||
+        $(sha256sum <"$SOURCES/$f") != "$(sha256sum <"$APPDIR/usr/libexec/$f")" ]]; then
+        problem "usr/libexec/$f is not build/appimage/$f"
+    fi
+done
+[[ -x $APPDIR/usr/libexec/QtWebEngineProcess ]] ||
+    problem "usr/libexec/QtWebEngineProcess is not executable"
+{ is_elf "$APPDIR/usr/libexec/QtWebEngineProcess.real" &&
+    [[ -x $APPDIR/usr/libexec/QtWebEngineProcess.real ]]; } ||
+    problem "usr/libexec/QtWebEngineProcess.real is not an executable ELF"
 
 if ((problems > 0)); then
     echo "check-appdir: FAILED, $problems problem(s) in $elfs ELF files of $APPDIR" >&2
