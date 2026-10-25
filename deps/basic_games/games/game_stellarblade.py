@@ -123,6 +123,9 @@ class StellarBladeModDataChecker(mobase.ModDataChecker):
             for entry in [e for e in level if self._is_junk(e)]:
                 level.remove(entry)
         if len(levels) > 1:
+            # rename the wrapper first: a child with the same name would be merged
+            # into it and be deleted with it
+            filetree.move(levels[1], "__unwrap__")
             for entry in list(levels[-1]):
                 filetree.move(entry, "/", mobase.IFileTree.InsertPolicy.MERGE)
             filetree.remove(levels[1])
