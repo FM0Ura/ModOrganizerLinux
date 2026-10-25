@@ -146,6 +146,8 @@ class StellarBladeModDataChecker(mobase.ModDataChecker):
                 return f"{_WIN64}/dwmapi.dll"
             if key == "ue4ss.dll":
                 return f"{_UE4SS}/UE4SS.dll"
+            if key == "ue4ss-settings.ini":
+                return f"{_UE4SS}/UE4SS-settings.ini"
             return None
         if key in _FOLDERS:
             return _FOLDERS[key]
@@ -266,7 +268,7 @@ class StellarBladeGame(BasicGame, mobase.IPluginFileMapper):
         ]
 
     def _onAboutToRun(self, app_path: str, wd: QDir, args: str) -> bool:
-        if self._organizer.managedGame() is not self:
+        if not self.isActive():
             return True
         try:
             mod_list = self._organizer.modList()
