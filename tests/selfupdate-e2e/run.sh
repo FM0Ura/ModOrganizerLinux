@@ -23,6 +23,9 @@
 #    shows the error and keeps running; the test then stops it).
 # 3. no releases (the 404 of a private repository): only logged, nothing downloaded, Mod
 #    Organizer keeps running.
+# 4. read-only folder (APPIMAGE in a 0555 folder): the new version is still found, but
+#    only announced with the page of the release (logged); nothing is downloaded nor
+#    replaced and Mod Organizer keeps running.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -41,6 +44,7 @@ server=""
 cleanup() {
     [[ -z $pid ]] || kill -KILL "$pid" 2>/dev/null || true
     [[ -z $server ]] || kill "$server" 2>/dev/null || true
+    chmod -R u+w "$work" 2>/dev/null || true
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -103,10 +107,11 @@ for ((i = 0; i < 50; i++)); do
     sleep 0.2
 done
 
-# run_mo2 <name> <sums contents> [<API URL>]: sets up a fresh HOME, instance and APPIMAGE
-# and starts Mod Organizer in the background (pid)
+# run_mo2 <name> <sums contents> [<API URL> [readonly]]: sets up a fresh HOME, instance
+# and APPIMAGE (in a 0555 folder with "readonly") and starts Mod Organizer in the
+# background (pid)
 run_mo2() {
-    local name="$1" sums="$2" api="${3:-$base}" home game
+    local name="$1" sums="$2" api="${3:-$base}" mode="${4:-}" home game
     case_dir="$work/$name"
     home="$case_dir/home"
     instance="$home/.local/share/ModOrganizer/smoke"
@@ -128,6 +133,7 @@ run_mo2() {
     printf 'the old version\n' > "$appimage"
     chmod 0750 "$appimage"
     printf '%s' "$sums" > "$srv/download/SHA256SUMS"
+    [[ $mode != readonly ]] || chmod 0555 "$apps"
 
     env HOME="$home" \
         XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share" \
@@ -245,5 +251,44 @@ grep -E "update: |update available|no releases" "$instance/logs/mo_interface.log
     fail "something was downloaded without a release"
 [[ $(<"$appimage") == "the old version" ]] || fail "APPIMAGE was changed"
 echo "no releases test passed"
+
+echo "--- read-only folder of the AppImage"
+run_mo2 readonly "$sha  ModOrganizer-2.5.2.2-x86_64.AppImage
+" "$base" readonly
+found=0
+for ((i = 0; i < 120; i++)); do
+    if grep -q "update: showing the page of the release" \
+        "$instance/logs/mo_interface.log" 2>/dev/null; then
+        found=1
+        break
+    fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+done
+sleep 2
+alive=0
+kill -0 "$pid" 2>/dev/null && alive=1
+kill -TERM "$pid" 2>/dev/null || true
+for ((i = 0; i < 20; i++)); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.5
+done
+kill -KILL "$pid" 2>/dev/null || true
+wait "$pid" 2>/dev/null || true
+pid=""
+grep -E "update: |update available|no releases" "$instance/logs/mo_interface.log" || true
+((found)) || { cat "$out"; fail "no \"update: showing the page of the release\" in the log"; }
+grep -q "update available: 2.5.2[.0-9]* -> 2.5.2.2" "$instance/logs/mo_interface.log" ||
+    fail "the new version was not found"
+grep -q "is not writable, the new version can only be downloaded" \
+    "$instance/logs/mo_interface.log" || fail "no notice about the read-only folder"
+((alive)) || fail "Mod Organizer exited in the read-only case"
+! grep -q "update: downloading" "$instance/logs/mo_interface.log" ||
+    fail "something was downloaded for a read-only folder"
+[[ ! -e $marker ]] || fail "the new AppImage was executed"
+[[ $(<"$appimage") == "the old version" ]] || fail "APPIMAGE was changed"
+[[ -z $(leftovers) ]] || fail "download left behind: $(leftovers)"
+chmod 0755 "$apps"
+echo "read-only folder test passed"
 
 echo "self-update e2e test passed"
