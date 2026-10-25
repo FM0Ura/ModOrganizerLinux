@@ -75,6 +75,10 @@ BUNDLE_ANYWAY=(
 )
 # libraries that nothing links but that a bundled library opens with dlopen from its own
 # directory: the modules of NSS (QtWebEngine), libnssckbi.so being p11-kit's trust module
+# (Fedora ships no NSS built-in roots module), which reads only Fedora's trust paths.
+# QtWebEngine verifies servers with Chromium's built-in root store (checked on Ubuntu
+# 26.04, where those paths do not exist: public sites load, an untrusted root is
+# rejected), so only the CAs a user added to the host's store are missing elsewhere
 DLOPEN_MODULES=(
     libsoftokn3.so libsoftokn3.chk libfreeblpriv3.so libfreeblpriv3.chk
     libfreebl3.so libfreebl3.chk libnssckbi.so
@@ -307,6 +311,13 @@ env PATH="$TOOLS/bin:$PATH" \
     --desktop-file "$WORK/ModOrganizer.desktop" \
     --icon-file "$WORK/ModOrganizer.png" \
     --plugin qt
+
+# linuxdeploy wraps a custom AppRun with the hooks of its plugins (AppRun.wrapped and
+# apprun-hooks/; the Qt plugin's exports QT_QPA_PLATFORMTHEME=gtk2 on GNOME and XFCE,
+# which Mod Organizer would not restore and every child would inherit): the AppRun is
+# ours, exactly (scripts/check-appdir.sh checks it)
+rm -rf "$APPDIR/apprun-hooks" "$APPDIR/AppRun.wrapped"
+install -m 755 "$HERE/AppRun" "$APPDIR/AppRun"
 
 [[ -x $APPDIR/usr/libexec/QtWebEngineProcess ]] || die "QtWebEngineProcess was not deployed"
 [[ -d $APPDIR/usr/plugins/platforms ]] || die "the Qt platform plugins were not deployed"

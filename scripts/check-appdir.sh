@@ -16,8 +16,13 @@
 #     host's own libraries bring their dependencies);
 # (c) an ELF has an absolute RUNPATH/RPATH entry (only $ORIGIN-relative ones may ship),
 #     or a .pth file or sitecustomize.py refers to the host's Python
-#     (/usr/lib64/python*, /usr/lib/python*), or a symbolic link is absolute.
+#     (/usr/lib64/python*, /usr/lib/python*), or a symbolic link is absolute;
+# (d) AppRun is not byte-identical to build/appimage/AppRun, or apprun-hooks/ or
+#     AppRun.wrapped exist (linuxdeploy's wrapper, whose hooks change the environment:
+#     AppRun may change LD_LIBRARY_PATH only, see there).
 set -euo pipefail
+
+APPRUN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/build/appimage/AppRun"
 
 (($# == 2)) || { echo "usage: $0 <AppDir> <max-glibc>" >&2; exit 2; }
 APPDIR="$(cd "$1" && pwd)"
@@ -104,6 +109,17 @@ while IFS= read -r -d '' l; do
     target="$(readlink "$l")"
     [[ $target == /* ]] && problem "${l#"$APPDIR"/} is an absolute link to $target"
 done < <(find "$APPDIR" -type l -print0)
+
+# (d) the AppRun
+# (sha256sum: coreutils, unlike cmp, is in every container that builds this)
+if [[ ! -f $APPDIR/AppRun || $(sha256sum <"$APPRUN") != "$(sha256sum <"$APPDIR/AppRun")" ]]; then
+    problem "AppRun is not build/appimage/AppRun"
+fi
+[[ -x $APPDIR/AppRun ]] || problem "AppRun is not executable"
+for wrapper in apprun-hooks AppRun.wrapped; do
+    [[ ! -e $APPDIR/$wrapper && ! -L $APPDIR/$wrapper ]] ||
+        problem "$wrapper exists (the AppRun wrapper of linuxdeploy)"
+done
 
 if ((problems > 0)); then
     echo "check-appdir: FAILED, $problems problem(s) in $elfs ELF files of $APPDIR" >&2
