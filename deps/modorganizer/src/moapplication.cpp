@@ -38,6 +38,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QPainter>
 #include <QProxyStyle>
 #include <QSslSocket>
+#include <QTimer>
 #include <QStringList>
 #include <QStyleFactory>
 #include <QStyleOption>
@@ -359,6 +360,21 @@ int MOApplication::run(MOMultiProcess& multiProcess)
         Qt::QueuedConnection);
 
     log::debug("displaying main window");
+#ifndef _WIN32
+    // test hook of tests/smoke/modorganizer-smoke.sh: restart once in the same process
+    // (what Change Game does), to check that restarting does not crash
+    {
+      static bool restartedOnce = false;
+      if (!restartedOnce && qEnvironmentVariableIsSet("MO2_SMOKE_RESTART_ONCE")) {
+        restartedOnce = true;
+        // the restart drops the -i override: keep the instance as the current one
+        InstanceManager::singleton().setCurrentInstance(m_instance->displayName());
+        QTimer::singleShot(1500, this, [] {
+          qApp->exit(RestartExitCode);
+        });
+      }
+    }
+#endif
     mainWindow.show();
     mainWindow.activateWindow();
     splash.close();

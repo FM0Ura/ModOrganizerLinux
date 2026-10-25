@@ -32,6 +32,12 @@
 #    With the Python proxy installed (Phase 4d.1), Python must have started (no "failed to
 #    init python") and every Python plugin (bin/plugins/*.py, bin/plugins/*/__init__.py,
 #    but not plugin_python/ nor data/) must be logged as loaded from its file or folder.
+# 4. restart in the same process (Phase 5, spec section 3.8): with a ready instance and
+#    MO2_SMOKE_RESTART_ONCE=1, MOApplication::doOneRun() makes the application restart once
+#    right after showing the main window (what Change Game does). The test waits for two
+#    "displaying main window" lines and then sends SIGTERM; a crash (the second
+#    aboutToQuit used to segfault in OzoneUtilQt::getQOpenGLContext), a crash dump or an
+#    exit that is not by TERM or 0 fails it.
 set -euo pipefail
 
 INSTALL="${1:?usage: $0 <install prefix>}"
@@ -258,6 +264,84 @@ main_window() {
     rm -rf "$work" || true
 }
 
+# restart_once: see 4. above
+restart_once() {
+    local here home instance game out rc=0 i n=0 f app_env
+    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    echo "--- ModOrganizer -i smoke, restarted once in the same process"
+    pid=""
+    work="$(mktemp -d "${TMPDIR:-/tmp}/mo2-smoke.XXXXXX")"
+    trap '[[ -z ${pid:-} ]] || kill -KILL "$pid" 2>/dev/null; rm -rf "${work:-/nonexistent}" || true' EXIT
+    home="$work/home"
+    instance="$home/.local/share/ModOrganizer/smoke"
+    game="$work/game"
+    out="$work/app.out"
+    mkdir -p "$home"/{.config,.cache,.local/share,.local/state} "$work/tmp"
+    mkdir -m 700 "$work/runtime"
+    # shellcheck source=../lib/instance.sh
+    source "$here/../lib/instance.sh"
+    mo2_make_instance "$here/../fixtures/vfs-e2e" "$work" "$game" "$instance" /bin/true
+    sed -i -e 's|^\[General\]$|&\nfirst_start=false\nversion=2.5.2|' \
+        -e 's|^\[Settings\]$|&\nlog_level=0|' "$instance/ModOrganizer.ini"
+    app_env=(HOME="$home"
+        XDG_CONFIG_HOME="$home/.config" XDG_DATA_HOME="$home/.local/share"
+        XDG_CACHE_HOME="$home/.cache" XDG_STATE_HOME="$home/.local/state"
+        XDG_RUNTIME_DIR="$work/runtime" TMPDIR="$work/tmp"
+        DBUS_SESSION_BUS_ADDRESS="unix:path=$work/no-bus"
+        MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen MO2_SMOKE_RESTART_ONCE=1
+        QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu")
+    env "${app_env[@]}" "$APP" --logs -i smoke > "$out" 2>&1 < /dev/null &
+    pid=$!
+
+    # each restart starts a new log file, so the lines of the first run can be gone from
+    # it: count the increments seen in the log file (c, base) and, as a lower bound, the
+    # lines of the stdout copy (block buffered)
+    local c=0 prev=0 base=0 o=0
+    for ((i = 0; i < 120; i++)); do
+        c="$(grep -c "displaying main window" "$instance"/logs/mo_interface.log 2>/dev/null ||
+            true)"
+        c="${c:-0}"
+        ((c < prev)) && base=$((base + prev))
+        prev=$c
+        o="$(grep -c "displaying main window" "$out" 2>/dev/null || true)"
+        n=$((base + c))
+        ((o > n)) && n=$o
+        ((n >= 2)) && break
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.5
+    done
+    if ((n >= 2)) && kill -0 "$pid" 2>/dev/null; then
+        # let the second run settle before stopping it
+        sleep 2
+        kill -TERM "$pid" 2>/dev/null || true
+        for ((i = 0; i < 20; i++)); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.5
+        done
+    fi
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        pid=""
+        cat "$out"
+        fail "the application did not exit within 10 s of SIGTERM (or never restarted)"
+    fi
+    wait "$pid" || rc=$?
+    pid=""
+    cat "$out"
+    n="$(grep -c "displaying main window" "$out" || true)"
+
+    ((n >= 2)) || fail "the application did not show the main window twice (saw $n; exit $rc)"
+    ((rc == 143 || rc == 0)) || fail "the application exited with $rc after the restart"
+    [[ $(<"$out") != *"has crashed"* && $(<"$out") != *"terminate called"* ]] ||
+        fail "the application crashed"
+    f="$(find "$work" -type f \( -name '*.dmp' -o -name 'core' -o -name 'core.*' \) | head -n 5)"
+    [[ -z $f ]] || fail "crash dump(s) written: $f"
+    echo "restart test passed (exit $rc)"
+    trap - EXIT
+    rm -rf "$work" || true
+}
+
 # twice: the second start must not be disturbed by what the first one, stopped by
 # SIGTERM, left behind (single-process shared memory and local socket)
 start 1
@@ -266,6 +350,7 @@ if [[ ${MO2_SMOKE_MAIN_WINDOW:-1} == 0 ]]; then
     echo "--- main window test skipped (MO2_SMOKE_MAIN_WINDOW=0: no game plugin installed)"
 else
     main_window
+    restart_once
 fi
 
 echo "smoke test passed"
