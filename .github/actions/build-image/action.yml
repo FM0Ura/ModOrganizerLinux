@@ -1,0 +1,29 @@
+name: Build container image
+description: >
+  Builds the mo2-linux-build image from build/Containerfile, or loads it from the
+  Actions cache (keyed by the Containerfile), so a run does not install the Qt/Rust
+  toolchain again. Needs the superproject checked out in ModOrganizerLinux/.
+
+runs:
+  using: composite
+  steps:
+    # docker save | zstd of the image; saved by the post step of the cache action only
+    # when the key was a miss
+    - name: Restore container image
+      id: cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/mo2-linux-build.tar.zst
+        key: container-image-${{ hashFiles('ModOrganizerLinux/build/Containerfile') }}
+
+    - name: Load container image
+      if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: zstd -dc "$RUNNER_TEMP/mo2-linux-build.tar.zst" | docker load
+
+    - name: Build container image
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
+        docker save mo2-linux-build | zstd -T0 -3 -o "$RUNNER_TEMP/mo2-linux-build.tar.zst"
