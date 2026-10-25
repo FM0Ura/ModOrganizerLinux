@@ -11,6 +11,7 @@
 #include <report.h>
 
 #ifndef _WIN32
+#include "linux/appimage_linux.h"
 #include "linux/displaycheck_linux.h"
 #include <QProcessEnvironment>
 #endif
@@ -35,6 +36,11 @@ int run(int argc, char* argv[])
 {
   MOShared::SetThisThreadName("main");
   setExceptionHandlers();
+
+#ifndef _WIN32
+  // inside an AppImage: back to the environment of the host, for the whole process
+  appimage::captureAndRestore();
+#endif
 
   cl::CommandLine cl;
   if (auto r = cl.process(GetCommandLineW())) {

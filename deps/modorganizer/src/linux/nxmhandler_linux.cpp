@@ -3,6 +3,8 @@
 
 #include "nxmhandler_linux.h"
 
+#include "appimage_linux.h"
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -118,7 +120,7 @@ namespace
 Environment currentEnvironment()
 {
   Environment e;
-  e.appImage    = qEnvironmentVariable("APPIMAGE");
+  e.appImage    = appimage::info().appImage;
   e.containerId = qEnvironmentVariable("CONTAINER_ID");
   e.inContainer = vfsbridge::mode() == vfsbridge::Mode::Host;
   e.executable  = QCoreApplication::applicationFilePath();

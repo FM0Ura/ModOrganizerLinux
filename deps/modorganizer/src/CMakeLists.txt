@@ -119,6 +119,7 @@ set(_organizer_env_sources
 	envshell.cpp
 	envshortcut.cpp
 	envwindows.cpp
+	linux/appimage_linux.cpp
 	linux/envdump_linux.cpp
 	linux/envmetrics_linux.cpp
 	linux/envmodule_linux.cpp
