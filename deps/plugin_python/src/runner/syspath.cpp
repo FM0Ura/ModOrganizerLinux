@@ -42,6 +42,23 @@ namespace mo2::python {
         return result;
     }
 
+    std::optional<std::filesystem::path>
+    bundledPythonHome(const std::filesystem::path& pluginFolder)
+    {
+        namespace fs = std::filesystem;
+
+        const fs::path home = (pluginFolder / ".." / "..").lexically_normal().parent_path();
+        // (lexically_normal leaves a trailing separator, its parent_path drops it)
+        const fs::path os   = home / "lib" /
+                            ("python3." + std::to_string(PY_MINOR_VERSION)) / "os.py";
+
+        std::error_code ec;
+        if (fs::is_regular_file(os, ec)) {
+            return home;
+        }
+        return std::nullopt;
+    }
+
     std::vector<std::string> systemSysPathRoots()
     {
         py::module_ sys       = py::module_::import("sys");

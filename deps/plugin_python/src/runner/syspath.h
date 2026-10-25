@@ -1,6 +1,8 @@
 #ifndef PYTHONRUNNER_SYSPATH_H
 #define PYTHONRUNNER_SYSPATH_H
 
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -26,6 +28,14 @@ namespace mo2::python {
     // builds); Python must be initialized and the GIL held
     //
     RUNNER_DLL_EXPORT std::vector<std::string> systemSysPathRoots();
+
+    // the home of the Python bundled with Mod Organizer (Linux AppImage): the folder
+    // two levels above the plugin folder (usr, with bin/plugins and lib/python3.X) if
+    // it holds the standard library of the running version (lib/python3.X/os.py),
+    // nullopt in a development tree or an installation using the system's Python
+    //
+    RUNNER_DLL_EXPORT std::optional<std::filesystem::path>
+    bundledPythonHome(const std::filesystem::path& pluginFolder);
 
 }  // namespace mo2::python
 

@@ -142,6 +142,24 @@ namespace mo2::python {
 #else
             // Linux: Python computes the paths of the system's standard library, which
             // are filtered below, with the paths of Mod Organizer
+            //
+            // in the AppImage the Python is the bundled one: its home comes from the
+            // plugin folder, never from the environment (restored to the host's), and
+            // sys.base_prefix, thus the filter below, then points to the AppDir
+            if (!paths.empty()) {
+                const auto pluginFolder = absolute(paths[0]).parent_path().parent_path();
+                if (const auto home = bundledPythonHome(pluginFolder)) {
+                    const auto status = PyConfig_SetBytesString(
+                        &config, &config.home, home->string().c_str());
+                    if (PyStatus_Exception(status)) {
+                        MOBase::log::error("failed to init python: failed to set the "
+                                           "bundled home: {}",
+                                           status.err_msg ? status.err_msg : "");
+                        PyConfig_Clear(&config);
+                        return false;
+                    }
+                }
+            }
 #endif
 
             py::initialize_interpreter(&config, 1, &argv0, true);

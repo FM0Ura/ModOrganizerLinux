@@ -1,7 +1,14 @@
 #include <gtest/gtest.h>
 
+#include <unistd.h>
+
+#include <Python.h>
+#include <filesystem>
+#include <fstream>
+
 #include "syspath.h"
 
+using mo2::python::bundledPythonHome;
 using mo2::python::filterSysPath;
 
 namespace {
@@ -61,4 +68,48 @@ TEST(SysPath, NonAsciiPaths)
                             {home + "/plugins/plugin_python/libs"}),
               (std::vector<std::string>{"/usr/lib64/python3.14",
                                         home + "/plugins/plugin_python/libs"}));
+}
+
+namespace {
+    // a temporary directory removed with the test
+    struct TempDir
+    {
+        std::filesystem::path path;
+
+        TempDir()
+        {
+            path = std::filesystem::temp_directory_path() /
+                   ("mo2-bundled-python-" + std::to_string(::getpid()));
+            std::filesystem::remove_all(path);
+            std::filesystem::create_directories(path);
+        }
+        ~TempDir()
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    };
+
+    const std::string osPy = std::string("python3.") + std::to_string(PY_MINOR_VERSION);
+}  // namespace
+
+TEST(BundledPythonHome, FoundInAppDirLayout)
+{
+    TempDir dir;
+    std::filesystem::create_directories(dir.path / "usr/bin/plugins");
+    std::filesystem::create_directories(dir.path / "usr/lib" / osPy);
+    std::ofstream(dir.path / "usr/lib" / osPy / "os.py") << "";
+
+    const auto home = bundledPythonHome(dir.path / "usr/bin/plugins");
+    ASSERT_TRUE(home.has_value());
+    EXPECT_EQ(*home, dir.path / "usr");
+}
+
+TEST(BundledPythonHome, AbsentInDevelopmentTree)
+{
+    TempDir dir;
+    std::filesystem::create_directories(dir.path / "bin/plugins");
+    std::filesystem::create_directories(dir.path / "lib");
+
+    EXPECT_FALSE(bundledPythonHome(dir.path / "bin/plugins").has_value());
 }
