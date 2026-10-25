@@ -27,3 +27,37 @@ Preparação (servidor local, sem GitHub): uma pasta `srv/` com `srv/repos/FM0Ur
 - [ ] `chmod a-w ~/Applications` e reinicie o MO2. Esperado: sem botão de atualização (log de depuração "not checking for updates, the folder of … is not writable"). Volte com `chmod u+w`.
 - [ ] Sem `MO2_UPDATE_API_URL` e com o repositório privado: sem botão, e o log de depuração diz "no releases found, or the request for them failed" (sem janela de erro).
 - [ ] Fora do AppImage (`distrobox enter mo2-run -- install/bin/ModOrganizer`): log "not checking for updates, not running from an AppImage".
+
+## 3. Fluxo completo com o AppImage (spec 5.3)
+
+**Ambiente:** Bazzite, usuário limpo, **sem distrobox**: nada de `distrobox enter`, e o `mo2-run` não pode estar em uso. Use a conta (ou um `HOME` novo) sem instância anterior do MO2, para a primeira execução ser de verdade. Os pré-requisitos do host (Steam com Proton, `umu-run`, `fusermount3`) já estão no Bazzite; o jogo tem de ter rodado uma vez pela Steam (prefixo criado).
+
+Os passos 1 a 6 usam o AppImage de um release **rascunho** (ou do artefato do CI `[appimage-ci]`). O passo 7 precisa de **duas versões publicadas** pelo usuário (por exemplo `2.5.2.1` e `2.5.2.2`), com o repositório já público (spec 1.3); a seção 2 acima (servidor local) cobre os cliques da janela sem GitHub, mas não substitui este passo.
+
+1. **Baixar o AppImage.**
+   - [ ] Baixe `ModOrganizer-<versão>-x86_64.AppImage`, `SHA256SUMS` e o `.debug.tar.zst` do rascunho (ou do artefato) e rode `sha256sum -c SHA256SUMS --ignore-missing`. Esperado: `OK`.
+   - [ ] O tamanho está perto de 253 MB e o nome tem a versão de quatro números.
+2. **Abrir pelo Gear Lever.**
+   - [ ] No Gear Lever, abra o arquivo, **Unlock** e **Move to the app menu**. Esperado: entrada "Mod Organizer" no menu; abre a janela de escolha de instância, sem terminal.
+   - [ ] **Help → About** mostra a versão do release.
+3. **Criar a instância do Skyrim SE.**
+   - [ ] Crie a instância (a Steam do Bazzite é detectada). Esperado: a janela principal abre; nenhum aviso de "Python could not be loaded" no ícone de notificações (os plugins Python carregaram); nenhum aviso de dependências do host.
+4. **Baixar um mod pelo `nxm://`, inclusive FOMOD.**
+   - [ ] Entre no Nexus (Settings → Nexus); o login fica após fechar e abrir o MO2 (Secret Service).
+   - [ ] "Mod Manager Download" no site do Nexus abre o MO2 (pelo `.desktop` do Gear Lever) e baixa; instale o mod. Repita com um mod que tenha FOMOD: o instalador mostra os passos e instala.
+5. **Rodar o jogo com SKSE e mods; o jogo não herda variáveis do AppImage.**
+   - [ ] Com o SKSE e os mods ativos, **Run** pelo MO2. Esperado: o jogo abre e os mods valem (a pasta virtual está montada).
+   - [ ] Com o jogo rodando, em outro terminal: `pid=$(pgrep -n -f SkyrimSE.exe)` (ou ache o processo do jogo em `pstree -p $(pgrep -x ModOrganizer)`), depois `tr '\0' '\n' < /proc/$pid/environ | grep -E 'APPDIR|APPIMAGE|MO2_APPIMAGE|LD_LIBRARY_PATH|QT_|PYTHON|QTWEBENGINE'`. Esperado: nenhuma variável do AppImage (`APPDIR`, `APPIMAGE`, `MO2_APPIMAGE_ORIG_*`); `LD_LIBRARY_PATH` e `QT_*` só se já existiam no ambiente do host antes de abrir o MO2 (compare com `env` de um terminal comum).
+   - [ ] O mesmo para um navegador aberto pelo MO2: clique num link que abre o navegador do sistema (por exemplo, o link de um mod nas notas) e leia o `/proc/<pid>/environ` do `firefox`/`chromium` que abriu (`pgrep -n firefox`). Esperado: igual, sem variáveis do AppImage.
+   - [ ] A janela do jogo recebe o teclado (no KDE Wayland, ver a regra do KWin em `docs/user/pt-BR/troubleshooting.md`, se a janela só piscar na barra).
+6. **LOOT, um plugin Python e o BSA Packer.**
+   - [ ] **Sort** do LOOT ordena os plugins (a masterlist é baixada; sem erro de certificado).
+   - [ ] Um plugin Python funciona: a pré-visualização de um `.dds` (preview DDS) abre a imagem.
+   - [ ] **Ferramentas → BSA Packer** gera um `.bsa` do mod de teste na pasta do mod (Skyrim SE, o alvo de validação da 4e); o jogo o carrega com `create_plugins` ligado.
+7. **Atualizar para a segunda versão (`2.5.2.N+1`).**
+   - [ ] **Pelo MO2:** com o AppImage `2.5.2.N` instalado e o release `2.5.2.N+1` publicado, o botão de atualização aparece, a janela mostra as notas, e ao aceitar o MO2 baixa, fecha e reabre sozinho. **Help → About** mostra `2.5.2.N+1`; o arquivo manteve o nome e o caminho; o `.desktop` do Gear Lever e o `nxm://` continuam funcionando (baixe outro mod pelo `nxm://` depois).
+   - [ ] **Variante "trocar de instância antes de atualizar"** (spec 3.8): antes de aceitar a atualização, use **Change Game** (ou abra outra instância pelo gerenciador) uma ou duas vezes, depois atualize. Esperado: sem queda (`coredumpctl list ModOrganizer` sem entrada nova), a atualização segue e o MO2 reabre na instância certa.
+   - [ ] **Pelo Gear Lever:** com o AppImage antigo de novo (`2.5.2.N`), o Gear Lever mostra "atualização disponível" e atualiza (baixando só a diferença, via zsync); depois o MO2 abre na versão nova e o `nxm://` funciona.
+   - [ ] O arquivo `.debug.tar.zst` do release serve para uma queda de verdade: `coredumpctl gdb ModOrganizer`, com `set debug-file-directory` apontando para a árvore extraída, mostra os nomes de função na pilha (siga `docs/user/pt-BR/troubleshooting.md`, "Relatar uma queda"). Se não houver queda para testar, `kill -SEGV $(pgrep -x ModOrganizer)` num MO2 de teste serve.
+
+Ao fim, o usuário publica os releases (`gh release edit v<versão> --draft=false`) e a Fase 5 fecha.
