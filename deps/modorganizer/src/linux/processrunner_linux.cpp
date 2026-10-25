@@ -36,6 +36,7 @@
 //   (exitcodes::take()).
 
 #include "../iuserinterface.h"
+#include "hostdeps_linux.h"
 #include "../modinfo.h"
 #include "../organizercore.h"
 #include "../processrunner.h"
@@ -294,6 +295,24 @@ ProcessRunner::Results ProcessRunner::run()
     return Error;
   }
 
+  // the programs of the host that this launch needs (Phase 5, section 3.6): umu-run
+  // only for a Windows program, fusermount3 only for the virtual file system
+  {
+    const bool needsUmu = request.argv.value(0) == "umu-run";
+    auto missing        = hostdeps::missingHostTools(&hostdeps::findOnHost);
+    std::erase_if(missing, [&](const hostdeps::MissingHostTool& t) {
+      return (t.name == "umu-run" && !needsUmu) ||
+             (t.name == "fusermount3" && !m_sp.hooked);
+    });
+
+    if (!missing.empty()) {
+      showError(QObject::tr("Cannot start \"%1\".")
+                    .arg(launchBinary.absoluteFilePath()) +
+                "\n\n" + hostdeps::missingHostToolsMessage(missing));
+      return Error;
+    }
+  }
+
   if (m_sp.hooked) {
     // saves the profile, mounts the virtual file system, notifies the plugins, etc.;
     // false if a plugin doesn't want the program to run or the file system can't be
@@ -314,8 +333,11 @@ ProcessRunner::Results ProcessRunner::run()
     if (request.argv.value(0) == "umu-run" &&
         QString::fromStdString(e.what()).contains("umu-run")) {
       // spawn_failed for argv[0]: umu-run is not in the PATH of the host
-      text += "\n\n" + QObject::tr("Windows programs run with umu-run: install "
-                                   "umu-launcher on the host.");
+      text += "\n\n" +
+              hostdeps::missingHostToolsMessage(
+                  hostdeps::missingHostTools([](const QString& name) {
+                    return name == "umu-run" ? QString() : name;
+                  }));
     }
     showError(text);
     if (m_sp.hooked) {

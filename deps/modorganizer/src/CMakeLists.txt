@@ -133,6 +133,7 @@ set(_organizer_launch_sources
 	virtualizedpaths.cpp
 	shared/appconfig.cpp
 	linux/exitcodes_linux.cpp
+	linux/hostdeps_linux.cpp
 	linux/loot_linux.cpp
 	linux/protonlauncher_linux.cpp
 	linux/spawn_linux.cpp
