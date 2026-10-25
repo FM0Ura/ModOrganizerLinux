@@ -15,7 +15,14 @@ atualização na barra. Clique para ver a versão e as notas do release e aceite
    do release;
 2. troca o seu arquivo **no lugar** (mesmo nome, mesmas permissões), então a entrada do menu
    e o tratador de `nxm://` continuam valendo;
-3. fecha e abre de novo com os mesmos argumentos, já na versão nova (Help, About mostra).
+3. fecha e abre de novo já na versão nova (Help, About mostra), na instância que estava
+   aberta. Um link (`nxm://`, `moshortcut://`) ou um comando com que ele foi aberto não é
+   tratado de novo. Se o fechamento for cancelado (downloads ou programas ainda rodando), a
+   versão nova abre na próxima vez que você abrir o Mod Organizer.
+
+Uma atualização interrompida por uma falha pode deixar um arquivo oculto
+`.<nome>.update-<número>` ao lado do AppImage; o Mod Organizer o remove na próxima vez que
+consulta as atualizações.
 
 Ele não atualiza quando:
 

@@ -16,8 +16,13 @@ appears in the toolbar. Click it to see the version and the release notes, then 
    `SHA256SUMS` of the release;
 2. it replaces your file **in place** (same name, same permissions), so your menu entry and
    the `nxm://` handler keep working;
-3. it closes, and starts again with the same arguments, now in the new version
-   (Help, About shows it).
+3. it closes, and starts again in the new version (Help, About shows it), in the instance
+   that was open. A link (`nxm://`, `moshortcut://`) or a command it was started with is not
+   handled a second time. If closing is cancelled (downloads or programs still running),
+   the new version starts the next time you open Mod Organizer.
+
+A crashed update can leave a hidden `.<name>.update-<number>` file next to the AppImage;
+Mod Organizer removes it the next time it checks for updates.
 
 It does not update when:
 

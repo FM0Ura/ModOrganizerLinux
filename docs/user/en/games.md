@@ -50,7 +50,10 @@ documents, settings and saves live in its Proton prefix
 game once from Steam** before creating the instance; without a prefix Mod Organizer uses the
 XDG folders and says so in the log. Of the `basic_games` games, Cyberpunk 2077 and
 NieR:Automata are validated (see the table above); Baldur's Gate 3 was tried and has known
-gaps, and the rest are detected but untested.
+gaps, and the rest are detected but untested. `basic_games` needs no new package. If you
+installed `dotnet-runtime-8.0` to try LSLib, you can remove it: in the box (Fedora),
+`sudo dnf remove dotnet-runtime-8.0`; on a Bazzite host, where it is layered with
+rpm-ostree, `rpm-ostree uninstall dotnet-runtime-8.0`, then reboot.
 
 ### Proxy DLLs (Wine DLL overrides)
 
