@@ -3,12 +3,26 @@
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
 **Última atualização:** 2026-10-24
-**Fase atual:** 5 — Distribuição (não iniciada) · **Anterior:** Fase 4 (4b a 4e) ✅ concluída em 2026-10-24 (testes manuais de 2026-10-24 no Bazzite; CI Linux verde; merge no `main` pelos PRs #3 a #9, em ordem). O que os testes acharam fica para depois da Fase 5: [Pendências por fase](#pendências-por-fase), "Testes manuais de 2026-10-24"
+**Fase atual:** 5 — Distribuição (não iniciada) · **Em paralelo:** Fase 6a — Stellar Blade (branch `fase-6a-stellar-blade`, worktree `../ModOrganizerLinux-6a`, a partir do `origin/main`; não enviada; ver [Fase 6a — progresso](#fase-6a--progresso)) · **Anterior:** Fase 4 (4b a 4e) ✅ concluída em 2026-10-24 (testes manuais de 2026-10-24 no Bazzite; CI Linux verde; merge no `main` pelos PRs #3 a #9, em ordem). O que os testes acharam fica para depois da Fase 5: [Pendências por fase](#pendências-por-fase), "Testes manuais de 2026-10-24"
 **Branch principal:** `main` (Fases 1 a 4e; `fase-2-vfs-fuse`, `fase-3-steam-proton`, `fase-4a-nexus` e os branches de `fase-4b-loot` a `fase-4e-bsa` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`). **Branch da Fase 4d.2:** `fase-4d2-basic-games` (a partir de `fase-4d1-python`; worktree `../ModOrganizerLinux-4d2`). **Branch da Fase 4e:** `fase-4e-bsa` (a partir de `fase-4d2-basic-games`; worktree `../ModOrganizerLinux-4e`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Fase 6a — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](docs/superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md) (a Fase 6b, Nexus Collections, tem a [spec própria](docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md)) · Plano: [`docs/superpowers/plans/2026-10-25-phase6a-stellar-blade.md`](docs/superpowers/plans/2026-10-25-phase6a-stellar-blade.md) · Checklist manual: [`docs/testing/phase6a-manual-checklist.md`](docs/testing/phase6a-manual-checklist.md)
+
+| # | Tarefa | Status | Commits principais |
+|---|---|---|---|
+| 1 | Plugin do jogo `games/game_stellarblade.py` no `basic_games` (arquivo nosso, não do upstream): app ID 3489700, pasta de dados na raiz do jogo, saves de `AppData/Local/SB/Saved/SaveGames` (não por perfil) e os `.ini` do perfil de `Saved/Config/WindowsNoEditor` | ✅ | `a91d3a3`, `6873424` |
+| 2 | `StellarBladeModDataChecker`: completa caminhos já estruturados; `.pak`/`.ucas`/`.utoc` soltos em `SB/Content/Paks/~mods`; mods do UE4SS em `SB/Binaries/Win64/ue4ss/Mods/<mod>`; `dwmapi.dll`/UE4SS em `SB/Binaries/Win64`; lixo descartado; `.exe` ou conteúdo não reconhecido, instalação manual. Um mod de `LogicMods` sem a pasta cai em `~mods` (o usuário move) | ✅ | `c7d7ff4`, `021bb5f`, `c40bd40`, `388568a` |
+| 3 | `mods.txt`/`mods.json` do UE4SS gerados no perfil antes de cada execução (padrões do UE4SS, as pastas `ue4ss/Mods` dos mods ativos e o `Keybinds` por último) e mapeados para `SB/Binaries/Win64/ue4ss/Mods/` (o `mods.txt` dos mods não vale); `IPluginFileMapper` | ✅ | `281e2e8`, `858e792`, `0e99e1c`, `0e54857` |
+| 4 | Documentação (README, `deps/README.md`, ROADMAP, STATE), checklist e `./build.sh --tests` completo | ✅ | este commit |
+| 5 | Teste manual no Bazzite ([`docs/testing/phase6a-manual-checklist.md`](docs/testing/phase6a-manual-checklist.md)) | ⚪ pendente | — |
+
+O UE4SS usa a DLL proxy `dwmapi.dll` e precisa de `WINEDLLOVERRIDES=dwmapi=n,b` em **Modify Executables → Proton → Environment**; o plugin não tem API para defini-la (mesmo caso das outras DLLs proxy; README, "Plugins Python"). O README marca o Stellar Blade como "implemented, manual test pending" até a tarefa 5.
 
 ## Fase 4e — progresso
 

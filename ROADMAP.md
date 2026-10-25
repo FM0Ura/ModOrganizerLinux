@@ -102,6 +102,13 @@ Fase 4e — Spec: [`docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md`](do
 - CI de release, separação de símbolos de depuração, documentação de usuário.
 - Atualização automática.
 
+## Fase 6 — Mods do Stellar Blade e Nexus Collections
+
+Dividida em duas subfases, ambas a partir do `main`.
+
+- (6a) Suporte ao Stellar Blade: plugin de jogo próprio no `basic_games` (arrumação dos mods `.pak` e UE4SS na instalação, `mods.txt` do UE4SS gerado pelo perfil, saves e configs). Spec: [`docs/superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](docs/superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md) · Plano: [`docs/superpowers/plans/2026-10-25-phase6a-stellar-blade.md`](docs/superpowers/plans/2026-10-25-phase6a-stellar-blade.md) · Checklist manual: [`docs/testing/phase6a-manual-checklist.md`](docs/testing/phase6a-manual-checklist.md)
+- (6b) Nexus Collections. Spec: [`docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md`](docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md)
+
 ## Depois da Fase 5 — correções dos testes manuais de 2026-10-24
 
 Decisão do usuário: corrigir depois da Fase 5. Detalhes e diagnóstico em [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase) ("Testes manuais de 2026-10-24").

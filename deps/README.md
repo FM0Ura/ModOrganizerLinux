@@ -140,6 +140,9 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   `git subtree pull` that touches these upstream functions will conflict, and must keep
   the patches (see the `deps/basic_games: Linux:` commits); `./build.sh --only basic_games
   --tests` runs `tests/basic-games` against the installed package.
+  `games/game_stellarblade.py` (Stellar Blade, Phase 6a) is a file of ours, not from
+  upstream: a `git subtree pull` neither brings nor touches it, and it has no `sys.platform`
+  branch.
 - **`bsapacker`** (the BSA Packer tool, Phase 4e) carries Linux patches that are not
   upstream, all inside `deps/bsapacker` (spec of Phase 4e, section 3; the subtree itself is
   byte-identical to upstream `de1d783`). On Windows it keeps using `libbsarch`; on Linux:
