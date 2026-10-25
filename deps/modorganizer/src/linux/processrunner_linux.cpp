@@ -299,10 +299,12 @@ ProcessRunner::Results ProcessRunner::run()
   // only for a Windows program, fusermount3 only for the virtual file system
   {
     const bool needsUmu = request.argv.value(0) == "umu-run";
-    auto missing        = hostdeps::missingHostTools(&hostdeps::findOnHost);
-    std::erase_if(missing, [&](const hostdeps::MissingHostTool& t) {
-      return (t.name == "umu-run" && !needsUmu) ||
-             (t.name == "fusermount3" && !m_sp.hooked);
+    // only the needed ones are looked up (each lookup is a distrobox-host-exec in a
+    // container); the others count as found
+    const auto missing = hostdeps::missingHostTools([&](const QString& name) {
+      const bool needed = (name == "umu-run" && needsUmu) ||
+                          (name == "fusermount3" && m_sp.hooked);
+      return needed ? hostdeps::findOnHost(name) : name;
     });
 
     if (!missing.empty()) {
