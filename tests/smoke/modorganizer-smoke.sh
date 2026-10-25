@@ -38,10 +38,14 @@
 #    "displaying main window" lines and then sends SIGTERM; a crash (the second
 #    aboutToQuit used to segfault in OzoneUtilQt::getQOpenGLContext), a crash dump or an
 #    exit that is not by TERM or 0 fails it.
+#
+# MO2_SMOKE_APP (Phase 5): the command that starts the application, $INSTALL/bin/ModOrganizer
+# by default. For an extracted AppImage it is squashfs-root/AppRun and the install prefix is
+# squashfs-root/usr (where bin/plugins is), see tests/appimage/run-distro-smoke.sh.
 set -euo pipefail
 
 INSTALL="${1:?usage: $0 <install prefix>}"
-APP="$INSTALL/bin/ModOrganizer"
+APP="${MO2_SMOKE_APP:-$INSTALL/bin/ModOrganizer}"
 TIMEOUT="${MO2_SMOKE_TIMEOUT:-20}"
 
 fail() { echo "smoke test FAILED: $*" >&2; exit 1; }
