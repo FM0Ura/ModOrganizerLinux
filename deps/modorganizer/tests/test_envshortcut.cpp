@@ -2,12 +2,15 @@
 
 #include <sys/stat.h>
 
+#include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 
 #include "envshortcut.h"
+#include "linux/appimage_linux.h"
 #include "tempdir.h"
 
 namespace
@@ -139,3 +142,20 @@ TEST(EnvShortcut, DesktopLocation)
   EXPECT_TRUE(s.exists(env::Shortcut::Desktop));
   EXPECT_TRUE(s.remove(env::Shortcut::Desktop));
 }
+
+#ifndef _WIN32
+TEST(EnvShortcut, TargetIsTheAppImageFile)
+{
+  // outside an AppImage: the executable
+  appimage::setInfoForTesting({});
+  EXPECT_EQ(env::shortcutTarget(),
+            QFileInfo(qApp->applicationFilePath()).absoluteFilePath());
+
+  // inside: the file, not the temporary mount that the executable is in
+  appimage::setInfoForTesting({"/home/u/ModOrganizer-2.5.2-x86_64.AppImage",
+                               "/tmp/.mount_ModOrgabc"});
+  EXPECT_EQ(env::shortcutTarget(), "/home/u/ModOrganizer-2.5.2-x86_64.AppImage");
+
+  appimage::setInfoForTesting({});
+}
+#endif

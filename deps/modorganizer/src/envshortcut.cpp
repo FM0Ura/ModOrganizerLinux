@@ -5,6 +5,9 @@
 #include "instancemanager.h"
 #include <log.h>
 #include <utility.h>
+#ifndef _WIN32
+#include "linux/appimage_linux.h"
+#endif
 
 namespace env
 {
@@ -130,6 +133,17 @@ private:
 };
 #endif  // _WIN32
 
+QString shortcutTarget()
+{
+#ifndef _WIN32
+  if (appimage::info().active()) {
+    return appimage::info().appImage;
+  }
+#endif
+
+  return QFileInfo(qApp->applicationFilePath()).absoluteFilePath();
+}
+
 Shortcut::Shortcut() : m_iconIndex(0) {}
 
 Shortcut::Shortcut(const Executable& exe) : Shortcut()
@@ -137,7 +151,7 @@ Shortcut::Shortcut(const Executable& exe) : Shortcut()
   const auto& i = *InstanceManager::singleton().currentInstance();
 
   m_name   = MOBase::sanitizeFileName(exe.title());
-  m_target = QFileInfo(qApp->applicationFilePath()).absoluteFilePath();
+  m_target = shortcutTarget();
 
   m_arguments = QString("\"moshortcut://%1:%2\"")
                     .arg(i.isPortable() ? "" : i.displayName())
