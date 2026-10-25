@@ -85,3 +85,18 @@ def test_mappings_point_profile_files_to_ue4ss_mods(steam, tmp_path):
         assert Path(mapping.source) == tmp_path / "profile" / name
         assert Path(mapping.destination) == game_dir / _MODS / name
         assert mapping.isDirectory is False
+
+
+def test_lowercase_ue4ss_path_is_found(tmp_path):
+    a = tmp_path / "mods/Lower"
+    (a / "sb/binaries/win64/ue4ss/mods/LowerMod").mkdir(parents=True)
+    _write()(tmp_path / "profile", [a])
+    lines = (tmp_path / "profile/mods.txt").read_text().splitlines()
+    assert lines[9:] == ["LowerMod : 1", "Keybinds : 1"]
+
+
+def test_game_is_a_file_mapper():
+    import mobase
+
+    game = _load_basic_games()["StellarBladeGame"]
+    assert isinstance(game, mobase.IPluginFileMapper)
