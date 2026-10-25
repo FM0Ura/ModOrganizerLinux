@@ -45,7 +45,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 ### With Gear Lever (Bazzite)
 
 Open the downloaded file with [Gear Lever](https://github.com/mijorus/gearlever)
-(Bazzite has it installed) click **Unlock**, then **Move to the app menu**: it moves the AppImage to your
+(Bazzite has it installed), click **Unlock**, then **Move to the app menu**: it moves the AppImage to your
 applications folder and adds a menu entry. Gear Lever can also update it later (see
 [Updating](updating.md)).
 

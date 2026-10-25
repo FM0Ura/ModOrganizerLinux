@@ -124,8 +124,9 @@ Comandos de instalação por distribuição: [Dependências do host](docs/user/p
 
 - **Dentro do Mod Organizer:** com *Check for updates* ligado, aparece um botão de
   atualização quando há um release novo. Ele baixa, confere o SHA-256 contra o `SHA256SUMS`
-  do release, troca o arquivo no lugar e reinicia. Espera enquanto um programa iniciado pelo
-  Mod Organizer está rodando.
+  do release, troca o arquivo no lugar e reinicia. Não atualiza enquanto um programa iniciado pelo
+  Mod Organizer está rodando: ele pede para você fechar os programas, e você clica em
+  atualizar de novo.
 - **Gear Lever ou AppImageUpdate:** o AppImage leva a informação de atualização, então só a
   parte que mudou é baixada.
 

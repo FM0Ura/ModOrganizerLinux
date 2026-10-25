@@ -124,8 +124,8 @@ Install commands per distribution: [Host dependencies](docs/user/en/install.md#h
 
 - **Inside Mod Organizer:** with *Check for updates* on, an update button appears when a new
   release exists. It downloads, verifies the SHA-256 against the release's `SHA256SUMS`,
-  replaces the file in place and restarts. It waits while a program started by Mod
-  Organizer is running.
+  replaces the file in place and restarts. It does not update while a program started by
+  Mod Organizer is running: it asks you to close the programs, and you click Update again.
 - **Gear Lever or AppImageUpdate:** the AppImage carries update information, so only the
   changed part is downloaded.
 

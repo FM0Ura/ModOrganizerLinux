@@ -20,9 +20,12 @@ atualização na barra. Clique para ver a versão e as notas do release e aceite
 Ele não atualiza quando:
 
 - um programa iniciado pelo Mod Organizer ainda está rodando (a pasta virtual está montada).
-  Feche o programa; a atualização segue;
-- a pasta do AppImage não é gravável. O MO2 oferece então a página do release para você
-  trocar o arquivo, e não mostra o botão de atualização;
+  O MO2 avisa e não instala nada (um arquivo que ele já tinha baixado é descartado). Nada
+  espera nem continua depois: feche os programas e clique no botão de atualização de novo;
+- a pasta do AppImage não é gravável. O MO2 ainda consulta os releases e mostra o botão de
+  atualização de sempre, mas clicar nele só mostra um aviso com o link da página do
+  release; nada é baixado nem trocado. Troque o arquivo você mesmo, ou atualize pelo Gear
+  Lever;
 - o Mod Organizer não está rodando de um AppImage;
 - o checksum não confere ou o release não tem `SHA256SUMS`: ele avisa, aponta o release e
   deixa o arquivo antigo como estava.

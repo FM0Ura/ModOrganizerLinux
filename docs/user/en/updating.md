@@ -21,10 +21,13 @@ appears in the toolbar. Click it to see the version and the release notes, then 
 
 It does not update when:
 
-- a program started by Mod Organizer is still running (its virtual folder is mounted). Close
-  the program first; the update then goes on;
-- the folder of the AppImage is not writable. Mod Organizer then offers the page of the
-  release so you can replace the file yourself, and shows no update button;
+- a program started by Mod Organizer is still running (its virtual folder is mounted). Mod
+  Organizer warns you and installs nothing (a file it had already downloaded is discarded).
+  Nothing waits or resumes: close the programs, then click the update button again;
+- the folder of the AppImage is not writable. Mod Organizer still checks the releases and
+  shows the usual update button, but clicking it only shows a notice with a link to the
+  page of the release; nothing is downloaded or replaced. Replace the file yourself, or
+  update through Gear Lever;
 - Mod Organizer is not running from an AppImage;
 - the checksum does not match or the release has no `SHA256SUMS`: it tells you, links the
   release, and leaves the old file as it was.
