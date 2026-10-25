@@ -40,6 +40,29 @@ fs::path lootDataPath()
   return lootDataPath(home ? home : "", xdg ? xdg : "");
 }
 
+const std::vector<std::string>& caBundleCandidates()
+{
+  static const std::vector<std::string> candidates = {
+      "/etc/ssl/certs/ca-certificates.crt",
+      "/etc/pki/tls/certs/ca-bundle.crt",
+      "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      "/etc/ssl/ca-bundle.pem",
+      "/etc/ssl/cert.pem",
+  };
+  return candidates;
+}
+
+std::optional<std::string> caBundle(const std::vector<std::string>& candidates)
+{
+  for (const auto& candidate : candidates) {
+    std::error_code ec;
+    if (fs::is_regular_file(candidate, ec)) {
+      return candidate;
+    }
+  }
+  return std::nullopt;
+}
+
 std::optional<std::string> downloadFile(const std::string& url, const fs::path& file)
 {
   static const CURLcode initialised = curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -69,6 +92,10 @@ std::optional<std::string> downloadFile(const std::string& url, const fs::path& 
     curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https,file");
     curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "lootcli/" LOOTCLI_VERSION_STRING);
+    static const auto ca = caBundle(caBundleCandidates());
+    if (ca) {
+      curl_easy_setopt(curl, CURLOPT_CAINFO, ca->c_str());
+    }
 
     const CURLcode rc = curl_easy_perform(curl);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);

@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out superproject
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: ModOrganizerLinux
 
@@ -18,14 +18,15 @@ jobs:
       - name: Guard against platform-sized save reads
         run: ModOrganizerLinux/scripts/check-save-reads.sh
 
+      # cached by the hash of build/Containerfile (.github/actions/build-image)
       - name: Build container image
-        run: docker build -t mo2-linux-build -f ModOrganizerLinux/build/Containerfile ModOrganizerLinux/build
+        uses: ./ModOrganizerLinux/.github/actions/build-image
 
       # libloot (Rust, several minutes): its source, cargo home and build tree
       # (build/libloot/build-libloot.sh), keyed by the script (which pins the commit)
       # and the image
       - name: Cache libloot
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ModOrganizerLinux/build-out/libloot
           key: libloot-${{ hashFiles('ModOrganizerLinux/build/libloot/build-libloot.sh', 'ModOrganizerLinux/build/Containerfile') }}
@@ -41,8 +42,24 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
             mo2-linux-build ./build.sh --tests
 
+      # the AppRun launcher (build/appimage/AppRun) against a fake AppDir and host;
+      # needs neither the build nor an AppImage
+      - name: Test the AppImage launcher
+        run: ModOrganizerLinux/tests/appimage/test-apprun.sh
+
+      # headless end-to-end test of the update of the AppImage (tests/selfupdate-e2e):
+      # runs the install tree of this job, which is built without MO2_VERSION (2.5.2),
+      # older than the fake v2.5.2.2 it is offered; the release workflow builds 2.5.2.N.
+      # As the runner's user, not root: root may write to the 0555 folder of the
+      # read-only case, which the script then skips
+      - name: Test the self-update
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+            mo2-linux-build tests/selfupdate-e2e/run.sh
+
       - name: Upload install tree
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mo2-linux-install
           path: ModOrganizerLinux/install/

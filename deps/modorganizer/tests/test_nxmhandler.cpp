@@ -1,3 +1,4 @@
+#include "../src/linux/appimage_linux.h"
 #include "../src/linux/nxmhandler_linux.h"
 #include "tempdir.h"
 
@@ -119,6 +120,24 @@ TEST(NxmHandler, DesktopFileContent)
       "MimeType=x-scheme-handler/nxm;\n");
 }
 
+// the AppImage path, with spaces and non-ASCII characters, is one quoted argument
+TEST(NxmHandler, DesktopFileQuotesAppImageWithSpaces)
+{
+  Environment e;
+  e.appImage = QString::fromUtf8("/home/u/Applications/Mod Organizer \xc3\xa7.AppImage");
+
+  EXPECT_EQ(nxmhandler::desktopFileContent(e),
+            QString::fromUtf8(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                "Name=Mod Organizer 2 (nxm links)\n"
+                "Comment=Download Nexus Mods links with Mod Organizer 2\n"
+                "Exec=\"/home/u/Applications/Mod Organizer \xc3\xa7.AppImage\" %u\n"
+                "Terminal=false\n"
+                "NoDisplay=true\n"
+                "MimeType=x-scheme-handler/nxm;\n"));
+}
+
 // the string escapes of the Desktop Entry Specification apply on top of the quoting of
 // Exec: a backslash of the quoted argument is written twice
 TEST(NxmHandler, DesktopFileEscapesBackslashes)
@@ -199,10 +218,12 @@ TEST(NxmHandler, CommandsHost)
 TEST(NxmHandler, CurrentEnvironment)
 {
   ScopedEnv bridge("MO2_VFS_BRIDGE", "host");
-  ScopedEnv appImage("APPIMAGE", "/a/b.AppImage");
   ScopedEnv container("CONTAINER_ID", "box");
 
+  // the AppImage comes from what captureAndRestore() found, not from $APPIMAGE
+  appimage::setInfoForTesting({"/a/b.AppImage", "/tmp/.mount_x"});
   const auto e = nxmhandler::currentEnvironment();
+  appimage::setInfoForTesting({});
   EXPECT_EQ(e.appImage, "/a/b.AppImage");
   EXPECT_EQ(e.containerId, "box");
   EXPECT_TRUE(e.inContainer);

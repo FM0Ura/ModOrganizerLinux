@@ -11,7 +11,9 @@
 #include <report.h>
 
 #ifndef _WIN32
+#include "linux/appimage_linux.h"
 #include "linux/displaycheck_linux.h"
+#include "linux/selfupdate_linux.h"
 #include <QProcessEnvironment>
 #endif
 
@@ -28,6 +30,15 @@ int main(int argc, char* argv[])
 {
   const int r = run(argc, argv);
   std::cout << "mod organizer done\n";
+
+#ifndef _WIN32
+  // an installed update of the AppImage: its new version replaces this process, now
+  // that the application is gone (virtual file system unmounted, single-instance lock
+  // released); only returns if that fails
+  std::cout.flush();
+  selfupdate::runPendingReexec();
+#endif
+
   return r;
 }
 
@@ -35,6 +46,11 @@ int run(int argc, char* argv[])
 {
   MOShared::SetThisThreadName("main");
   setExceptionHandlers();
+
+#ifndef _WIN32
+  // inside an AppImage: back to the environment of the host, for the whole process
+  appimage::captureAndRestore();
+#endif
 
   cl::CommandLine cl;
   if (auto r = cl.process(GetCommandLineW())) {
@@ -62,6 +78,12 @@ int run(int argc, char* argv[])
 
   // must be after logging
   TimeThis tt("main() multiprocess");
+
+#ifndef _WIN32
+  // restarting in the same process crashed in OzoneUtilQt::getQOpenGLContext at the
+  // second aboutToQuit of QtWebEngine (STATE.md, manual tests of 2026-10-24, item 1)
+  QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+#endif
 
   MOApplication app(argc, argv);
 

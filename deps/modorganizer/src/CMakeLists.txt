@@ -119,6 +119,7 @@ set(_organizer_env_sources
 	envshell.cpp
 	envshortcut.cpp
 	envwindows.cpp
+	linux/appimage_linux.cpp
 	linux/envdump_linux.cpp
 	linux/envmetrics_linux.cpp
 	linux/envmodule_linux.cpp
@@ -132,6 +133,7 @@ set(_organizer_launch_sources
 	virtualizedpaths.cpp
 	shared/appconfig.cpp
 	linux/exitcodes_linux.cpp
+	linux/hostdeps_linux.cpp
 	linux/loot_linux.cpp
 	linux/protonlauncher_linux.cpp
 	linux/spawn_linux.cpp
@@ -143,11 +145,13 @@ set(_organizer_launch_sources
 # the desktop integration of the Linux build: logins in the Secret Service
 # (secretstore_linux.cpp, over secretservice_linux.cpp) and the nxm:// handler
 # (nxmhandler_linux.cpp), spec of Phase 4a
-# and the display check of main() (displaycheck_linux.cpp, Phase 4c.2)
+# and the display check of main() (displaycheck_linux.cpp, Phase 4c.2), and the update
+# of the AppImage (selfupdate_linux.cpp, Phase 5)
 set(_organizer_desktop_sources
 	linux/displaycheck_linux.cpp
 	linux/nxmhandler_linux.cpp
-	linux/secretstore_linux.cpp)
+	linux/secretstore_linux.cpp
+	linux/selfupdate_linux.cpp)
 
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)
@@ -230,6 +234,18 @@ if (NOT WIN32)
 	endif()
 	if (NOT _organizer_version)
 		message(FATAL_ERROR "no VER_FILEVERSION_STR in version.rc")
+	endif()
+	# the release builds (build.sh with MO2_VERSION) set the version of the port,
+	# 2.5.2.N; that is never a prerelease
+	set(MO2_VERSION_OVERRIDE "" CACHE STRING
+		"version of Mod Organizer instead of the one in version.rc")
+	if (MO2_VERSION_OVERRIDE)
+		if (NOT MO2_VERSION_OVERRIDE MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?$")
+			message(FATAL_ERROR
+				"MO2_VERSION_OVERRIDE '${MO2_VERSION_OVERRIDE}' is not X.Y.Z or X.Y.Z.N")
+		endif()
+		set(_organizer_version "${MO2_VERSION_OVERRIDE}")
+		set(_organizer_prerelease 0)
 	endif()
 	target_compile_definitions(organizer_datatree PUBLIC
 		MO2_VERSION_STRING="${_organizer_version}"

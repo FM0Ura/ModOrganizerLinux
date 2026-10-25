@@ -25,7 +25,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vcpkg-cache
           key: vcpkg-windows-${{ github.run_id }}
@@ -52,7 +52,7 @@ jobs:
       # only deps/modorganizer is needed; it is moved to build/modorganizer, where mob
       # keeps the projects it builds
       - name: Check out application
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: superproject
           sparse-checkout: deps/modorganizer
@@ -81,7 +81,7 @@ jobs:
         run: cmake --install vsbuild --config RelWithDebInfo
 
       - name: Upload install tree
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: modorganizer-windows
           path: install/bin

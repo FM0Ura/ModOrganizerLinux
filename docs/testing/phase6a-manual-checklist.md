@@ -2,7 +2,7 @@
 
 Spec: [`../superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](../superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md) · Plano: [`../superpowers/plans/2026-10-25-phase6a-stellar-blade.md`](../superpowers/plans/2026-10-25-phase6a-stellar-blade.md)
 
-**Ambiente:** Bazzite (KDE Plasma 6), MO2 iniciado **pelo box**: `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer`, com o `install/` do worktree `ModOrganizerLinux-6a` (`./build.sh` na distrobox `mo2-run`). Pacotes do box: `python3 python3-pyqt6` (README, "Plugins Python"). Stellar Blade (Steam, app 3489700) **rodado ao menos uma vez pela Steam** (o prefixo do Proton tem de existir). Downloads pelo botão **Download with mod manager** do site da Nexus (handler `nxm://` da Fase 4a).
+**Ambiente:** Bazzite (KDE Plasma 6), MO2 iniciado **pelo box**: `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer`, com o `install/` do worktree `ModOrganizerLinux-6a` (`./build.sh` na distrobox `mo2-run`). Pacotes do box: `python3 python3-pyqt6` ([docs/dev/building.md](../dev/building.md#python-no-box)). Stellar Blade (Steam, app 3489700) **rodado ao menos uma vez pela Steam** (o prefixo do Proton tem de existir). Downloads pelo botão **Download with mod manager** do site da Nexus (handler `nxm://` da Fase 4a).
 
 `<prefixo>` abaixo é `<biblioteca da Steam do jogo>/steamapps/compatdata/3489700/pfx/drive_c/users/steamuser`.
 

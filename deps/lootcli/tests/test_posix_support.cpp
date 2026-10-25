@@ -10,6 +10,7 @@
 #include <string>
 
 namespace fs = std::filesystem;
+using lootcli::posix::caBundle;
 using lootcli::posix::downloadFile;
 using lootcli::posix::lootDataPath;
 
@@ -144,4 +145,43 @@ TEST(DownloadFile, UnwritableDestinationIsAnError)
 
   ASSERT_TRUE(error);
   EXPECT_NE(error->find("no-such-dir"), std::string::npos) << *error;
+}
+
+TEST(CaBundle, FirstExistingFileWins)
+{
+  TempDir dir;
+  const auto debian = dir.path() / "ca-certificates.crt";
+  const auto fedora = dir.path() / "tls-ca-bundle.pem";
+  std::ofstream(debian) << "debian";
+  std::ofstream(fedora) << "fedora";
+
+  EXPECT_EQ(caBundle({(dir.path() / "missing.pem").string(), fedora.string(),
+                      debian.string()}),
+            fedora.string());
+}
+
+TEST(CaBundle, FoldersAreSkipped)
+{
+  TempDir dir;
+  const auto folder = dir.path() / "certs";
+  const auto file   = dir.path() / "cert.pem";
+  fs::create_directory(folder);
+  std::ofstream(file) << "pem";
+
+  EXPECT_EQ(caBundle({folder.string(), file.string()}), file.string());
+}
+
+TEST(CaBundle, NoneFound)
+{
+  TempDir dir;
+  EXPECT_EQ(caBundle({(dir.path() / "a.pem").string(), (dir.path() / "b.pem").string()}),
+            std::nullopt);
+}
+
+TEST(CaBundle, DefaultListStartsWithDebian)
+{
+  const auto& list = lootcli::posix::caBundleCandidates();
+  ASSERT_EQ(list.size(), 5u);
+  EXPECT_EQ(list.front(), "/etc/ssl/certs/ca-certificates.crt");
+  EXPECT_EQ(list.back(), "/etc/ssl/cert.pem");
 }

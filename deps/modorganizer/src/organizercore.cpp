@@ -248,6 +248,14 @@ OrganizerCore::OrganizerCore(Settings& settings)
       }
     });
   });
+
+#ifndef _WIN32
+  // the update of the AppImage waits until no program runs through the virtual file
+  // system, the same state that defers the refresh above
+  m_Updater.setProgramsRunningCheck([this] {
+    return m_VFS->isActive();
+  });
+#endif
 }
 
 OrganizerCore::~OrganizerCore()

@@ -185,6 +185,22 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   uninstantiated-suite self-check (the per-game suites need game data). At run time
   `libbsa_packer.so` needs `libtbb`, `liblz4`, `libz` and Qt6Concurrent of the box's system
   Qt. A `git subtree pull` of `bsapacker` conflicts only where these files changed upstream.
+- **AppImage tools** (Phase 5) are not subtrees either: `build/appimage/build-appimage.sh`
+  downloads them into `build-out/appimage-tools`, checks the SHA-256 pinned at the top of
+  the script and extracts them (no FUSE needed, e.g. in a container):
+
+  | tool | version | file | SHA-256 |
+  |---|---|---|---|
+  | [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy) | `1-alpha-20251107-1` | `linuxdeploy-x86_64.AppImage` | `c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d` |
+  | [linuxdeploy-plugin-qt](https://github.com/linuxdeploy/linuxdeploy-plugin-qt) | `1-alpha-20250213-1` | `linuxdeploy-plugin-qt-x86_64.AppImage` | `15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1c92724` |
+  | [appimagetool](https://github.com/AppImage/appimagetool) | `1.9.1` | `appimagetool-x86_64.AppImage` | `ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0` |
+  | [type2-runtime](https://github.com/AppImage/type2-runtime) (static, no libfuse2) | `20251108` | `runtime-x86_64` | `2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d` |
+
+  The release tags are the newest non-`continuous` ones on 2026-10-24 (the `continuous`
+  assets change in place); the hashes match the digests GitHub reports for the assets,
+  except linuxdeploy-plugin-qt's, whose release has none. linuxdeploy runs with the
+  container's `patchelf` (0.18, `PATCHELF`): the 0.15 inside linuxdeploy rewrites some
+  libraries of Fedora 44 into ones that crash when loaded (`libcrypt.so.2`).
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 

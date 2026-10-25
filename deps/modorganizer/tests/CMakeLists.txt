@@ -26,6 +26,10 @@ target_precompile_headers(organizer_tests REUSE_FROM organizer_datatree)
 find_package(7zip CONFIG REQUIRED)
 target_compile_definitions(organizer_tests PRIVATE MO2_TESTS_7Z="${7zip_LIBRARY}")
 
+# the files read by the tests (fixtures/selfupdate/release.json, test_selfupdate.cpp)
+target_compile_definitions(organizer_tests PRIVATE
+	MO2_TESTS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+
 # the Secret Service wrapper (test_secretservice.cpp); its integration test runs against
 # a gnome-keyring-daemon of its own (secret-service.sh), 77 meaning skipped
 if (TARGET organizer_secretservice)

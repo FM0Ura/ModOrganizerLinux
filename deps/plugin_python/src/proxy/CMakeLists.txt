@@ -32,6 +32,13 @@ else()
 	# Linux: the proxy is bin/plugins/plugin_python.so, next to the plugin_python folder
 	set_target_properties(proxy PROPERTIES PREFIX "")
 	mo2_install_plugin(proxy)
+
+	# the AppImage keeps the bundled libpython, which the proxy opens by name, in
+	# usr/lib: $ORIGIN/../../lib from usr/bin/plugins (the install prefix's lib, which was
+	# already the RUNPATH of the installed proxy, stays first)
+	set_property(TARGET proxy APPEND PROPERTY BUILD_RPATH "\$ORIGIN/../../lib")
+	set_property(TARGET proxy APPEND PROPERTY INSTALL_RPATH
+		"${CMAKE_INSTALL_PREFIX}/lib" "\$ORIGIN/../../lib")
 endif()
 
 set(PLUGIN_PYTHON_DIR bin/plugins/${PLUGIN_NAME})

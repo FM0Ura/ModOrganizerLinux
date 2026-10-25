@@ -22,7 +22,7 @@ Cada fase passa por: especificação → plano → implementação com revisão 
 | 4d.1 | Plugins Python — runtime | `plugin_python` (pybind11 + Python 3.14 + PyQt6 do Fedora) + seis plugins (preview_dds, form43_checker, script_extender_plugin_checker, tool_configurator, installer_wizard, fnistool) | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
 | 4d.2 | `basic_games` | Suporte a jogos da comunidade (`basic_games`) sobre o runtime da 4d.1 | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
 | 4e | BSA/BA2 | Criação de BSA/BA2 nativa | Todas as funcionalidades | ✅ Concluída (2026-10-24) |
-| 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | ⚪ Não iniciada |
+| 5 | Distribuição | AppImage, CI de release, documentação de usuário | Instalação em um clique no Bazzite | 🟡 Em andamento (implementação feita; falta o repositório público e o teste manual) |
 
 ## Fase 1 — Build nativo
 
@@ -98,9 +98,14 @@ Fase 4e — Spec: [`docs/superpowers/specs/2026-10-24-phase4e-bsa-design.md`](do
 
 ## Fase 5 — Distribuição
 
-- AppImage (`linuxdeploy` + plugin Qt) com 7-Zip, `lootcli` e Python embutidos.
-- CI de release, separação de símbolos de depuração, documentação de usuário.
-- Atualização automática.
+Spec: [`docs/superpowers/specs/2026-10-24-phase5-distribuicao-design.md`](docs/superpowers/specs/2026-10-24-phase5-distribuicao-design.md) · Plano: [`docs/superpowers/plans/2026-10-24-phase5-distribuicao.md`](docs/superpowers/plans/2026-10-24-phase5-distribuicao.md) · Checklist manual: [`docs/testing/phase5-manual-checklist.md`](docs/testing/phase5-manual-checklist.md)
+
+- AppImage (`linuxdeploy` + plugin Qt) com 7-Zip, `lootcli` e Python embutidos; só `umu-run`, FUSE 3 e a Steam com Proton ficam no host (o MO2 confere e avisa).
+- CI de release (`release-linux.yml`, rascunhos), separação de símbolos de depuração, smoke tests em containers (Fedora 44, Arch, Ubuntu 26.04).
+- Atualização pelo MO2 (releases do GitHub, SHA-256) e pelo Gear Lever/AppImageUpdate (zsync).
+- Documentação de usuário em inglês e português (`README.md`, `README.pt-BR.md`, `docs/user/`) e de desenvolvedor (`docs/dev/building.md`).
+- Correção da queda ao reiniciar no mesmo processo (`Qt::AA_ShareOpenGLContexts`; confirmação manual pendente).
+- Falta: abrir o repositório (Task 10, com o usuário) e o teste manual (Task 11).
 
 ## Fase 6 — Mods do Stellar Blade e Nexus Collections
 
@@ -111,9 +116,8 @@ Dividida em duas subfases, ambas a partir do `main`.
 
 ## Depois da Fase 5 — correções dos testes manuais de 2026-10-24
 
-Decisão do usuário: corrigir depois da Fase 5. Detalhes e diagnóstico em [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase) ("Testes manuais de 2026-10-24").
+Decisão do usuário: corrigir depois da Fase 5. A queda ao reiniciar no mesmo processo saiu daqui: foi corrigida na Fase 5 (confirmação manual pendente, [checklist](docs/testing/phase5-manual-checklist.md)). Detalhes e diagnóstico em [`STATE.md` → Pendências por fase](STATE.md#pendências-por-fase) ("Testes manuais de 2026-10-24").
 
-- Queda ao reiniciar o MO2 pela segunda vez no mesmo processo (trocar ou criar instância): `aboutToQuit` emitido a cada reinício apaga duas vezes o contexto OpenGL de reserva do QtWebEngine.
 - Queda em `TutorialControl::lockUI` (tutorial).
 - Helper travado (4c.2, item 3): a interface trava num `statx` dentro do mount.
 - Baldur's Gate 3: versão nativa não reconhecida; save com acento no nome não gravado pelo MO2; ordem de carga sem o LSLib.

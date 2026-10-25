@@ -1,5 +1,6 @@
 #include "multiprocess.h"
 #include "utility.h"
+#include <QFile>
 #include <QLocalSocket>
 #include <log.h>
 #include <report.h>
@@ -16,6 +17,19 @@ MOMultiProcess::MOMultiProcess(bool allowMultiple, QObject* parent)
 #ifndef _WIN32
   // the segment of a crashed or killed process stays on Linux; attaching to it and
   // detaching removes it if no other process uses it
+  //
+  // a System V key comes from the inode of a file in the temporary directory: when
+  // that file is gone, create() makes a new one, whose inode may be the one of a
+  // stale segment's file (ext4 reuses freed inodes), so create() fails with
+  // AlreadyExists, removes its file again and attach() then fails; making the file
+  // first lets attach() find such a segment and detach() remove it
+  if (m_SharedMem.nativeIpcKey().type() == QNativeIpcKey::Type::SystemV) {
+    QFile keyFile(m_SharedMem.nativeKey());
+    if (!keyFile.exists() && !keyFile.open(QIODevice::WriteOnly)) {
+      MOBase::log::warn("cannot create {}: {}", keyFile.fileName(),
+                        keyFile.errorString());
+    }
+  }
   if (m_SharedMem.attach())
     m_SharedMem.detach();
 #endif

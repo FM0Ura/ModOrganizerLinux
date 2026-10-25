@@ -22,6 +22,11 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <map>
 
+#ifndef _WIN32
+#include "linux/selfupdate_linux.h"
+#include <functional>
+#endif
+
 class Archive;
 class NexusInterface;
 class PluginContainer;
@@ -85,6 +90,15 @@ public:
 
   void setPluginContainer(PluginContainer* pluginContainer);
 
+#ifndef _WIN32
+  /**
+   * @brief tells whether programs started by Mod Organizer are running through the
+   *        virtual file system; the AppImage is not replaced and Mod Organizer is not
+   *        restarted while they are
+   **/
+  void setProgramsRunningCheck(std::function<bool()> f);
+#endif
+
   /**
    * @brief request information about the current version
    **/
@@ -126,6 +140,18 @@ private:
   void showProgress();
   void closeProgress();
 
+#ifndef _WIN32
+  // downloads the SHA256SUMS of the release, then its AppImage next to $APPIMAGE
+  void startAppImageUpdate(const QJsonObject& release);
+
+  // a warning with a link to the page of the release
+  void showReleasePage(const QString& title, const QString& message);
+
+  // true, after telling the user to close them, if programs are running through the
+  // virtual file system
+  bool programsRunning();
+#endif
+
 private slots:
 
   void downloadProgress(qint64 bytesReceived, qint64 bytesTotal);
@@ -144,6 +170,16 @@ private:
   int m_Attempts;
 
   GitHub m_GitHub;
+
+#ifndef _WIN32
+  // the SHA-256 of the AppImage being downloaded, from the SHA256SUMS of the release
+  QByteArray m_ExpectedSha256;
+  // html_url of the release being installed
+  QString m_ReleasePage;
+  std::function<bool()> m_ProgramsRunning;
+  // what testForUpdate() found possible for this AppImage
+  selfupdate::UpdateMode m_UpdateMode = selfupdate::UpdateMode::None;
+#endif
 
   // Map from version to release, in decreasing order (first element is the latest
   // release):

@@ -98,6 +98,12 @@ private:
   QString shortcutFilename() const;
 };
 
+// the program a shortcut of Mod Organizer starts: this executable; on Linux, the
+// .AppImage file when running inside an AppImage (the executable is then in a
+// temporary mount that is gone when Mod Organizer exits)
+//
+QString shortcutTarget();
+
 // returns a string representation of the given location
 //
 QString toString(Shortcut::Locations loc);

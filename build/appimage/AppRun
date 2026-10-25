@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# AppRun of the Mod Organizer AppImage (spec of Phase 5, sections 3.1 and 3.3).
+#
+# When the host's libstdc++ is newer than the bundled one (usr/libexec/mo2-hostlibs.sh,
+# which says why), and only then, this script puts a directory with links to the host's
+# libstdc++.so.6 and libgcc_s.so.1 in front of LD_LIBRARY_PATH (which wins over
+# RUNPATH), and exports the previous value as MO2_APPIMAGE_ORIG_LD_LIBRARY_PATH
+# (MO2_APPIMAGE_UNSET when it was not set), so that Mod Organizer restores the host's
+# environment for the whole process at the start of main (appimage_linux.cpp). Nothing
+# else in the environment is changed. QtWebEngineProcess, which Mod Organizer starts
+# with the host's environment and which loads the host's OpenGL drivers too, makes the
+# same choice through its wrapper (usr/libexec/QtWebEngineProcess).
+set -u
+
+HERE="${APPDIR:-$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")}"
+APP="$HERE/usr/bin/ModOrganizer"
+
+use_host_libstdcxx() {
+    local dir
+    # shellcheck source=mo2-hostlibs.sh
+    . "$HERE/usr/libexec/mo2-hostlibs.sh" 2>/dev/null &&
+        dir="$(mo2_hostlibs_dir "$HERE")" || return 1
+
+    export MO2_APPIMAGE_ORIG_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-MO2_APPIMAGE_UNSET}"
+    export LD_LIBRARY_PATH="$dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+}
+
+use_host_libstdcxx
+
+exec "$APP" "$@"

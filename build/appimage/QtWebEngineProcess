@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# QtWebEngineProcess of the Mod Organizer AppImage (spec of Phase 5, section 3.3): a
+# wrapper, installed as AppDir/usr/libexec/QtWebEngineProcess, of the real one
+# (QtWebEngineProcess.real, next to it).
+#
+# Mod Organizer runs every program with the host's environment (appimage_linux.cpp), so
+# the LD_LIBRARY_PATH that AppRun set for a newer host libstdc++ is gone when QtWebEngine
+# starts its processes; its GPU process loads the host's OpenGL drivers, which may need
+# that libstdc++. This makes the same choice as AppRun (mo2-hostlibs.sh), for this
+# process only, and changes nothing else: the arguments and argv[0] are Chromium's.
+set -u
+
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+
+# shellcheck source=mo2-hostlibs.sh
+if . "$here/mo2-hostlibs.sh" 2>/dev/null && dir="$(mo2_hostlibs_dir "$here/../..")"; then
+    export LD_LIBRARY_PATH="$dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+exec -a "$0" "$here/QtWebEngineProcess.real" "$@"

@@ -9,6 +9,16 @@
 static const QString GITHUB_URL("https://api.github.com");
 static const QString USER_AGENT("GitHubPP");
 
+#ifndef _WIN32
+// for development only: MO2_UPDATE_API_URL replaces https://api.github.com, to test the
+// update of the AppImage against a local server (spec of Phase 5, section 3.4)
+static QString apiUrl()
+{
+  const QString url = qEnvironmentVariable("MO2_UPDATE_API_URL");
+  return url.isEmpty() ? GITHUB_URL : url;
+}
+#endif
+
 GitHub::GitHub(const char* clientId) : m_AccessManager(new QNetworkAccessManager(this))
 {}
 
@@ -72,7 +82,11 @@ QJsonDocument GitHub::handleReply(QNetworkReply* reply)
 QNetworkReply* GitHub::genReply(Method method, const QString& path,
                                 const QByteArray& data, bool relative)
 {
+#ifdef _WIN32
   QNetworkRequest request(relative ? GITHUB_URL + "/" + path : path);
+#else
+  QNetworkRequest request(relative ? apiUrl() + "/" + path : path);
+#endif
 
   request.setHeader(QNetworkRequest::UserAgentHeader, USER_AGENT);
   request.setRawHeader("Accept", "application/vnd.github.v3+json");
