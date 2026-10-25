@@ -17,7 +17,7 @@ Spec: [`../superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](../sup
 
 ## 2. Instalação dos mods
 
-- [ ] Instalar, pelo **Download with mod manager**: Stellar Blade UE4SS (mod 2952), CNS (mod 1496), Better Jiggle (mod 1570), Catwalk Animations (mod 2717) e um mod `.pak` solto com efeito visível (cor de cabelo). Esperado, em cada um: nenhuma janela de instalação manual; na aba **Filetree** do mod, o conteúdo está sob `SB/…` nos destinos da spec §3 (`.pak`/`.ucas`/`.utoc` em `SB/Content/Paks/~mods`; o UE4SS em `SB/Binaries/Win64`; mods do UE4SS em `SB/Binaries/Win64/ue4ss/Mods/<mod>`). Anotar o que cair em outro lugar; um mod de `LogicMods` empacotado sem a pasta `LogicMods` cai em `~mods` (limitação conhecida: mover pelo MO2).
+- [ ] Instalar, pelo **Download with mod manager**: Stellar Blade UE4SS (mod 2952), CNS (mod 1496), Better Jiggle (mod 1570), Catwalk Animations (mod 2717) e um mod `.pak` solto com efeito visível (cor de cabelo). Esperado, em cada um: nenhuma janela de instalação manual; na aba **Filetree** do mod, o conteúdo está sob `SB/…` nos destinos da spec §3 (`.pak`/`.ucas`/`.utoc` em `SB/Content/Paks/~mods`; o UE4SS: `dwmapi.dll` em `SB/Binaries/Win64` e a pasta `ue4ss/` em `SB/Binaries/Win64/ue4ss`; mods do UE4SS em `SB/Binaries/Win64/ue4ss/Mods/<mod>`). Anotar o que cair em outro lugar; um mod de `LogicMods` empacotado sem a pasta `LogicMods` cai em `~mods` (limitação conhecida: mover pelo MO2).
 
 ## 3. DLL proxy do UE4SS
 
