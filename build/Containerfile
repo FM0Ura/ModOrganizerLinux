@@ -17,6 +17,13 @@ RUN dnf -y install --setopt=install_weak_deps=False \
         libsecret-devel gnome-keyring dbus-daemon tomlplusplus-devel libcurl-devel \
     && dnf clean all
 
+# Tools of the AppImage (build/appimage/build-appimage.sh, scripts/check-appdir.sh):
+# linuxdeploy and appimagetool are downloaded by the script; these are what they and
+# the script call (zsyncmake, desktop-file-validate, file, patchelf, objcopy, zstd)
+RUN dnf -y install --setopt=install_weak_deps=False \
+        zsync zstd file patchelf desktop-file-utils binutils findutils which \
+    && dnf clean all
+
 # Rust (stable) via rustup, system-wide so any user in a distrobox sees it.
 ENV RUSTUP_HOME=/opt/rustup \
     CARGO_HOME=/opt/cargo \
