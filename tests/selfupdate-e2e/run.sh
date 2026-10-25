@@ -25,7 +25,8 @@
 #    Organizer keeps running.
 # 4. read-only folder (APPIMAGE in a 0555 folder): the new version is still found, but
 #    only announced with the page of the release (logged); nothing is downloaded nor
-#    replaced and Mod Organizer keeps running.
+#    replaced and Mod Organizer keeps running. Skipped as root (a container of the CI):
+#    root may write to a 0555 folder, so the folder counts as writable.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -181,7 +182,8 @@ arg=smoke
 APPDIR=<unset>"
 [[ $(<"$marker") == "$expected" ]] || fail "unexpected arguments or environment, expected:
 $expected"
-cmp -s "$new" "$appimage" || fail "APPIMAGE was not replaced by the new version"
+# (sha256sum: cmp is not in the build container)
+[[ $(sha256sum <"$new") == "$(sha256sum <"$appimage")" ]] || fail "APPIMAGE was not replaced by the new version"
 [[ $(stat -c %a "$appimage") == 750 ]] ||
     fail "APPIMAGE has mode $(stat -c %a "$appimage"), expected 750"
 [[ -z $(leftovers) ]] || fail "download left behind: $(leftovers)"
@@ -253,6 +255,11 @@ grep -E "update: |update available|no releases" "$instance/logs/mo_interface.log
 echo "no releases test passed"
 
 echo "--- read-only folder of the AppImage"
+if (($(id -u) == 0)); then
+    echo "read-only folder test SKIPPED: running as root, which may write to a 0555 folder"
+    echo "self-update e2e test passed"
+    exit 0
+fi
 run_mo2 readonly "$sha  ModOrganizer-2.5.2.2-x86_64.AppImage
 " "$base" readonly
 found=0
