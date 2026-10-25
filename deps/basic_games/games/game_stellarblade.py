@@ -38,6 +38,27 @@ DEFAULT_UE4SS_MODS = [
 ]
 
 
+def _find_dir(root: Path, relative: str) -> Path | None:
+    """Resolves relative under root, matching each segment case-insensitively."""
+    current = root
+    for segment in relative.split("/"):
+        try:
+            match = next(
+                (
+                    e
+                    for e in current.iterdir()
+                    if e.is_dir() and e.name.casefold() == segment.casefold()
+                ),
+                None,
+            )
+        except OSError:
+            return None
+        if match is None:
+            return None
+        current = match
+    return current
+
+
 def write_ue4ss_mod_lists(profile_dir: Path, mod_dirs: list[Path]) -> None:
     """
     Writes mods.txt and mods.json (UE4SS mod lists) into profile_dir: the defaults,
@@ -48,8 +69,8 @@ def write_ue4ss_mod_lists(profile_dir: Path, mod_dirs: list[Path]) -> None:
     seen = {name.casefold() for name, _ in mods}
     seen.update({"shared", "keybinds"})
     for mod_dir in mod_dirs:
-        mods_dir = mod_dir / _UE4SS_MODS
-        if not mods_dir.is_dir():
+        mods_dir = _find_dir(mod_dir, _UE4SS_MODS)
+        if mods_dir is None:
             continue
         for entry in sorted(mods_dir.iterdir(), key=lambda e: e.name.casefold()):
             if entry.is_dir() and entry.name.casefold() not in seen:
@@ -59,13 +80,15 @@ def write_ue4ss_mod_lists(profile_dir: Path, mod_dirs: list[Path]) -> None:
 
     profile_dir.mkdir(parents=True, exist_ok=True)
     (profile_dir / "mods.txt").write_text(
-        "".join(f"{name} : {int(enabled)}\n" for name, enabled in mods)
+        "".join(f"{name} : {int(enabled)}\n" for name, enabled in mods),
+        encoding="utf-8",
     )
     (profile_dir / "mods.json").write_text(
         json.dumps(
             [{"mod_name": name, "mod_enabled": enabled} for name, enabled in mods],
             indent=4,
-        )
+        ),
+        encoding="utf-8",
     )
 
 
@@ -184,7 +207,7 @@ class StellarBladeModDataChecker(mobase.ModDataChecker):
         return filetree
 
 
-class StellarBladeGame(BasicGame):
+class StellarBladeGame(BasicGame, mobase.IPluginFileMapper):
     Name = "Stellar Blade Support Plugin"
     Author = "FM0Ura"
     Version = "1.0.0"
@@ -204,6 +227,10 @@ class StellarBladeGame(BasicGame):
     GameSavesDirectory = "%USERPROFILE%/AppData/Local/SB/Saved/SaveGames"
     GameSaveExtension = "sav"
     GameIniFiles = ["Engine.ini", "Game.ini", "Input.ini", "GameUserSettings.ini"]
+
+    def __init__(self):
+        BasicGame.__init__(self)
+        mobase.IPluginFileMapper.__init__(self)
 
     def paksDirectory(self) -> QDir:
         return QDir(self.gameDirectory().absoluteFilePath("SB/Content/Paks"))
@@ -225,7 +252,7 @@ class StellarBladeGame(BasicGame):
         super().initializeProfile(directory, settings)
         try:
             write_ue4ss_mod_lists(Path(directory.absolutePath()), [])
-        except OSError as e:
+        except Exception as e:
             qWarning(f"Stellar Blade: could not write the UE4SS mod lists: {e}")
 
     def mappings(self) -> list[mobase.Mapping]:
@@ -244,12 +271,13 @@ class StellarBladeGame(BasicGame):
         try:
             mod_list = self._organizer.modList()
             mod_dirs = [
-                Path(mod_list.getMod(name).absolutePath())
+                Path(mod.absolutePath())
                 for name in mod_list.allModsByProfilePriority()
                 if mod_list.state(name) & mobase.ModState.ACTIVE
+                and (mod := mod_list.getMod(name)) is not None
             ]
             mod_dirs.append(Path(self._organizer.overwritePath()))
             write_ue4ss_mod_lists(Path(self._organizer.profilePath()), mod_dirs)
-        except OSError as e:
+        except Exception as e:
             qWarning(f"Stellar Blade: could not write the UE4SS mod lists: {e}")
         return True
