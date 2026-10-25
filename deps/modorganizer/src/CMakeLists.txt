@@ -96,7 +96,8 @@ mo2_configure_target(organizer WARNINGS 4 TRANSLATIONS OFF)
 # library, organizer_datatree, and the rest of env, except env.cpp
 # (which needs the settings), as organizer_env, the file tree of archives used by
 # the installation as organizer_archivetree, the Linux parts of running programs
-# (the virtual file system connector, spawn and the availability of LOOT) as
+# (the virtual file system connector, spawn and the availability of LOOT, and the
+# plugin folders) as
 # organizer_launch, with its posix_spawn() call in organizer_posixspawn (built without
 # src/ in the include path, where spawn.h hides the <spawn.h> of the system), and the
 # desktop integration (logins in the Secret Service and the nxm:// handler) as
@@ -130,6 +131,7 @@ set(_organizer_env_sources
 
 set(_organizer_launch_sources
 	filemappingbuilder.cpp
+	pluginpaths.cpp
 	virtualizedpaths.cpp
 	shared/appconfig.cpp
 	linux/exitcodes_linux.cpp

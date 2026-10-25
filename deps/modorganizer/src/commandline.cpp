@@ -5,6 +5,7 @@
 #include "messagedialog.h"
 #include "multiprocess.h"
 #include "organizercore.h"
+#include "pluginpaths.h"
 #include "shared/appconfig.h"
 #include "shared/util.h"
 #include <log.h>
@@ -844,9 +845,7 @@ std::optional<int> ReloadPluginCommand::runPostOrganizer(OrganizerCore& core)
 {
   const QString name = QString::fromStdString(vm()["PLUGIN"].as<std::string>());
 
-  QString filepath =
-      QDir(qApp->applicationDirPath() + "/" + ToQString(AppConfig::pluginPath()))
-          .absoluteFilePath(name);
+  QString filepath = pluginFilePath(pluginsPaths(), name);
 
   log::debug("reloading plugin from {}", filepath);
   core.pluginContainer().reloadPlugin(filepath);

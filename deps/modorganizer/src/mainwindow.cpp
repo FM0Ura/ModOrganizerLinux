@@ -55,6 +55,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nexusinterface.h"
 #include "nxmaccessmanager.h"
 #include "organizercore.h"
+#include "pluginpaths.h"
 #include "overwriteinfodialog.h"
 #include "pluginlist.h"
 #include "previewdialog.h"
@@ -2632,8 +2633,10 @@ void MainWindow::openInstallFolder()
 
 void MainWindow::openPluginsFolder()
 {
-  QString pluginsPath =
-      QCoreApplication::applicationDirPath() + "/" + ToQString(AppConfig::pluginPath());
+  // the shipped folder is read-only in the AppImage, plugins are installed in the
+  // user's
+  QString pluginsPath = userPluginsPath();
+  QDir().mkpath(pluginsPath);
   shell::Explore(pluginsPath);
 }
 

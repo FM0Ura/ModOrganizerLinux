@@ -2,6 +2,7 @@
 #include "iuserinterface.h"
 #include "organizercore.h"
 #include "organizerproxy.h"
+#include "pluginpaths.h"
 #include "report.h"
 #include "shared/appconfig.h"
 #include <QAction>
@@ -401,12 +402,18 @@ QStringList PluginContainer::pluginFileNames() const
   }
   std::vector<IPluginProxy*> proxyList = bf::at_key<IPluginProxy>(m_Plugins);
   for (IPluginProxy* proxy : proxyList) {
-    QStringList proxiedPlugins =
-        proxy->pluginList(QCoreApplication::applicationDirPath() + "/" +
-                          ToQString(AppConfig::pluginPath()));
-    result.append(proxiedPlugins);
+    result.append(proxiedPluginList(proxy));
   }
   return result;
+}
+
+QStringList PluginContainer::proxiedPluginList(IPluginProxy* proxy) const
+{
+  std::vector<QStringList> entriesByFolder;
+  for (const QString& pluginPath : pluginsPaths()) {
+    entriesByFolder.push_back(proxy->pluginList(pluginPath));
+  }
+  return mergePluginEntries(entriesByFolder);
 }
 
 QObject* PluginContainer::as_qobject(MOBase::IPlugin* plugin) const
@@ -604,9 +611,7 @@ IPlugin* PluginContainer::registerPlugin(QObject* plugin, const QString& filepat
       bf::at_key<IPluginProxy>(m_Plugins).push_back(proxy);
       emit pluginRegistered(proxy);
 
-      QStringList filepaths =
-          proxy->pluginList(QCoreApplication::applicationDirPath() + "/" +
-                            ToQString(AppConfig::pluginPath()));
+      QStringList filepaths = proxiedPluginList(proxy);
       for (const QString& filepath : filepaths) {
         loadProxied(filepath, proxy);
       }
@@ -921,8 +926,7 @@ void PluginContainer::loadPlugin(QString const& filepath)
   } else {
     // We need to check if this can be handled by a proxy.
     for (auto* proxy : this->plugins<IPluginProxy>()) {
-      auto filepaths = proxy->pluginList(QCoreApplication::applicationDirPath() + "/" +
-                                         ToQString(AppConfig::pluginPath()));
+      auto filepaths = proxiedPluginList(proxy);
       if (filepaths.contains(filepath)) {
         plugins = loadProxied(filepath, proxy);
         break;
@@ -1136,33 +1140,42 @@ void PluginContainer::loadPlugins()
     loadCheck.open(QIODevice::WriteOnly);
   }
 
-  QString pluginPath =
-      qApp->applicationDirPath() + "/" + ToQString(AppConfig::pluginPath());
-  log::debug("looking for plugins in {}", QDir::toNativeSeparators(pluginPath));
-  QDirIterator iter(pluginPath, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+  // the user's folder is created here so that it can be opened from the menu
+  QDir().mkpath(userPluginsPath());
 
-  while (iter.hasNext()) {
-    iter.next();
+  std::vector<QStringList> entriesByFolder;
+  for (const QString& pluginPath : pluginsPaths()) {
+    log::debug("looking for plugins in {}", QDir::toNativeSeparators(pluginPath));
 
-    if (skipPlugin == iter.fileName()) {
-      log::debug("plugin \"{}\" skipped for this session", iter.fileName());
+    QStringList entries;
+    QDirIterator iter(pluginPath, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    while (iter.hasNext()) {
+      entries.append(iter.next());
+    }
+    entriesByFolder.push_back(entries);
+  }
+
+  for (const QString& filepath : mergePluginEntries(entriesByFolder)) {
+    const QString fileName = QFileInfo(filepath).fileName();
+
+    if (skipPlugin == fileName) {
+      log::debug("plugin \"{}\" skipped for this session", fileName);
       continue;
     }
 
     if (m_Organizer) {
-      if (m_Organizer->settings().plugins().blacklisted(iter.fileName())) {
-        log::debug("plugin \"{}\" blacklisted", iter.fileName());
+      if (m_Organizer->settings().plugins().blacklisted(fileName)) {
+        log::debug("plugin \"{}\" blacklisted", fileName);
         continue;
       }
     }
 
     if (loadCheck.isOpen()) {
-      loadCheck.write(iter.fileName().toUtf8());
+      loadCheck.write(fileName.toUtf8());
       loadCheck.write("\n");
       loadCheck.flush();
     }
 
-    QString filepath = iter.filePath();
     if (QLibrary::isLibrary(filepath)) {
       loadQtPlugin(filepath);
     } else if (auto p = isQtPluginFolder(filepath)) {

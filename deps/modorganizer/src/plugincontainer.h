@@ -393,6 +393,9 @@ private:
   // Retrieve the path to the file or folder corresponding to the plugin.
   QString filepath(MOBase::IPlugin* plugin) const;
 
+  // The plugins the given proxy lists in the plugin folders (see pluginpaths.h).
+  QStringList proxiedPluginList(MOBase::IPluginProxy* proxy) const;
+
   // Load plugins from the given filepath using the given proxy.
   std::vector<QObject*> loadProxied(const QString& filepath,
                                     MOBase::IPluginProxy* proxy);
