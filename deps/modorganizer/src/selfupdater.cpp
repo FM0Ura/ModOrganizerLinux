@@ -63,7 +63,6 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #else
 #include "linux/appimage_linux.h"
 #include "linux/selfupdate_linux.h"
-#include <unistd.h>  // access()
 #endif
 
 #include <exception>
@@ -101,16 +100,11 @@ void SelfUpdater::setProgramsRunningCheck(std::function<bool()> f)
 void SelfUpdater::testForUpdate(const Settings& settings)
 {
 #ifndef _WIN32
-  // only the AppImage is updated: a single file, replaced by the one of the release
-  const QString appImage = appimage::info().appImage;
-  if (!appimage::info().active()) {
+  // only the AppImage is updated: a single file, replaced by the one of the release; in
+  // a folder that is not writable, a new version is only announced (startUpdate())
+  m_UpdateMode = selfupdate::updateMode(appimage::info().appImage);
+  if (m_UpdateMode == selfupdate::UpdateMode::None) {
     log::debug("not checking for updates, not running from an AppImage");
-    return;
-  }
-
-  const QString appImageDir = QFileInfo(appImage).absolutePath();
-  if (::access(QFile::encodeName(appImageDir).constData(), W_OK) != 0) {
-    log::debug("not checking for updates, the folder of {} is not writable", appImage);
     return;
   }
 #endif
@@ -172,6 +166,11 @@ void SelfUpdater::testForUpdate(const Settings& settings)
               log::info("update available: {} -> {}", this->m_MOVersion, lastKey);
               emit updateAvailable();
 #ifndef _WIN32
+              if (m_UpdateMode == selfupdate::UpdateMode::NotifyOnly) {
+                log::warn("update: the folder of {} is not writable, the new version "
+                          "can only be downloaded from the page of the release",
+                          appimage::info().appImage);
+              }
               // for tests only: install the update without the user, see
               // startUpdate()
               if (qEnvironmentVariableIsSet("MO2_SMOKE_ACCEPT_UPDATE")) {
@@ -201,6 +200,21 @@ void SelfUpdater::startUpdate()
   auto latestRelease = m_UpdateCandidates.begin()->second;
 
 #ifndef _WIN32
+  if (m_UpdateMode == selfupdate::UpdateMode::NotifyOnly) {
+    // nothing is downloaded nor replaced
+    m_ReleasePage = latestRelease["html_url"].toString();
+    log::info("update: showing the page of the release {}, the folder of {} is not "
+              "writable",
+              latestRelease["tag_name"].toString(), appimage::info().appImage);
+    showReleasePage(
+        tr("Update"),
+        tr("Mod Organizer %1 is available, but the folder of the AppImage (%2) is not "
+           "writable, so it can't be updated from here.")
+            .arg(latestRelease["tag_name"].toString(),
+                 QFileInfo(appimage::info().appImage).absolutePath()));
+    return;
+  }
+
   if (programsRunning()) {
     return;
   }

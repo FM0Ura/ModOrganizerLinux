@@ -88,6 +88,21 @@ namespace
   std::optional<PendingReexec> g_pending;
 }  // namespace
 
+UpdateMode updateMode(const QString& appImage)
+{
+  if (appImage.isEmpty()) {
+    return UpdateMode::None;
+  }
+
+  // the new file is renamed over the old one: the folder must be writable
+  const QString dir = QFileInfo(appImage).absolutePath();
+  if (::access(QFile::encodeName(dir).constData(), W_OK) != 0) {
+    return UpdateMode::NotifyOnly;
+  }
+
+  return UpdateMode::Install;
+}
+
 std::optional<Asset> appImageAsset(const QJsonObject& release)
 {
   static const QRegularExpression re(

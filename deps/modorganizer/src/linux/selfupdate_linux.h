@@ -16,6 +16,21 @@
 // SelfUpdater (selfupdater.cpp) does the network part and the dialogs.
 namespace selfupdate
 {
+// what can be done with an update, for Mod Organizer running from `appImage` (the
+// path of $APPIMAGE, empty outside an AppImage)
+enum class UpdateMode
+{
+  // not an AppImage: no check for updates
+  None,
+  // download the new AppImage and replace this one
+  Install,
+  // the folder of the AppImage is not writable: only tell about a new version and offer
+  // the page of the release, nothing is downloaded nor replaced
+  NotifyOnly
+};
+
+UpdateMode updateMode(const QString& appImage);
+
 struct Asset
 {
   QString name;

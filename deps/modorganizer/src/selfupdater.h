@@ -23,6 +23,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <map>
 
 #ifndef _WIN32
+#include "linux/selfupdate_linux.h"
 #include <functional>
 #endif
 
@@ -176,6 +177,8 @@ private:
   // html_url of the release being installed
   QString m_ReleasePage;
   std::function<bool()> m_ProgramsRunning;
+  // what testForUpdate() found possible for this AppImage
+  selfupdate::UpdateMode m_UpdateMode = selfupdate::UpdateMode::None;
 #endif
 
   // Map from version to release, in decreasing order (first element is the latest

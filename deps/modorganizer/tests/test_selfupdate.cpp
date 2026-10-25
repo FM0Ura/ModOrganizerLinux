@@ -287,3 +287,35 @@ TEST(Reexec, ReturnsWhenExecFails)
   ASSERT_TRUE(WIFEXITED(status));
   EXPECT_EQ(WEXITSTATUS(status), 3);
 }
+
+TEST(UpdateMode, NoCheckOutsideAnAppImage)
+{
+  EXPECT_EQ(selfupdate::updateMode(""), selfupdate::UpdateMode::None);
+}
+
+TEST(UpdateMode, InstallsInAWritableFolder)
+{
+  TempDir dir;
+  const auto target = dir.path() / "ModOrganizer.AppImage";
+  writeFile(target, "old");
+
+  EXPECT_EQ(selfupdate::updateMode(q(target)), selfupdate::UpdateMode::Install);
+}
+
+TEST(UpdateMode, OnlyNotifiesInAReadOnlyFolder)
+{
+  if (::geteuid() == 0) {
+    GTEST_SKIP() << "root can write to a read-only directory";
+  }
+
+  TempDir dir;
+  const auto apps   = dir.path() / "apps";
+  const auto target = apps / "ModOrganizer.AppImage";
+  fs::create_directories(apps);
+  writeFile(target, "old");
+  fs::permissions(apps, fs::perms(0555));
+
+  EXPECT_EQ(selfupdate::updateMode(q(target)), selfupdate::UpdateMode::NotifyOnly);
+
+  fs::permissions(apps, fs::perms(0755));
+}
