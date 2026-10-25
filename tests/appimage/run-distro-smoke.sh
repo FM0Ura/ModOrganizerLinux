@@ -56,7 +56,7 @@ line="$(grep -E "^${IMAGE//./\\.}\|" "$HERE/distros.txt" || true)"
 IFS='|' read -r _ PM PKGS <<< "$line"
 case $PM in
     dnf) INSTALL_CMD="dnf install -y --setopt=install_weak_deps=False $PKGS" ;;
-    pacman) INSTALL_CMD="pacman -Sy --noconfirm --needed $PKGS" ;;
+    pacman) INSTALL_CMD="pacman -Syu --noconfirm --needed $PKGS" ;;
     apt) INSTALL_CMD="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS" ;;
     *) fail "unknown package manager $PM" ;;
 esac
