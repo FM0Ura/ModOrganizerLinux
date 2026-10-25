@@ -163,3 +163,20 @@ TEST(CaptureAndRestore, DoesNothingOutsideAppImage)
   EXPECT_FALSE(appimage::info().active());
   EXPECT_STREQ(::getenv("LD_LIBRARY_PATH"), "/keep");
 }
+
+TEST(CaptureAndRestore, MarkersWithoutAppImageAreRestored)
+{
+  // squashfs-root/AppRun of an extracted AppImage: AppRun's markers, no APPIMAGE; the
+  // programs started by Mod Organizer must not get AppRun's LD_LIBRARY_PATH either
+  EnvGuard guard({"APPIMAGE", "LD_LIBRARY_PATH", "MO2_APPIMAGE_ORIG_LD_LIBRARY_PATH"});
+
+  ::unsetenv("APPIMAGE");
+  ::setenv("LD_LIBRARY_PATH", "/run/user/1000/mo2-hostlibs-1000", 1);
+  ::setenv("MO2_APPIMAGE_ORIG_LD_LIBRARY_PATH", "MO2_APPIMAGE_UNSET", 1);
+  appimage::captureAndRestore();
+
+  EXPECT_EQ(::getenv("LD_LIBRARY_PATH"), nullptr);
+  EXPECT_EQ(::getenv("MO2_APPIMAGE_ORIG_LD_LIBRARY_PATH"), nullptr);
+  // not an AppImage: no self-update
+  EXPECT_FALSE(appimage::info().active());
+}

@@ -41,7 +41,9 @@ std::map<std::string, std::optional<std::string>>
 hostEnvironment(const std::map<std::string, std::string>& current);
 
 // reads the environment, fills info() and applies hostEnvironment() to the process;
-// does nothing without $APPIMAGE
+// does nothing without $APPIMAGE and without markers; with markers only (an extracted
+// AppImage run through squashfs-root/AppRun), restores the environment but leaves
+// info() inactive
 void captureAndRestore();
 
 // environ as a map

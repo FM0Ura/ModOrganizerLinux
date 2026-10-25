@@ -80,17 +80,16 @@ void captureAndRestore()
 {
   const auto env = currentEnvironment();
 
-  const auto appImage = env.find("APPIMAGE");
-  if (appImage == env.end()) {
-    return;
+  // an extracted AppImage (squashfs-root/AppRun) has AppRun's markers but no APPIMAGE:
+  // its environment is restored all the same, but it is not an AppImage (info())
+  if (const auto appImage = env.find("APPIMAGE"); appImage != env.end()) {
+    Info i;
+    i.appImage = QString::fromLocal8Bit(appImage->second.c_str());
+    if (const auto dir = env.find("APPDIR"); dir != env.end()) {
+      i.appDir = QString::fromLocal8Bit(dir->second.c_str());
+    }
+    g_info = i;
   }
-
-  Info i;
-  i.appImage = QString::fromLocal8Bit(appImage->second.c_str());
-  if (const auto dir = env.find("APPDIR"); dir != env.end()) {
-    i.appDir = QString::fromLocal8Bit(dir->second.c_str());
-  }
-  g_info = i;
 
   for (const auto& [name, value] : hostEnvironment(env)) {
     if (value) {
