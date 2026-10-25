@@ -24,6 +24,7 @@ GAMES = {
     "524220": ("NieRAutomata", "NieRAutomata.exe", True),
     "1091500": ("Cyberpunk 2077", "bin/x64/Cyberpunk2077.exe", True),
     "1086940": ("Baldurs Gate 3", "bin/bg3.exe", True),
+    "3489700": ("StellarBlade", "SB/Binaries/Win64/SB-Win64-Shipping.exe", True),
 }
 
 
@@ -42,6 +43,8 @@ def steam(tmp_path, monkeypatch):
             f'\t"installdir"\t\t"{installdir}"\n}}\n',
         )
         _write(root / "steamapps/common" / installdir / binary, "")
+        if appid == "3489700":
+            _write(root / "steamapps/common" / installdir / "SB.exe", "")
         compat = root / "steamapps/compatdata" / appid
         compat.mkdir(parents=True)
         if prefix:
