@@ -100,3 +100,78 @@ def test_game_is_a_file_mapper():
 
     game = _load_basic_games()["StellarBladeGame"]
     assert isinstance(game, mobase.IPluginFileMapper)
+
+
+def _hook_game(steam, tmp_path, active_names, mods, managed="Stellar Blade Support Plugin"):
+    """The game initialized with a mocked organizer; returns (game, organizer)."""
+    import mobase
+
+    game = _load_basic_games()["StellarBladeGame"]
+    game.detectGame()
+    organizer = MagicMock()
+    organizer.profilePath.return_value = str(tmp_path / "profile")
+    organizer.overwritePath.return_value = str(tmp_path / "overwrite")
+    organizer.managedGame.return_value.name.return_value = managed
+    mod_list = organizer.modList.return_value
+    mod_list.allModsByProfilePriority.return_value = list(mods)
+    mod_list.state.side_effect = lambda n: (
+        mobase.ModState.ACTIVE if n in active_names else mobase.ModState.EXISTS
+    )
+
+    def get_mod(n):
+        if n not in mods or mods[n] is None:
+            return None
+        m = MagicMock()
+        m.absolutePath.return_value = str(mods[n])
+        return m
+
+    mod_list.getMod.side_effect = get_mod
+    game.init(organizer)
+    return game, organizer
+
+
+def _ue4ss_mod(tmp_path, name, ue4ss_mod):
+    d = tmp_path / "mods" / name
+    (d / _MODS / ue4ss_mod).mkdir(parents=True)
+    return d
+
+
+def test_about_to_run_lists_active_mods_and_overwrite_last(steam, tmp_path):
+    active = _ue4ss_mod(tmp_path, "A", "ActiveMod")
+    inactive = _ue4ss_mod(tmp_path, "B", "InactiveMod")
+    overwrite = tmp_path / "overwrite"
+    (overwrite / _MODS / "OverwriteMod").mkdir(parents=True)
+    game, _ = _hook_game(
+        steam, tmp_path, {"A"}, {"A": active, "B": inactive, "Gone": None}
+    )
+    (tmp_path / "profile").mkdir()
+    assert game._onAboutToRun("x", MagicMock(), "") is True
+    lines = (tmp_path / "profile/mods.txt").read_text().splitlines()
+    assert lines[9:] == ["ActiveMod : 1", "OverwriteMod : 1", "Keybinds : 1"]
+
+
+def test_about_to_run_skips_mod_that_getmod_cannot_find(steam, tmp_path):
+    game, _ = _hook_game(steam, tmp_path, {"Gone"}, {"Gone": None})
+    (tmp_path / "profile").mkdir()
+    assert game._onAboutToRun("x", MagicMock(), "") is True
+    lines = (tmp_path / "profile/mods.txt").read_text().splitlines()
+    assert lines == _DEFAULT_LINES + ["Keybinds : 1"]
+
+
+def test_about_to_run_logs_errors_and_returns_true(steam, tmp_path, monkeypatch):
+    game, organizer = _hook_game(steam, tmp_path, set(), {})
+    organizer.modList.side_effect = RuntimeError("boom")
+    module = sys.modules[type(game).__module__]
+    warnings = []
+    monkeypatch.setattr(module, "qWarning", warnings.append)
+    assert game._onAboutToRun("x", MagicMock(), "") is True
+    assert len(warnings) == 1 and "boom" in warnings[0]
+
+
+def test_about_to_run_does_nothing_when_another_game_is_managed(steam, tmp_path):
+    active = _ue4ss_mod(tmp_path, "A", "ActiveMod")
+    game, _ = _hook_game(steam, tmp_path, {"A"}, {"A": active}, managed="Other Game")
+    (tmp_path / "profile").mkdir()
+    assert game._onAboutToRun("x", MagicMock(), "") is True
+    assert not (tmp_path / "profile/mods.txt").exists()
+    assert not (tmp_path / "profile/mods.json").exists()

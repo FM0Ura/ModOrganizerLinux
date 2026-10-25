@@ -233,6 +233,22 @@ def test_loose_proxy_dll_goes_to_win64():
     assert _fixed(["UE4SS.dll"]) == {"SB/Binaries/Win64/ue4ss/UE4SS.dll"}
 
 
+def test_loose_ue4ss_settings_goes_with_ue4ss_dll():
+    assert _fixed(
+        [
+            "UE4SS-settings.ini",
+            "UE4SS.dll",
+            "dwmapi.dll",
+            ("Mods", [("M", [("Scripts", ["main.lua"])])]),
+        ]
+    ) == {
+        "SB/Binaries/Win64/ue4ss/UE4SS-settings.ini",
+        "SB/Binaries/Win64/ue4ss/UE4SS.dll",
+        "SB/Binaries/Win64/dwmapi.dll",
+        "SB/Binaries/Win64/ue4ss/Mods/M/Scripts/main.lua",
+    }
+
+
 def test_wrapper_folder_is_unwrapped():
     assert _fixed(
         [("MeuMod-v1.2", [("SB", [("Content", [("Paks", [("~mods", ["a.pak"])])])])])]
