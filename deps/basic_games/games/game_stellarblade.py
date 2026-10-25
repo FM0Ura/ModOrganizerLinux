@@ -1,11 +1,15 @@
+import json
+from pathlib import Path
+
 import mobase
-from PyQt6.QtCore import QDir
+from PyQt6.QtCore import QDir, qWarning
 
 from ..basic_game import BasicGame
 
 _PAKS = "SB/Content/Paks"
 _WIN64 = "SB/Binaries/Win64"
 _UE4SS = _WIN64 + "/ue4ss"
+_UE4SS_MODS = _UE4SS + "/Mods"
 
 # Folders (compared with casefold()) that are completed up to the canonical SB/... path
 _FOLDERS = {
@@ -19,6 +23,50 @@ _FOLDERS = {
 }
 _PAK_EXTENSIONS = (".pak", ".ucas", ".utoc")
 _JUNK_EXTENSIONS = (".md", ".png", ".jpg", ".jpeg", ".webp")
+
+# UE4SS 3.x default mods, in the order of its own mods.txt
+DEFAULT_UE4SS_MODS = [
+    ("CheatManagerEnablerMod", True),
+    ("ActorDumperMod", False),
+    ("ConsoleCommandsMod", True),
+    ("ConsoleEnablerMod", True),
+    ("SplitScreenMod", False),
+    ("LineTraceMod", True),
+    ("BPModLoaderMod", True),
+    ("BPML_GenericFunctions", True),
+    ("jsbLuaProfilerMod", False),
+]
+
+
+def write_ue4ss_mod_lists(profile_dir: Path, mod_dirs: list[Path]) -> None:
+    """
+    Writes mods.txt and mods.json (UE4SS mod lists) into profile_dir: the defaults,
+    then the UE4SS mods found in mod_dirs (in order), then Keybinds (it has to be the
+    last one).
+    """
+    mods: list[tuple[str, bool]] = list(DEFAULT_UE4SS_MODS)
+    seen = {name.casefold() for name, _ in mods}
+    seen.update({"shared", "keybinds"})
+    for mod_dir in mod_dirs:
+        mods_dir = mod_dir / _UE4SS_MODS
+        if not mods_dir.is_dir():
+            continue
+        for entry in sorted(mods_dir.iterdir(), key=lambda e: e.name.casefold()):
+            if entry.is_dir() and entry.name.casefold() not in seen:
+                seen.add(entry.name.casefold())
+                mods.append((entry.name, True))
+    mods.append(("Keybinds", True))
+
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / "mods.txt").write_text(
+        "".join(f"{name} : {int(enabled)}\n" for name, enabled in mods)
+    )
+    (profile_dir / "mods.json").write_text(
+        json.dumps(
+            [{"mod_name": name, "mod_enabled": enabled} for name, enabled in mods],
+            indent=4,
+        )
+    )
 
 
 class StellarBladeModDataChecker(mobase.ModDataChecker):
@@ -168,4 +216,40 @@ class StellarBladeGame(BasicGame):
     def init(self, organizer: mobase.IOrganizer) -> bool:
         super().init(organizer)
         self._register_feature(StellarBladeModDataChecker())
+        organizer.onAboutToRun(self._onAboutToRun)
+        return True
+
+    def initializeProfile(
+        self, directory: QDir, settings: mobase.ProfileSetting
+    ) -> None:
+        super().initializeProfile(directory, settings)
+        try:
+            write_ue4ss_mod_lists(Path(directory.absolutePath()), [])
+        except OSError as e:
+            qWarning(f"Stellar Blade: could not write the UE4SS mod lists: {e}")
+
+    def mappings(self) -> list[mobase.Mapping]:
+        return [
+            mobase.Mapping(
+                self._organizer.profilePath() + "/" + name,
+                self.ue4ssModsDirectory().absoluteFilePath(name),
+                False,
+            )
+            for name in ("mods.txt", "mods.json")
+        ]
+
+    def _onAboutToRun(self, app_path: str, wd: QDir, args: str) -> bool:
+        if self._organizer.managedGame() is not self:
+            return True
+        try:
+            mod_list = self._organizer.modList()
+            mod_dirs = [
+                Path(mod_list.getMod(name).absolutePath())
+                for name in mod_list.allModsByProfilePriority()
+                if mod_list.state(name) & mobase.ModState.ACTIVE
+            ]
+            mod_dirs.append(Path(self._organizer.overwritePath()))
+            write_ue4ss_mod_lists(Path(self._organizer.profilePath()), mod_dirs)
+        except OSError as e:
+            qWarning(f"Stellar Blade: could not write the UE4SS mod lists: {e}")
         return True
