@@ -145,11 +145,13 @@ set(_organizer_launch_sources
 # the desktop integration of the Linux build: logins in the Secret Service
 # (secretstore_linux.cpp, over secretservice_linux.cpp) and the nxm:// handler
 # (nxmhandler_linux.cpp), spec of Phase 4a
-# and the display check of main() (displaycheck_linux.cpp, Phase 4c.2)
+# and the display check of main() (displaycheck_linux.cpp, Phase 4c.2), and the update
+# of the AppImage (selfupdate_linux.cpp, Phase 5)
 set(_organizer_desktop_sources
 	linux/displaycheck_linux.cpp
 	linux/nxmhandler_linux.cpp
-	linux/secretstore_linux.cpp)
+	linux/secretstore_linux.cpp
+	linux/selfupdate_linux.cpp)
 
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)

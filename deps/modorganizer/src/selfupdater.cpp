@@ -60,6 +60,10 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 #ifdef _WIN32
 #include <Windows.h>  //for VS_FIXEDFILEINFO, GetLastError
+#else
+#include "linux/appimage_linux.h"
+#include "linux/selfupdate_linux.h"
+#include <unistd.h>  // access()
 #endif
 
 #include <exception>
@@ -87,11 +91,28 @@ void SelfUpdater::setPluginContainer(PluginContainer* pluginContainer)
   m_Interface->setPluginContainer(pluginContainer);
 }
 
+#ifndef _WIN32
+void SelfUpdater::setProgramsRunningCheck(std::function<bool()> f)
+{
+  m_ProgramsRunning = std::move(f);
+}
+#endif
+
 void SelfUpdater::testForUpdate(const Settings& settings)
 {
 #ifndef _WIN32
-  log::debug("not checking for updates, there are no Linux releases yet");
-  return;
+  // only the AppImage is updated: a single file, replaced by the one of the release
+  const QString appImage = appimage::info().appImage;
+  if (!appimage::info().active()) {
+    log::debug("not checking for updates, not running from an AppImage");
+    return;
+  }
+
+  const QString appImageDir = QFileInfo(appImage).absolutePath();
+  if (::access(QFile::encodeName(appImageDir).constData(), W_OK) != 0) {
+    log::debug("not checking for updates, the folder of {} is not writable", appImage);
+    return;
+  }
 #endif
   if (settings.network().offlineMode()) {
     log::debug("not checking for updates, in offline mode");
@@ -106,11 +127,21 @@ void SelfUpdater::testForUpdate(const Settings& settings)
   // TODO: if prereleases are disabled we could just request the latest release
   // directly
   try {
+#ifdef _WIN32
+    const GitHub::Repository repository("Modorganizer2", "modorganizer");
+#else
+    // the releases of the Linux port
+    const GitHub::Repository repository("FM0Ura", "ModOrganizerLinux");
+#endif
     m_GitHub.releases(
-        GitHub::Repository("Modorganizer2", "modorganizer"),
+        repository,
         [this](const QJsonArray& releases) {
           if (releases.isEmpty()) {
             // error message already logged
+#ifndef _WIN32
+            // not for an HTTP error, such as the 404 of a private repository
+            log::debug("no releases found, or the request for them failed");
+#endif
             return;
           }
 
@@ -140,6 +171,13 @@ void SelfUpdater::testForUpdate(const Settings& settings)
               }
               log::info("update available: {} -> {}", this->m_MOVersion, lastKey);
               emit updateAvailable();
+#ifndef _WIN32
+              // for tests only: install the update without the user, see
+              // startUpdate()
+              if (qEnvironmentVariableIsSet("MO2_SMOKE_ACCEPT_UPDATE")) {
+                QTimer::singleShot(0, this, &SelfUpdater::startUpdate);
+              }
+#endif
             } else if (lastKey < this->m_MOVersion) {
               // this could happen if the user switches from using prereleases to
               // stable builds. Should we downgrade?
@@ -161,6 +199,12 @@ void SelfUpdater::startUpdate()
   Q_ASSERT(!m_UpdateCandidates.empty());
 
   auto latestRelease = m_UpdateCandidates.begin()->second;
+
+#ifndef _WIN32
+  if (programsRunning()) {
+    return;
+  }
+#endif
 
   UpdateDialog dialog(m_Parent);
   dialog.setVersions(MOShared::createVersionInfo().string(),
@@ -191,6 +235,13 @@ void SelfUpdater::startUpdate()
   // it:
   dialog.setChangeLogs(details);
 
+#ifndef _WIN32
+  // MO2_SMOKE_ACCEPT_UPDATE: for tests only, the dialog is accepted without showing it
+  if (qEnvironmentVariableIsSet("MO2_SMOKE_ACCEPT_UPDATE") ||
+      dialog.exec() == QDialog::Accepted) {
+    startAppImageUpdate(latestRelease);
+  }
+#else
   int res = dialog.exec();
 
   if (dialog.result() == QDialog::Accepted) {
@@ -210,7 +261,106 @@ void SelfUpdater::startUpdate()
           tr("Failed to find correct download, please try again later."));
     }
   }
+#endif
 }
+
+#ifndef _WIN32
+bool SelfUpdater::programsRunning()
+{
+  if (!m_ProgramsRunning || !m_ProgramsRunning()) {
+    return false;
+  }
+
+  log::warn("update: programs are running through the virtual file system");
+  QMessageBox::warning(m_Parent, tr("Update"),
+                       tr("Programs started by Mod Organizer are still running. Close "
+                          "the running programs first, then update again."));
+  return true;
+}
+
+void SelfUpdater::showReleasePage(const QString& title, const QString& message)
+{
+  QString text = message.toHtmlEscaped();
+  if (!m_ReleasePage.isEmpty()) {
+    text += "<br><br>" + tr("You can download the new version from <a href=\"%1\">the "
+                            "page of the release</a>.")
+                             .arg(m_ReleasePage.toHtmlEscaped());
+  }
+
+  QMessageBox box(QMessageBox::Warning, title, text, QMessageBox::Ok, m_Parent);
+  box.setTextFormat(Qt::RichText);
+  box.setTextInteractionFlags(Qt::TextBrowserInteraction);
+  box.exec();
+}
+
+void SelfUpdater::startAppImageUpdate(const QJsonObject& release)
+{
+  m_ReleasePage = release["html_url"].toString();
+
+  const auto appImage = selfupdate::appImageAsset(release);
+  const auto sums     = selfupdate::checksumAsset(release);
+
+  if (!appImage) {
+    log::error("update: the release {} has no AppImage", release["tag_name"].toString());
+    showReleasePage(tr("Update"),
+                    tr("The release has no AppImage (ModOrganizer-<version>-"
+                       "x86_64.AppImage)."));
+    return;
+  }
+
+  if (!sums) {
+    log::error("update: the release {} has no SHA256SUMS",
+               release["tag_name"].toString());
+    showReleasePage(tr("Update"), tr("The release has no SHA256SUMS: the download "
+                                     "could not be verified."));
+    return;
+  }
+
+  log::debug("update: downloading {}", sums->url.toString());
+
+  // the checksums first: without them, the AppImage is not downloaded at all
+  QNetworkReply* reply =
+      m_Interface->getAccessManager()->get(QNetworkRequest(sums->url));
+
+  connect(reply, &QNetworkReply::finished, this, [this, reply, appImage = *appImage] {
+    reply->deleteLater();
+
+    const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (reply->error() != QNetworkReply::NoError || status != 200) {
+      log::error("update: download of {} failed: {} (HTTP {})", reply->url().toString(),
+                 reply->errorString(), status);
+      showReleasePage(tr("Download failed"),
+                      tr("The SHA256SUMS of the release could not be downloaded: %1")
+                          .arg(reply->errorString()));
+      return;
+    }
+
+    const auto sha = selfupdate::expectedSha256(reply->readAll(), appImage.name);
+    if (!sha) {
+      log::error("update: {} is not in the SHA256SUMS of the release", appImage.name);
+      showReleasePage(tr("Update"), tr("The SHA256SUMS of the release has no "
+                                       "checksum for %1.")
+                                        .arg(appImage.name));
+      return;
+    }
+
+    m_ExpectedSha256 = *sha;
+
+    // next to the AppImage, so that it can be renamed over it
+    const QString path = selfupdate::downloadPathFor(appimage::info().appImage);
+    log::debug("update: downloading {} to {}", appImage.url.toString(), path);
+    m_UpdateFile.setFileName(path);
+    if (!m_UpdateFile.open(QIODevice::WriteOnly)) {
+      log::error("update: can't create {}: {}", path, m_UpdateFile.errorString());
+      showReleasePage(tr("Download failed"), tr("%1 could not be created: %2")
+                                                 .arg(path, m_UpdateFile.errorString()));
+      return;
+    }
+
+    download(appImage.url.toString());
+  });
+}
+#endif
 
 void SelfUpdater::showProgress()
 {
@@ -336,6 +486,33 @@ void SelfUpdater::downloadCancel()
 
 void SelfUpdater::installUpdate()
 {
+#ifndef _WIN32
+  // the new version is not started while programs use the mount of this one
+  if (programsRunning()) {
+    m_UpdateFile.remove();
+    return;
+  }
+
+  const QString target = appimage::info().appImage;
+  const auto e =
+      selfupdate::replaceAppImage(m_UpdateFile.fileName(), target, m_ExpectedSha256);
+
+  if (e != selfupdate::ReplaceError::None) {
+    showReleasePage(tr("Update failed"), tr("The update could not be installed: %1.")
+                                             .arg(selfupdate::toString(e)));
+    return;
+  }
+
+  // main() executes the new AppImage once this one has exited normally (with the
+  // virtual file system unmounted)
+  QStringList args = QCoreApplication::arguments();
+  if (!args.isEmpty()) {
+    args.removeFirst();
+  }
+  selfupdate::scheduleReexec(target, args);
+  log::info("update: installed, restarting");
+  QCoreApplication::quit();
+#else
   const QString parameters = "/DIR=\"" + qApp->applicationDirPath() + "\" ";
   const auto r             = shell::Execute(m_UpdateFile.fileName(), parameters);
 
@@ -347,6 +524,7 @@ void SelfUpdater::installUpdate()
   }
 
   m_UpdateFile.remove();
+#endif
 }
 
 void SelfUpdater::report7ZipError(QString const& errorMessage)
