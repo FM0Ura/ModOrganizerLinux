@@ -18,10 +18,11 @@ Spec: [`../superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](../sup
 ## 2. Instalação dos mods
 
 - [ ] Instalar, pelo **Download with mod manager**: Stellar Blade UE4SS (mod 2952), CNS (mod 1496), Better Jiggle (mod 1570), Catwalk Animations (mod 2717) e um mod `.pak` solto com efeito visível (cor de cabelo). Esperado, em cada um: nenhuma janela de instalação manual; na aba **Filetree** do mod, o conteúdo está sob `SB/…` nos destinos da spec §3 (`.pak`/`.ucas`/`.utoc` em `SB/Content/Paks/~mods`; o UE4SS: `dwmapi.dll` em `SB/Binaries/Win64` e a pasta `ue4ss/` em `SB/Binaries/Win64/ue4ss`; mods do UE4SS em `SB/Binaries/Win64/ue4ss/Mods/<mod>`). Anotar o que cair em outro lugar; um mod de `LogicMods` empacotado sem a pasta `LogicMods` cai em `~mods` (limitação conhecida: mover pelo MO2).
+- [ ] Na aba **Filetree** do CNS, confirmar que `SB/Content/Paks/LogicMods/DekCNS_P.pak` continua em `LogicMods` (não foi movido para `~mods`).
 
 ## 3. DLL proxy do UE4SS
 
-- [ ] **Tools → Modify Executables…**, selecionar o executável do jogo e, no grupo **Proton**, na linha **Environment**, escrever `WINEDLLOVERRIDES=dwmapi=n,b`; **OK**.
+- [ ] **Tools → Modify Executables…**, selecionar o executável **"Stellar Blade"** (`SB.exe`; o BasicGame registra o launcher e o binário com o mesmo título e só o primeiro, o `SB.exe`, sobrevive na lista) e, no grupo **Proton**, na linha **Environment**, escrever `WINEDLLOVERRIDES=dwmapi=n,b`; **OK**.
 
 ## 4. Execução
 
@@ -38,7 +39,7 @@ Spec: [`../superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](../sup
 
 ## 7. Configs por perfil
 
-- [ ] Num perfil com configs locais (**Use profile-specific Game INI Files**), editar o `Engine.ini` em **Tools → INI Editor** e executar o jogo. Esperado: o arquivo chega a `<prefixo>/AppData/Local/SB/Saved/Config/WindowsNoEditor/Engine.ini` durante a execução. Se não chegar, anotar (spec §4: os configs ficam de fora e viram limitação).
+- [ ] Num perfil com configs locais (a opção **Use profile-specific Game INI Files** fica na janela **Configure Profiles**), editar o `Engine.ini` em **Tools → INI Editor** e executar o jogo. Esperado: o arquivo chega a `<prefixo>/AppData/Local/SB/Saved/Config/WindowsNoEditor/Engine.ini` durante a execução. Se não chegar, anotar (spec §4: os configs ficam de fora e viram limitação).
 
 ## 8. Saves
 
