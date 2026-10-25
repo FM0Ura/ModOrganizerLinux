@@ -49,4 +49,12 @@ Organizer monta a pasta virtual com os seus mods, executa o programa do Windows 
 **Sort** na lista de plugins roda o LOOT (libloot 0.29.5). Ele usa a pasta de dados do LOOT
 em Flatpak, se você tiver, ou `~/.local/share/LOOT`, e baixa a masterlist na primeira vez.
 
+## Instalar um plugin do Mod Organizer
+
+O AppImage é somente leitura, então os plugins do Mod Organizer (arquivos `.so`, plugins
+Python como um arquivo `.py` ou uma pasta com `__init__.py`) vão em
+`~/.local/share/ModOrganizer/plugins`. A opção *Open MO2 Plugins folder* do menu de pastas abre
+essa pasta. Reinicie o Mod Organizer para carregar um plugin novo. Um plugin ali com o mesmo
+nome de um que vem com o Mod Organizer o substitui.
+
 Próximo: [Atualização](updating.md).

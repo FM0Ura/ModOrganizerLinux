@@ -51,4 +51,12 @@ Organizer mounts the virtual folder with your mods, runs the Windows program thr
 Flatpak LOOT if you have it, otherwise `~/.local/share/LOOT`, and downloads the masterlist
 the first time.
 
+## Install a Mod Organizer plugin
+
+The AppImage is read-only, so Mod Organizer plugins (`.so` files, Python plugins as a
+`.py` file or a folder with an `__init__.py`) go in `~/.local/share/ModOrganizer/plugins`.
+The *Open MO2 Plugins folder* entry of the folder menu opens it. Restart Mod Organizer to load
+a new plugin. A plugin there with the same name as one shipped with Mod Organizer replaces
+it.
+
 Next: [Updating](updating.md).
