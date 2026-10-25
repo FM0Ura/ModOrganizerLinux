@@ -63,6 +63,12 @@ int run(int argc, char* argv[])
   // must be after logging
   TimeThis tt("main() multiprocess");
 
+#ifndef _WIN32
+  // restarting in the same process crashed in OzoneUtilQt::getQOpenGLContext at the
+  // second aboutToQuit of QtWebEngine (STATE.md, manual tests of 2026-10-24, item 1)
+  QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+#endif
+
   MOApplication app(argc, argv);
 
   // check if the command line wants to run something right now
