@@ -6,18 +6,21 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QRegularExpression>
 
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <cerrno>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -232,9 +235,65 @@ QString downloadPathFor(const QString& target)
       .arg(QCoreApplication::applicationPid());
 }
 
+int removeStaleDownloads(const QString& target)
+{
+  const QFileInfo fi(target);
+  const QString prefix = QString(".%1.update-").arg(fi.fileName());
+  const qint64 self    = QCoreApplication::applicationPid();
+
+  int removed = 0;
+  const QDir dir(fi.absolutePath());
+  for (const QString& name :
+       dir.entryList(QDir::Files | QDir::Hidden | QDir::System, QDir::Name)) {
+    if (!name.startsWith(prefix)) {
+      continue;
+    }
+
+    bool ok          = false;
+    const qint64 pid = name.mid(prefix.size()).toLongLong(&ok, 10);
+    if (!ok || pid <= 0 || pid == self) {
+      continue;
+    }
+
+    // a process that still runs (or that this user can't signal) may be downloading
+    if (pid <= std::numeric_limits<pid_t>::max() &&
+        (::kill(static_cast<pid_t>(pid), 0) == 0 || errno != ESRCH)) {
+      continue;
+    }
+
+    if (QFile::remove(dir.filePath(name))) {
+      log::debug("update: removed the leftover download {}", dir.filePath(name));
+      ++removed;
+    }
+  }
+
+  return removed;
+}
+
+QStringList restartArguments(const QStringList& args, const QString& instance)
+{
+  QStringList result;
+  for (const QString& a : args) {
+    if (a == "--logs" || a == "--multiple") {
+      result.append(a);
+    }
+  }
+
+  if (!instance.isEmpty()) {
+    result.append({"-i", instance});
+  }
+
+  return result;
+}
+
 void scheduleReexec(const QString& appImage, const QStringList& args)
 {
   g_pending = PendingReexec{appImage, args};
+}
+
+void cancelReexec()
+{
+  g_pending.reset();
 }
 
 bool runPendingReexec()

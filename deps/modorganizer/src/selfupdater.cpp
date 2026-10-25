@@ -61,6 +61,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #ifdef _WIN32
 #include <Windows.h>  //for VS_FIXEDFILEINFO, GetLastError
 #else
+#include "instancemanager.h"
 #include "linux/appimage_linux.h"
 #include "linux/selfupdate_linux.h"
 #endif
@@ -106,6 +107,10 @@ void SelfUpdater::testForUpdate(const Settings& settings)
   if (m_UpdateMode == selfupdate::UpdateMode::None) {
     log::debug("not checking for updates, not running from an AppImage");
     return;
+  }
+  // what crashed runs left behind (hidden, the size of an AppImage)
+  if (m_UpdateMode == selfupdate::UpdateMode::Install) {
+    selfupdate::removeStaleDownloads(appimage::info().appImage);
   }
 #endif
   if (settings.network().offlineMode()) {
@@ -518,14 +523,25 @@ void SelfUpdater::installUpdate()
   }
 
   // main() executes the new AppImage once this one has exited normally (with the
-  // virtual file system unmounted)
+  // virtual file system unmounted), in the instance that is open now; the links and
+  // commands of the first start are not handled again
   QStringList args = QCoreApplication::arguments();
   if (!args.isEmpty()) {
     args.removeFirst();
   }
-  selfupdate::scheduleReexec(target, args);
+  QString instance;
+  if (const auto i = InstanceManager::singleton().currentInstance(); i && !i->isPortable()) {
+    instance = i->displayName();
+  }
+  selfupdate::scheduleReexec(target, selfupdate::restartArguments(args, instance));
   log::info("update: installed, restarting");
-  QCoreApplication::quit();
+
+  // the exit can be refused (downloads or programs still running, MainWindow::canExit()):
+  // then the new version only starts the next time, and a later exit must not restart
+  if (!ExitModOrganizer()) {
+    selfupdate::cancelReexec();
+    log::info("update: the exit was cancelled, the new version starts the next time");
+  }
 #else
   const QString parameters = "/DIR=\"" + qApp->applicationDirPath() + "\" ";
   const auto r             = shell::Execute(m_UpdateFile.fileName(), parameters);

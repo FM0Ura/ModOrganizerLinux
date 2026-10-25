@@ -80,6 +80,22 @@ QString downloadPathFor(const QString& target);
 // run(): the virtual file system is unmounted and the application is gone)
 void scheduleReexec(const QString& appImage, const QStringList& args);
 
+// forgets what scheduleReexec() remembered: the exit was refused (MainWindow::canExit())
+void cancelReexec();
+
+// the arguments for the new version, from the arguments of this process (`args`,
+// without the program): only the options that change nothing (--logs, --multiple),
+// then `-i <instance>` for the instance that is open now, when it is not portable
+// (`instance` empty). The rest is dropped: -i/-p of the first start (Change Game may
+// have opened another instance since), an nxm:// or moshortcut:// link and a command,
+// which were handled already
+QStringList restartArguments(const QStringList& args, const QString& instance);
+
+// removes the downloads that other runs of Mod Organizer left next to `target` when
+// they crashed (downloadPathFor(), with the pid of a process that is not running);
+// returns how many were removed
+int removeStaleDownloads(const QString& target);
+
 // executes what scheduleReexec() remembered, with execv() (no shell), argv[0] being
 // the path, and the current environment (that of the host, appimage_linux.h). Returns
 // false at once when nothing was scheduled; otherwise it only returns if execv() failed,

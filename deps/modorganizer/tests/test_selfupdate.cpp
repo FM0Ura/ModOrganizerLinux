@@ -319,3 +319,82 @@ TEST(UpdateMode, OnlyNotifiesInAReadOnlyFolder)
 
   fs::permissions(apps, fs::perms(0755));
 }
+
+TEST(Reexec, CancelledRestartIsNotExecuted)
+{
+  TempDir dir;
+  const auto script = dir.path() / "New Organizer.AppImage";
+  writeFile(script, "#!/bin/sh\nexit 0\n");
+  fs::permissions(script, fs::perms(0755));
+
+  // a refused exit (canExit()) must not leave the restart for a later exit
+  selfupdate::scheduleReexec(q(script), {});
+  selfupdate::cancelReexec();
+  EXPECT_FALSE(selfupdate::runPendingReexec());
+}
+
+TEST(RestartArguments, KeepsTheInstanceAndTheHarmlessOptions)
+{
+  EXPECT_EQ(selfupdate::restartArguments({"--logs", "-i", "smoke"}, "smoke"),
+            QStringList({"--logs", "-i", "smoke"}));
+  EXPECT_EQ(selfupdate::restartArguments({"--multiple", "--logs"}, "Skyrim SE"),
+            QStringList({"--multiple", "--logs", "-i", "Skyrim SE"}));
+}
+
+TEST(RestartArguments, OpensTheRunningInstanceNotTheFirstOne)
+{
+  // started with -i Old, then Change Game to New: New is opened again
+  EXPECT_EQ(selfupdate::restartArguments({"-i", "Old", "-p", "Default"}, "New"),
+            QStringList({"-i", "New"}));
+  EXPECT_EQ(selfupdate::restartArguments({"--instance=Old", "--profile", "P"}, "New"),
+            QStringList({"-i", "New"}));
+  EXPECT_EQ(selfupdate::restartArguments({"-iOld", "-pP"}, "New"),
+            QStringList({"-i", "New"}));
+}
+
+TEST(RestartArguments, DropsLinksAndCommands)
+{
+  // the link or the command of the first start is not handled a second time
+  EXPECT_EQ(selfupdate::restartArguments(
+                {"--logs", "nxm://skyrimspecialedition/mods/1/files/2?key=k&expires=1"},
+                "smoke"),
+            QStringList({"--logs", "-i", "smoke"}));
+  EXPECT_EQ(selfupdate::restartArguments({"moshortcut://smoke:SKSE"}, "smoke"),
+            QStringList({"-i", "smoke"}));
+  EXPECT_EQ(selfupdate::restartArguments({"run", "-e", "SKSE", "--pick"}, "smoke"),
+            QStringList({"-i", "smoke"}));
+}
+
+TEST(RestartArguments, PortableInstanceHasNoInstanceOption)
+{
+  // an empty name (portable, or none): Mod Organizer finds it again by itself
+  EXPECT_EQ(selfupdate::restartArguments({"--logs", "-i", "Old"}, ""),
+            QStringList({"--logs"}));
+}
+
+TEST(StaleDownloads, RemovesTheLeftoversOfOtherProcesses)
+{
+  TempDir dir;
+  const auto target = dir.path() / "Mod Organizer.AppImage";
+  writeFile(target, "current");
+
+  const auto mine = fs::path(selfupdate::downloadPathFor(q(target)).toStdString());
+  // a pid that can't be running (above the kernel's maximum, 2^22)
+  const auto dead    = dir.path() / ".Mod Organizer.AppImage.update-99999999";
+  const auto running = dir.path() / ".Mod Organizer.AppImage.update-1";
+  const auto other   = dir.path() / ".Other.AppImage.update-99999999";
+  const auto notPid  = dir.path() / ".Mod Organizer.AppImage.update-abc";
+  for (const auto& p : {mine, dead, running, other, notPid}) {
+    writeFile(p, "partial");
+  }
+
+  EXPECT_EQ(selfupdate::removeStaleDownloads(q(target)), 1);
+
+  EXPECT_FALSE(fs::exists(dead));
+  // this process's, a running one's (pid 1), another file's and a non-pid name stay
+  EXPECT_TRUE(fs::exists(mine));
+  EXPECT_TRUE(fs::exists(running));
+  EXPECT_TRUE(fs::exists(other));
+  EXPECT_TRUE(fs::exists(notPid));
+  EXPECT_EQ(readFile(target), "current");
+}
