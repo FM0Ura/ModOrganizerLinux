@@ -49,10 +49,13 @@ jobs:
 
       # headless end-to-end test of the update of the AppImage (tests/selfupdate-e2e):
       # runs the install tree of this job, which is built without MO2_VERSION (2.5.2),
-      # older than the fake v2.5.2.2 it is offered; the release workflow builds 2.5.2.N
+      # older than the fake v2.5.2.2 it is offered; the release workflow builds 2.5.2.N.
+      # As the runner's user, not root: root may write to the 0555 folder of the
+      # read-only case, which the script then skips
       - name: Test the self-update
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/work" -w /work/ModOrganizerLinux \
             mo2-linux-build tests/selfupdate-e2e/run.sh
 
       - name: Upload install tree
