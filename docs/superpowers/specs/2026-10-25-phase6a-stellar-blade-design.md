@@ -42,8 +42,8 @@ Meta: com o Stellar Blade da Steam do usuário (Bazzite), criar uma instância n
 | Lançador | `SB.exe` (raiz) |
 | Executável real | `SB/Binaries/Win64/SB-Win64-Shipping.exe` |
 | Paks do jogo | `SB/Content/Paks` |
-| Documentos (provável pasta de saves) | `<prefixo>/drive_c/users/steamuser/Documents/StellarBlade` |
-| Configs | `<prefixo>/drive_c/users/steamuser/AppData/Local/SB` (deve ser `Saved/Config/Windows/*.ini`, a confirmar) |
+| Saves | `<prefixo>/drive_c/users/steamuser/AppData/Local/SB/Saved/SaveGames/<steamid64>/*.sav` (verificado; `Documents/StellarBlade/<steamid64>` só tem o `steam_autocloud.vdf`) |
+| Configs | `<prefixo>/drive_c/users/steamuser/AppData/Local/SB/Saved/Config/WindowsNoEditor/` (`Engine.ini`, `Game.ini`, `Input.ini`, `Compat.ini`, … — verificado) |
 | Domínio Nexus | `stellarblade` |
 
 ## 3. Destinos de mods e arrumação na instalação
@@ -70,7 +70,16 @@ Decisões do Claude, aceitas pelo usuário; os detalhes de casamento de nomes fi
 5. **Lixo** (`*.txt` de readme, `*.md`, imagens de capa, `manifest.json`): descartado, como no Silent Hill 2 Remake — mas **não** `enabled.txt` nem `.txt` dentro de pastas de mod do UE4SS.
 6. Nada reconhecível: `INVALID` (o MO2 abre a instalação manual como hoje).
 
-### 3.2 A verificar pelo construtor no UE4SS real
+### 3.2 UE4SS real (verificado em 2026-10-25 pela prévia de conteúdo pública da Nexus)
+
+- O UE4SS usado pela Collection de referência é o **"Stellar Blade UE4SS"** ([mod 2952](https://www.nexusmods.com/stellarblade/mods/2952), arquivo "SB UE4SS 1.3"). Layout: `SB/Binaries/Win64/dwmapi.dll` + `SB/Binaries/Win64/ue4ss/` (com `Mods/<mod>/Scripts/main.lua`, `Mods/mods.txt`, `Mods/mods.json`, `Mods/shared/`). Logo, pasta de mods do UE4SS = `SB/Binaries/Win64/ue4ss/Mods`; DLL proxy = `dwmapi.dll`.
+- Layouts reais de mods: CNS (mod 1496) já vem com `SB/...` completo, misturando `ue4ss/Mods/DekCNS/` (com `enabled.txt`), `ue4ss/UE4SS-settings.ini`, `Paks/LogicMods/*.pak` e `Paks/~mods/CustomNanosuitSystem/*.json`; Better Jiggle (mod 1570) vem com `ue4ss/Mods/JiggleUpdate/` + `ue4ss/Mods/mods.txt` + `ue4ss/UE4SS-settings.ini` na raiz; Catwalk (mod 2717) vem com `~Mods/` na raiz (com `.pak` e `.json`); o Chunk ID Patcher (mod 861) é só um `.exe` na raiz.
+- **Problema achado:** vários mods trazem o próprio `ue4ss/Mods/mods.txt`; o de prioridade maior substituiria a lista do UE4SS e poderia desligar o `BPModLoaderMod` (sem ele, nenhum mod de `LogicMods` carrega) — anti-meta §1.3. **Decisão do Claude** (no espaço que esta seção deixava ao construtor), no padrão do Oblivion Remaster: o plugin **gera** `mods.txt` e `mods.json` no perfil, a cada execução, e os mapeia para `SB/Binaries/Win64/ue4ss/Mods/`; os `mods.txt`/`mods.json` dos mods ficam sem efeito. A lista gerada: os mods padrão do UE4SS com os valores padrão, mais `<pasta> : 1` para cada outra pasta de `ue4ss/Mods/` presente nos mods ativos (exceto `shared`). Sem aba de edição nesta fase (não-meta §1.2).
+- `WINEDLLOVERRIDES=dwmapi=n,b`: o `basic_games` não tem como declarar o ambiente do executável, então segue o precedente da 4d.2 (README e checklist).
+- `UE4SS-settings.ini` trazido por vários mods (CNS, Jiggle) fica com a prioridade do MO2 decidindo, com o conflito visível no painel.
+- `.exe` solto (Chunk ID Patcher): `INVALID` pela regra 6; o usuário decide (é uma ferramenta, não um mod).
+
+### 3.2.1 (original) A verificar pelo construtor no UE4SS real
 
 - Qual build do UE4SS a comunidade usa hoje no Stellar Blade (Nexus [mod 378](https://www.nexusmods.com/stellarblade/mods/378) e o fork mencionado lá) e o layout que ele espera: `Win64/ue4ss/Mods` (UE4SS ≥ 3.0) ou `Win64/Mods` (antigo). A regra 3 segue esse layout.
 - Qual DLL proxy ele usa (`dwmapi.dll`, `xinput1_3.dll`, …). No Linux, DLL proxy só carrega com `WINEDLLOVERRIDES=<dll>=n,b` (precedente da 4d.2: CET/RED4ext, FAR). **Decisão do Claude:** se o `basic_games` permitir declarar o ambiente do executável, o plugin já o declara; senão, segue o precedente — README e checklist explicam a linha em **Modify Executables → Proton → Environment**.
@@ -82,8 +91,8 @@ A 6a é planejada sozinha: o verificador segue as regras acima, não as pastas p
 
 ## 4. Saves e configs
 
-- **Saves:** `GameSavesDirectory` em `%DOCUMENTS%/StellarBlade/...` (a pasta exata dos saves fica com o construtor, a partir do prefixo real). Saves locais por perfil se o `basic_games` já suportar para o jogo (`BasicLocalSavegames`).
-- **Configs por perfil:** os `.ini` de `AppData/Local/SB/Saved/Config/Windows` como arquivos do perfil, mapeados para o prefixo. A 4d.2 já mapeia arquivo de perfil para o prefixo (o `modsettings.lsx` do BG3) e o VFS já grava na pasta real quando a raiz só tem mappings de arquivo (Fase 3), então deve funcionar. **Se não funcionar no teste, os configs ficam de fora nesta fase** (decisão do usuário) — registrado como limitação.
+- **Saves:** `GameSavesDirectory` = `%USERPROFILE%/AppData/Local/SB/Saved/SaveGames`, extensão `sav` (a aba de saves os lista). **Decisão do Claude:** sem saves locais por perfil nesta fase — os saves ficam numa subpasta por SteamID e sincronizam pela Steam Cloud (`steam_autocloud.vdf`), e trocar a pasta por perfil arrisca brigar com a nuvem.
+- **Configs por perfil:** os `.ini` de `AppData/Local/SB/Saved/Config/WindowsNoEditor` (`Engine.ini`, `Game.ini`, `Input.ini`, `GameUserSettings.ini`) como arquivos do perfil, mapeados para o prefixo. A 4d.2 já mapeia arquivo de perfil para o prefixo (o `modsettings.lsx` do BG3) e o VFS já grava na pasta real quando a raiz só tem mappings de arquivo (Fase 3), então deve funcionar. **Se não funcionar no teste, os configs ficam de fora nesta fase** (decisão do usuário) — registrado como limitação.
 
 ## 5. Onde fica o código
 
