@@ -242,6 +242,17 @@ def test_wrapper_folder_is_unwrapped():
     }
 
 
+def test_wrapper_with_same_named_child_keeps_files():
+    assert _fixed([("MyMod", [("MyMod", [("Scripts", ["main.lua"]), "enabled.txt"])])]) == {
+        "SB/Binaries/Win64/ue4ss/Mods/MyMod/Scripts/main.lua",
+        "SB/Binaries/Win64/ue4ss/Mods/MyMod/enabled.txt",
+    }
+    assert _fixed([("Foo", [("Foo", ["a.pak", "b.pak"])])]) == {
+        "SB/Content/Paks/~mods/a.pak",
+        "SB/Content/Paks/~mods/b.pak",
+    }
+
+
 def test_mixed_loose_pak_and_ue4ss():
     assert _fixed(
         ["a.pak", ("ue4ss", [("Mods", [("M", [("Scripts", ["main.lua"])])])])]
