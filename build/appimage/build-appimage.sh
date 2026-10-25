@@ -388,7 +388,7 @@ sort -u "$WORK/owners.txt" | while IFS= read -r pkg; do
 done
 
 # --- checks -----------------------------------------------------------------------
-MAX_GLIBC="$(ldd --version | head -n 1 | grep -oE '[0-9]+\.[0-9]+$')"
+MAX_GLIBC="$(ldd --version | sed -n '1p' | grep -oE '[0-9]+\.[0-9]+$')"
 log "check-appdir (glibc $MAX_GLIBC)"
 "$ROOT/scripts/check-appdir.sh" "$APPDIR" "$MAX_GLIBC"
 
