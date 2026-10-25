@@ -28,7 +28,9 @@ missingHostTools(const std::function<QString(const QString&)>& findExecutable);
 
 // the tools searched in the PATH of the host: Mod Organizer's own PATH, or, in a
 // container (vfsbridge::mode() is Host), the PATH of the host, through
-// distrobox-host-exec
+// distrobox-host-exec. Empty when the program is not found. When the host can't be
+// asked (Host mode and no distrobox-host-exec), `name` itself: the check fails open,
+// the tool counts as present and the launch reports what really fails
 QString findOnHost(const QString& name);
 
 // the message for the user: which tools are missing, what they are for, and where the
