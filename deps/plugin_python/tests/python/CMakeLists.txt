@@ -23,6 +23,7 @@ target_sources(python-tests
 		test_qt_widgets.py
 		test_qt.py
 		test_shared_cpp_owner.py
+		test_winreg.py
 )
 
 if (WIN32)
@@ -55,7 +56,7 @@ else()
 		PROPERTIES
 		DEPENDS python-tests
 		ENVIRONMENT_MODIFICATION
-		"PYTHONPATH=set:$<TARGET_FILE_DIR:mobase>:${PYLIB_DIR};\
+		"PYTHONPATH=set:$<TARGET_FILE_DIR:mobase>:${PYLIB_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../../src/libs;\
 UIBASE_PATH=set:${UIBASE_PATH}"
 	)
 endif()

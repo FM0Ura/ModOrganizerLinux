@@ -57,6 +57,10 @@ else()
 	# installed as a target, not as a file, so that its INSTALL_RPATH is applied
 	install(TARGETS runner LIBRARY DESTINATION ${PLUGIN_PYTHON_DIR}/dlls)
 
+	# an empty registry for the plugins written for Windows that import winreg
+	install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../libs/winreg.py
+		DESTINATION ${PLUGIN_PYTHON_DIR}/libs)
+
 	# the soname of the system's libpython, which the proxy opens by name: the libpython
 	# file of the library is a link that only exists with the development package
 	list(GET Python_LIBRARIES 0 _python_library)

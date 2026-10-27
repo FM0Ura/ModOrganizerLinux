@@ -93,6 +93,11 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   `gamePath` and `compatData`, or `None` when the app is not installed); `basic_games` is
   the user. It sits in `src/mobase/wrappers/utils.cpp`, with its pytest in
   `tests/python/test_steam.py` (`deps/plugin_python: Linux: mobase.utils.steamApp`).
+  On Linux only, `src/libs/winreg.py` is installed in `plugin_python/libs`: an always
+  empty registry (opening or querying a key raises `FileNotFoundError`, writing raises
+  `PermissionError`), so that plugins written for Windows that import `winreg` at the
+  top of a module (e.g., RootBuilder) load; its pytest is `tests/python/test_winreg.py`
+  (`deps/plugin_python: Linux: an empty winreg`).
 - **`fnistool`**, **`installer_wizard`**, **`script_extender_plugin_checker`** and
   **`tool_configurator`** (Python plugins) carry Linux fixes that are not upstream, each
   in `if sys.platform == "win32": ... else: ...`: `fnistool` passes `RedirectFiles` as a
