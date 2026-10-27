@@ -28,6 +28,11 @@ TEST(PluginPaths, UserFolderComesFirst)
   EXPECT_NE(paths[0], paths[1]);
 }
 
+TEST(PluginPaths, UserDataIsInTheUserFolder)
+{
+  EXPECT_EQ(userPluginDataPath(), userPluginsPath() + "/data");
+}
+
 TEST(PluginPaths, MergeKeepsTheEntriesOfEveryFolder)
 {
   const auto merged = mergePluginEntries(

@@ -18,6 +18,10 @@ QString builtInPluginsPath();
 // global instances (an instance is a folder with a ModOrganizer.ini, this one has none)
 QString userPluginsPath();
 
+// <user's folder>/data: the data folder of the plugins on Linux (pluginDataPath()),
+// writable, beside the user's plugins, where the plugins of Windows keep theirs
+QString userPluginDataPath();
+
 // the user's folder first, then the shipped one
 QStringList pluginsPaths();
 
