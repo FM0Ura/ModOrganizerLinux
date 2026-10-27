@@ -1,7 +1,7 @@
 # Página da Nexus no painel lateral — Design
 
 - **Data:** 2026-10-27
-- **Status:** aguardando aprovação do usuário
+- **Status:** aprovado pelo usuário (2026-10-27)
 - **Branch (decisão do Claude):** `worktree-nexus-page-panel`, a partir de `main` (44ca78a).
 - **Depende de:** Fase 4a (Nexus, login/API key no keyring).
 
