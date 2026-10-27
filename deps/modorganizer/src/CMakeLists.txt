@@ -539,6 +539,7 @@ mo2_add_filter(NAME src/modinfo/dialog GROUPS
 	modinfodialogimages
 	modinfodialognexus
 	nexusimagecache
+	nexuspagepanel
 	modinfodialogtab
 	modinfodialogtextfiles
 )
