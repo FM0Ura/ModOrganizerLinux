@@ -28,6 +28,11 @@ std::optional<GameFileIcon> gameFileIcon(QStringView extension);
 // type and then its generic one; empty if the type is unknown
 QStringList mimeIconNames(QStringView extension);
 
+// resource of the generic kind (image, text, archive) of the MIME type of `extension`
+// (no dot), used when the icon theme has none of its icons; empty if the type is
+// unknown or of another kind
+QString mimeFallbackResource(QStringView extension);
+
 }  // namespace fileicons
 
 #endif  // MODORGANIZER_FILEICONS_H
