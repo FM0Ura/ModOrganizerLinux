@@ -387,11 +387,17 @@ class IniEdit(mobase.IPluginTool):
     def init(self, organizer):
         self.__organizer = organizer
         self.__window = None
+        dataPath = organizer.pluginDataPath()
+        if sys.platform != "win32" and not os.path.exists(dataPath + "/settings.json"):
+            # Linux: the data folder of the plugins is the user's, the files shipped
+            # with this plugin stay in <bin>/plugins/data, beside pyCfgDialog
+            import pyCfgDialog
+            dataPath = os.path.dirname(os.path.abspath(pyCfgDialog.__file__))
         try:
-            f = open(organizer.pluginDataPath() + "/settings.json", "r")
+            f = open(dataPath + "/settings.json", "r")
         except IOError:
             return False
-        QtCore.QDir.addSearchPath("pyCfg", self.__organizer.pluginDataPath() + "/res/")
+        QtCore.QDir.addSearchPath("pyCfg", dataPath + "/res/")
         self.__settings = json.loads(f.read())
         f.close()
         return True

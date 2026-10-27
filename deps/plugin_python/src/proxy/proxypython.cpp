@@ -211,10 +211,13 @@ bool ProxyPython::init(IOrganizer* moInfo)
 #else
         // Linux: the proxy is plugins/plugin_python.so, next to the plugin_python
         // folder; the standard library is the system's (the runner filters sys.path),
-        // the paths are the bytes of the file system (UTF-8)
+        // the paths are the bytes of the file system (UTF-8); the data folder of the
+        // plugins is the user's, then the one shipped with Mod Organizer (modules such
+        // as DDS of preview_dds stay there)
         const std::vector<fs::path> paths{
             pluginFolder / "plugin_python" / "libs",
-            fs::path{QFile::encodeName(IOrganizer::getPluginDataPath()).toStdString()}};
+            fs::path{QFile::encodeName(IOrganizer::getPluginDataPath()).toStdString()},
+            pluginFolder / "data"};
 #endif
 #ifdef _WIN32
         m_Runner->initialize(paths);
