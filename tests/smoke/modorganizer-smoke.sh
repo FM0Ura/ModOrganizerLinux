@@ -14,7 +14,11 @@
 #    create-instance dialog) and then waits in that dialog until the timeout
 #    (MO2_SMOKE_TIMEOUT seconds, 20 by default) stops it with SIGTERM. A crash, an
 #    abort or a missing Qt platform plugin fails the test; a clean exit is accepted.
-#    This is done twice in a row, see the end of the script.
+#    This is done twice in a row, see the end of the script. A probe plugin in the
+#    user's plugin folder checks that it gets the compatibility of the plugins of
+#    Windows (mo2_windows_compat): it finds probe/Bin/Vanilla.DLL as
+#    probe/bin/vanilla.dll and writes True in $HOME/probe.txt, then the registered
+#    plugins of Windows, none of which may be a shipped plugin (bin/plugins);
 # 3. with a ready instance (the fake Skyrim SE and the instance of
 #    tests/fixtures/vfs-e2e, set up in a temporary directory that also holds HOME,
 #    XDG_* and TMPDIR), `ModOrganizer -i smoke` gets up to the main window: the
@@ -78,12 +82,28 @@ printf '%s\n' "$out"
 
 # start <n>: one headless start with a fresh HOME, stopped by the timeout
 start() {
-    local home rc=0 out
+    local home rc=0 out probe
     echo "--- ModOrganizer, start $1 (fresh HOME, no instance, ${TIMEOUT}s)"
     home="$(mktemp -d)"
     # a private runtime directory too: neither it nor the state directory of mo2-vfs
     # (read by its --cleanup at startup) may be the user's
     mkdir -m 700 "$home/runtime"
+    mkdir -p "$home/.local/share/ModOrganizer/plugins/compat_probe" "$home/probe/Bin"
+    : >"$home/probe/Bin/Vanilla.DLL"
+    cat >"$home/.local/share/ModOrganizer/plugins/compat_probe/__init__.py" <<'PROBE'
+import os
+
+with open(os.path.join(os.environ["HOME"], "probe.txt"), "w") as f:
+    f.write(str(os.path.exists(os.path.join(os.environ["HOME"], "probe/bin/vanilla.dll"))))
+    import mo2_windows_compat
+
+    for root in mo2_windows_compat._roots:
+        f.write("\n" + root)
+
+
+def createPlugins():
+    return []
+PROBE
     # logins are in the Secret Service: a bus that does not exist keeps the test away
     # from the keyring of the user (the box reaches the session bus of the host)
     out="$(env HOME="$home" \
@@ -93,6 +113,7 @@ start() {
         DBUS_SESSION_BUS_ADDRESS="unix:path=$home/no-bus" \
         MO2_VFS_BRIDGE=direct QT_QPA_PLATFORM=offscreen \
         timeout -k 10 "$TIMEOUT" "$APP" --logs 2>&1)" || rc=$?
+    probe="$(cat "$home/probe.txt" 2>/dev/null || true)"
     rm -rf "$home"
     printf '%s\n' "$out"
 
@@ -105,6 +126,10 @@ start() {
     [[ $out == *"looking for plugins in "* ]] || fail "the plugins were not loaded"
     [[ $out == *"timing: PluginContainer::loadPlugins()"* ]] ||
         fail "the instance selection was not reached"
+    [[ ${probe%%$'\n'*} == True ]] ||
+        fail "the compatibility layer was not applied (probe: '$probe')"
+    [[ $probe != *"/bin/plugins/"* ]] ||
+        fail "a shipped plugin was registered as a plugin of Windows (probe: '$probe')"
     echo "start $1 passed (exit $rc)"
 }
 

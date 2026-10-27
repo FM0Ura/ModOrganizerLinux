@@ -30,6 +30,8 @@ along with python proxy plugin.  If not, see <http://www.gnu.org/licenses/>.
 #include <QCoreApplication>
 #include <QDirIterator>
 #include <QFile>
+#include <QDir>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QWidget>
 #include <QtPlugin>
@@ -317,6 +319,17 @@ QList<QObject*> ProxyPython::load(const QString& identifier)
     if (!m_Runner) {
         return {};
     }
+#ifndef _WIN32
+    // Linux: a plugin that is not shipped with Mod Organizer (the user's folder) gets
+    // the compatibility of the plugins of Windows; canonical paths, the folders may
+    // be reached through a link (/home and /var/home)
+    const QString shipped =
+        QDir(QFile::decodeName(QByteArray::fromStdString(getPluginFolder().string())))
+            .canonicalPath();
+    if (!QFileInfo(identifier).canonicalFilePath().startsWith(shipped + "/")) {
+        m_Runner->addWindowsPluginRoot(identifier);
+    }
+#endif
     return m_Runner->load(identifier);
 }
 

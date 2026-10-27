@@ -64,9 +64,10 @@ add_dependencies(runner-tests mobase)
 if (WIN32)
 	set(PYTHONPATH "${PYLIB_DIR}\\;$<TARGET_FILE_DIR:mobase>\\;${Python_DLL_DIR}\\;${Python_LIB_DIR}")
 else()
-	# Linux: PyQt6 is the system's (spec of Phase 4d.1, section 1.2), the tests only
-	# give mobase to the runner (TestPythonPaths.h)
-	set(PYTHONPATH "$<TARGET_FILE_DIR:mobase>")
+	# Linux: PyQt6 is the system's (spec of Phase 4d.1, section 1.2), the tests give
+	# mobase and the modules of plugin_python/libs (mo2_windows_compat, installed by
+	# the runner) to the runner (TestPythonPaths.h)
+	set(PYTHONPATH "$<TARGET_FILE_DIR:mobase>:${CMAKE_CURRENT_SOURCE_DIR}/../../src/libs")
 endif()
 
 set_tests_properties(${runner-tests_gtests}
