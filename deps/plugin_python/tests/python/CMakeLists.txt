@@ -23,6 +23,7 @@ target_sources(python-tests
 		test_qt_widgets.py
 		test_qt.py
 		test_shared_cpp_owner.py
+		test_windows_compat.py
 		test_winreg.py
 )
 
