@@ -137,6 +137,28 @@ void NexusPagePanel::clear()
   }
 }
 
+void NexusPagePanel::rebindMod(ModInfo::Ptr mod)
+{
+  if (!mod || !m_Mod || mod == m_Mod) {
+    return;
+  }
+
+  disconnectMod();
+  m_Mod = mod;
+
+  m_ModConnections.append(connect(mod.get(), &ModInfo::modDetailsUpdated, this,
+                                  &NexusPagePanel::onModDetailsUpdated));
+  m_ModConnections.append(connect(mod.get(), &ModInfo::nexusRequestFailed, this,
+                                  &NexusPagePanel::onRequestFailed));
+
+  if (m_LoadingFromNexus) {
+    // the reply would go to the old object: ask again, keeping the running timeout
+    mod->requestNexusInfo(nexuspage::panelRequestTag());
+  }
+
+  emit modChanged(mod);
+}
+
 void NexusPagePanel::setMod(ModInfo::Ptr mod)
 {
   if (!mod) {

@@ -3878,7 +3878,7 @@ void MainWindow::syncNexusPage()
     m_OrganizerCore.modList()->setNexusPageMod(index);
   } else {
     // a full refresh recreates the ModInfo objects, follow the mod by its name
-    m_NexusPagePanel->setMod(current);
+    m_NexusPagePanel->rebindMod(current);
   }
 }
 

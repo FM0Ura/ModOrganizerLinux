@@ -22,6 +22,11 @@ public:
 
   void setMod(ModInfo::Ptr mod);
   void clear();
+
+  // follows the same mod after its ModInfo object was recreated (full refresh of
+  // the mod list): swaps the object and its connections without reloading the page
+  // or starting a request; a request in flight is re-issued on the new object
+  void rebindMod(ModInfo::Ptr mod);
   ModInfo::Ptr mod() const { return m_Mod; }
 
 signals:
