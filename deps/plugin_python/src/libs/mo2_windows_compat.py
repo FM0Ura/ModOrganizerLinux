@@ -8,8 +8,9 @@ proxy): a plugin of the user's folder.
 
 - os.O_BINARY and the other open flags of Windows exist, with the value 0 (for the
   whole process: an attribute cannot be scoped, and 0 changes no open);
-- for the calls made by a registered plugin (a frame of the stack is in one of the
-  roots), the shipped plugins and Mod Organizer keep the behavior of Linux:
+- for the calls made by a registered plugin (the innermost frame outside of the
+  standard library is in one of the roots), the shipped plugins and Mod Organizer keep
+  the behavior of Linux, even when a plugin of Windows calls them back:
   - a path is looked up ignoring case, as Wine does: a component that does not exist
     is replaced by the only item of its folder with the same name ignoring case (none
     or several: the path is left as it was); reading or removing tries again with the
@@ -17,8 +18,9 @@ proxy): a plugin of the user's folder.
     written in the existing folder, whatever the case of its name;
   - backslashes are separators;
   - os.chmod() with a mode that would make the file unreadable by its owner (e.g.,
-    stat.S_IWRITE alone) has the meaning of Windows: with S_IWRITE, the file is made
-    writable, without it, read-only; the other bits are kept.
+    stat.S_IWRITE alone) or made only of stat.S_IREAD and stat.S_IWRITE has the meaning
+    of Windows: with S_IWRITE, the file is made writable, without it, read-only; the
+    other bits are kept.
 """
 
 import builtins
@@ -27,6 +29,7 @@ import io
 import os
 import stat
 import sys
+import sysconfig
 
 _FLAGS = (
     "O_BINARY",
@@ -48,6 +51,15 @@ _READ = {
     "listdir": (0,),
     "scandir": (0,),
     "utime": (0,),
+    "truncate": (0,),
+    "readlink": (0,),
+    "chown": (0,),
+    "lchown": (0,),
+    # shutil.copy2() copies the extended attributes (SELinux labels) to its target
+    "listxattr": (0,),
+    "getxattr": (0,),
+    "setxattr": (0,),
+    "removexattr": (0,),
 }
 
 # functions creating something: the positions of all their paths, all resolved first
@@ -71,6 +83,15 @@ _callers = {}
 _installed = False
 _THIS_FILE = os.path.abspath(__file__)
 
+# the frames of these folders (the standard library) are skipped: the plugin that
+# called shutil or pathlib is the caller
+_STDLIB = tuple(
+    {
+        os.path.normpath(sysconfig.get_paths()[name]) + os.sep
+        for name in ("stdlib", "platstdlib")
+    }
+)
+
 
 def add_root(path):
     """Registers a plugin of Windows: its folder, or its file for a single-file plugin."""
@@ -91,14 +112,20 @@ def _in_roots(filename):
 
 
 def from_windows_plugin():
-    """True if a frame of the stack is in a plugin of Windows."""
+    """True if the caller is a plugin of Windows: the innermost frame that is neither in
+    this module nor in the standard library is in one of the roots (code of Mod Organizer
+    or of a shipped plugin called back from a plugin of Windows is not)."""
     if not _roots:
         return False
     frame = sys._getframe(1)
     while frame is not None:
         filename = frame.f_code.co_filename
-        if filename != _THIS_FILE and _in_roots(filename):
-            return True
+        if not (
+            filename == _THIS_FILE
+            or filename.startswith(_STDLIB)
+            or filename.startswith("<frozen ")
+        ):
+            return _in_roots(filename)
         frame = frame.f_back
     return False
 
@@ -189,8 +216,10 @@ def _read_wrapper(original, positions):
         try:
             return original(*args, **kwargs)
         except (FileNotFoundError, NotADirectoryError):
+            if not from_windows_plugin():
+                raise
             new = _resolved(args, positions)
-            if new is None or not from_windows_plugin():
+            if new is None:
                 raise
             return original(*new, **kwargs)
 
@@ -219,7 +248,7 @@ def _chmod_wrapper(original):
     def chmod(path, mode, *args, **kwargs):
         if (
             isinstance(mode, int)
-            and not mode & stat.S_IRUSR
+            and (not mode & stat.S_IRUSR or not mode & ~(stat.S_IREAD | stat.S_IWRITE))
             and kwargs.get("dir_fd") is None
             and from_windows_plugin()
         ):
@@ -237,6 +266,21 @@ def _chmod_wrapper(original):
         return read(path, mode, *args, **kwargs)
 
     return chmod
+
+
+def _access_wrapper(original):
+    # os.access() returns False for a missing path instead of raising
+    def access(path, mode, *args, **kwargs):
+        if kwargs.get("dir_fd") is None:
+            (path,) = _backslashes((path,), (0,))
+        if original(path, mode, *args, **kwargs):
+            return True
+        if kwargs.get("dir_fd") is not None or not from_windows_plugin():
+            return False
+        new = _resolved((path,), (0,))
+        return new is not None and original(new[0], mode, *args, **kwargs)
+
+    return access
 
 
 def _creates(mode):
@@ -300,10 +344,12 @@ def install():
             setattr(os, flag, 0)
 
     for name, positions in _READ.items():
-        _replace_os(name, _read_wrapper(getattr(os, name), positions))
+        if hasattr(os, name):
+            _replace_os(name, _read_wrapper(getattr(os, name), positions))
     for name, positions in _CREATE.items():
         _replace_os(name, _create_wrapper(getattr(os, name), positions))
     _replace_os("chmod", _chmod_wrapper(os.chmod))
+    _replace_os("access", _access_wrapper(os.access))
     _replace_os("open", _os_open_wrapper(os.open))
 
     _ORIGINALS["builtins.open"] = builtins.open

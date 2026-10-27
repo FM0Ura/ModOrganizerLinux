@@ -57,6 +57,20 @@ def hardlink(source, target):
 
 def glob(pattern, recursive=False):
     return _glob.glob(pattern, recursive=recursive)
+
+
+def copy2(source, target):
+    import shutil
+
+    shutil.copy2(source, target)
+
+
+def access(path, mode):
+    return os.access(path, mode)
+
+
+def call(function, *args):
+    return function(*args)
 '''
 
 
@@ -140,7 +154,7 @@ def test_chmod_windows_meaning(tree):
     win.chmod(str(f), stat.S_IWRITE)
     assert stat.S_IMODE(f.stat().st_mode) == 0o644
     win.chmod(str(f), stat.S_IREAD)
-    assert stat.S_IMODE(f.stat().st_mode) == 0o400
+    assert stat.S_IMODE(f.stat().st_mode) == 0o444
     os.chmod(f, 0o644)
     linux.chmod(str(f), stat.S_IWRITE)
     assert stat.S_IMODE(f.stat().st_mode) == 0o200
@@ -197,3 +211,55 @@ def test_install_is_idempotent(tmp_path):
     mo2_windows_compat.install()
     assert os.stat is stat_before
     assert os.stat(tmp_path).st_mode
+
+
+def test_copy2_into_other_case_with_xattrs(tree, tmp_path):
+    game, win, linux = tree
+    source = tmp_path / "foo.dll"
+    source.write_text("mod")
+    try:
+        os.setxattr(source, "user.mo2test", b"1")
+    except OSError:
+        pytest.skip("no user xattrs on this file system")
+    win.copy2(str(source), str(game / "bin/x64/foo.dll"))
+    copied = game / "Bin/x64/foo.dll"
+    assert copied.read_text() == "mod"
+    assert os.getxattr(copied, "user.mo2test") == b"1"
+    win.copy2(str(source), str(game / "bin/vanilla.dll"))
+    assert (game / "Bin/Vanilla.DLL").read_text() == "mod"
+
+
+def test_access_ignores_case(tree):
+    game, win, linux = tree
+    assert win.access(str(game / "bin/vanilla.dll"), os.R_OK) is True
+    assert linux.access(str(game / "bin/vanilla.dll"), os.R_OK) is False
+
+
+def test_missing_path_outside_lists_nothing(tree, monkeypatch):
+    game, win, linux = tree
+    calls = []
+    listdir = mo2_windows_compat._ORIGINALS["listdir"]
+    monkeypatch.setitem(
+        mo2_windows_compat._ORIGINALS,
+        "listdir",
+        lambda *a: calls.append(a) or listdir(*a),
+    )
+    assert linux.exists(str(game / "bin/vanilla.dll")) is False
+    assert calls == []
+
+
+def test_code_called_back_by_a_plugin_keeps_linux_behavior(tree):
+    game, win, linux = tree
+    assert win.call(linux.exists, str(game / "bin/vanilla.dll")) is False
+    assert win.call(os.path.exists, str(game / "bin/vanilla.dll")) is True
+
+
+def test_chmod_read_write_idioms_keep_other_bits(tree):
+    game, win, linux = tree
+    f = game / "Bin/Vanilla.DLL"
+    os.chmod(f, 0o755)
+    win.chmod(str(f), stat.S_IREAD | stat.S_IWRITE)
+    assert stat.S_IMODE(f.stat().st_mode) == 0o755
+    win.chmod(str(f), stat.S_IREAD)
+    assert stat.S_IMODE(f.stat().st_mode) == 0o555
+    os.chmod(f, 0o644)

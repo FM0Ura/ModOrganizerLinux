@@ -84,9 +84,14 @@ plugin (`ProxyPython::load`), se o caminho dele não está dentro da pasta de pl
 o runner registra esse caminho como "raiz Windows" na camada: a pasta, para plugins-módulo,
 ou o arquivo `.py`, para os de um arquivo só. Na prática, são os plugins da pasta do usuário.
 
-**Como a camada sabe quem chamou.** O código chamador é de um plugin Windows quando algum
-quadro da pilha (`sys._getframe`) tem o arquivo dentro de uma raiz Windows. Isso cobre
-chamadas indiretas, como `shutil.copy2` chamado pelo RootBuilder. A pilha só é examinada
+**Como a camada sabe quem chamou.** O código chamador é de um plugin Windows quando o quadro
+mais interno da pilha (`sys._getframe`) que não é da biblioteca padrão nem da camada tem o
+arquivo dentro de uma raiz Windows. Isso cobre chamadas indiretas, como `shutil.copy2`
+chamado pelo RootBuilder, e deixa de fora o código do app chamado de volta de dentro de um
+plugin Windows (callbacks do `mobase`, laços do Qt). Decisão da revisão final, 2026-10-27: a
+regra anterior, "algum quadro da pilha", aplicava a camada a esse código, contra a decisão
+do usuário. Limite conhecido: um plugin que entrega o trabalho direto à biblioteca padrão
+(`Thread(target=os.remove)`) não recebe a camada. A pilha só é examinada
 quando a regra pode mudar alguma coisa (ver abaixo), nunca no caminho normal.
 
 **B — flags do Windows no `os`.** `os.O_BINARY`, `os.O_TEXT`, `os.O_NOINHERIT`,
@@ -98,7 +103,8 @@ fechar.
 **A — `os.chmod` com o significado do Windows.** No Windows, `chmod` só olha o bit
 `S_IWRITE`: com ele, tira o somente leitura; sem ele, põe. Quando a chamada vem de um plugin
 Windows **e** o modo pedido deixaria o arquivo ilegível para o dono (`mode & 0o400 == 0`, que
-inclui `stat.S_IWRITE` sozinho), a camada aplica esse significado:
+inclui `stat.S_IWRITE` sozinho) ou só tem os bits `S_IREAD`/`S_IWRITE` (`0o600`, `0o400`,
+idiomas do Windows; decisão da revisão final), a camada aplica esse significado:
 - com `S_IWRITE`: modo atual `| 0o200`;
 - sem: modo atual `& ~0o222`.
 
@@ -114,6 +120,8 @@ plugins Windows. A resolução de um caminho percorre os componentes a partir da
 Duas formas de aplicar:
 - **Leitura e remoção** (`os.stat`, `os.lstat`, `open`/`io.open`/`os.open` sem `O_CREAT`,
   `os.remove`/`os.unlink`, `os.rmdir`, `os.listdir`, `os.scandir`, `os.chmod`, `os.utime`,
+  `os.access`, `os.truncate`, `os.readlink`, `os.chown`/`os.lchown`, as funções de xattr que o
+  `shutil.copy2` usa para copiar os rótulos do SELinux,
   `os.rename`/`os.replace` na origem, `os.link` na origem): chama o original e, só se der
   `FileNotFoundError` ou `NotADirectoryError` **e** a chamada vier de um plugin Windows,
   resolve o caminho e tenta de novo, se ele mudou. `os.path.exists`, `isfile`, `isdir`,
