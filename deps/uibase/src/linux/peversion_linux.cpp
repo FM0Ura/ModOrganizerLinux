@@ -1,10 +1,13 @@
-// Minimal PE version resource reader, see peversion_linux.h.
+// Minimal PE version resource and icon reader, see peversion_linux.h and
+// uibase/linux/peicon.h.
 //
 // Layout references (Microsoft documentation): "PE Format" (DOS header, COFF header,
 // optional header data directories, section table, .rsrc directory tables) and
 // "VS_VERSIONINFO", "StringFileInfo", "VarFileInfo", "VS_FIXEDFILEINFO".
 
 #include "peversion_linux.h"
+
+#include <uibase/linux/peicon.h>
 
 #include <QByteArray>
 #include <QFile>
@@ -18,12 +21,17 @@ namespace MOBase::details
 namespace
 {
 
+  constexpr std::uint32_t RT_ICON             = 3;
+  constexpr std::uint32_t RT_GROUP_ICON       = 14;
   constexpr std::uint32_t RT_VERSION          = 16;
   constexpr std::uint32_t VS_VERSION_INFO_ID  = 1;
   constexpr std::uint32_t VS_FFI_SIGNATURE    = 0xFEEF04BD;
   constexpr std::uint32_t HIGH_BIT            = 0x80000000;
   constexpr std::size_t MaxVersionResource    = 0x10000;  // wLength is 16-bit
   constexpr std::size_t MaxResourceDirEntries = 4096;
+  constexpr std::size_t MaxIconGroupEntries   = 64;
+  constexpr std::size_t MaxIconImage          = 1u << 20;
+  constexpr std::size_t MaxIconGroup          = 6 + 14 * MaxIconGroupEntries;
 
   // little-endian reads from a buffer; the caller checks the bounds
   std::uint16_t u16(const QByteArray& b, std::size_t off)
@@ -187,8 +195,16 @@ namespace
     return std::nullopt;
   }
 
-  // the raw VS_VERSION_INFO resource
-  std::optional<QByteArray> readVersionResource(Reader& r)
+  // the resource section of a PE file: its section table and the extent of the
+  // resource directory tree
+  struct PeResources
+  {
+    std::vector<Section> sections;
+    std::uint64_t offset;  // file offset of the root directory
+    std::uint64_t size;    // bytes from the root directory to the end of its section
+  };
+
+  std::optional<PeResources> openResources(Reader& r)
   {
     // DOS header
     const auto dos = r.read(0, 64);
@@ -240,22 +256,75 @@ namespace
       return std::nullopt;
     }
 
-    std::vector<Section> sections;
+    PeResources res;
     for (std::size_t i = 0; i < sectionCount; ++i) {
       const std::size_t s = i * 40;
-      sections.push_back(
+      res.sections.push_back(
           {u32(*table, s + 12), u32(*table, s + 16), u32(*table, s + 20)});
+    }
+
+    res.size = 0;
+    const auto resourceOffset = rvaToOffset(res.sections, resourceRva, 16, &res.size);
+    if (!resourceOffset) {
+      return std::nullopt;
+    }
+    res.offset = *resourceOffset;
+
+    return res;
+  }
+
+  // the first language of the resource name directory `name`: the data entry offset
+  std::optional<std::uint32_t> firstLanguageEntry(ResourceTree& tree,
+                                                  std::uint32_t name)
+  {
+    const auto languages = tree.directory(name);
+    if (!languages || languages->empty() || (languages->front().target & HIGH_BIT)) {
+      return std::nullopt;
+    }
+
+    return languages->front().target;
+  }
+
+  // the contents of the IMAGE_RESOURCE_DATA_ENTRY at `entry`; a resource larger than
+  // `maxSize` is cut to that size if `truncate` is set, else rejected
+  std::optional<QByteArray> readDataEntry(Reader& r, ResourceTree& tree,
+                                          const std::vector<Section>& sections,
+                                          std::uint32_t entry, std::uint64_t maxSize,
+                                          bool truncate)
+  {
+    // data RVA and size
+    const auto dataEntry = tree.read(entry, 16);
+    if (!dataEntry) {
+      return std::nullopt;
+    }
+
+    std::uint64_t size = u32(*dataEntry, 4);
+    if (size > maxSize) {
+      if (!truncate) {
+        return std::nullopt;
+      }
+      size = maxSize;
+    }
+
+    const auto dataOffset = rvaToOffset(sections, u32(*dataEntry, 0), size);
+    if (!dataOffset) {
+      return std::nullopt;
+    }
+
+    return r.read(*dataOffset, size);
+  }
+
+  // the raw VS_VERSION_INFO resource
+  std::optional<QByteArray> readVersionResource(Reader& r)
+  {
+    const auto res = openResources(r);
+    if (!res) {
+      return std::nullopt;
     }
 
     // resource tree: type RT_VERSION / name VS_VERSION_INFO (else the first) / first
     // language
-    std::uint64_t resourceSize = 0;
-    const auto resourceOffset  = rvaToOffset(sections, resourceRva, 16, &resourceSize);
-    if (!resourceOffset) {
-      return std::nullopt;
-    }
-
-    ResourceTree tree(r, *resourceOffset, resourceSize);
+    ResourceTree tree(r, res->offset, res->size);
 
     const auto type = findSubdirectory(tree, 0, [](auto&& e) {
       return e.name == RT_VERSION;
@@ -276,25 +345,126 @@ namespace
       return std::nullopt;
     }
 
-    const auto languages = tree.directory(*name);
-    if (!languages || languages->empty() || (languages->front().target & HIGH_BIT)) {
+    const auto entry = firstLanguageEntry(tree, *name);
+    if (!entry) {
       return std::nullopt;
     }
 
-    // IMAGE_RESOURCE_DATA_ENTRY: data RVA and size
-    const auto dataEntry = tree.read(languages->front().target, 16);
-    if (!dataEntry) {
+    return readDataEntry(r, tree, res->sections, *entry, MaxVersionResource, true);
+  }
+
+  // .ico file from the first RT_GROUP_ICON and the RT_ICON images it references
+  std::optional<QByteArray> readIconFile(Reader& r)
+  {
+    const auto res = openResources(r);
+    if (!res) {
       return std::nullopt;
     }
 
-    const std::uint64_t size =
-        std::min<std::uint64_t>(u32(*dataEntry, 4), MaxVersionResource);
-    const auto dataOffset = rvaToOffset(sections, u32(*dataEntry, 0), size);
-    if (!dataOffset) {
+    ResourceTree tree(r, res->offset, res->size);
+
+    const auto groupType = findSubdirectory(tree, 0, [](auto&& e) {
+      return e.name == RT_GROUP_ICON;
+    });
+    if (!groupType) {
       return std::nullopt;
     }
 
-    return r.read(*dataOffset, size);
+    const auto groupName = findSubdirectory(tree, *groupType, [](auto&&) {
+      return true;
+    });
+    if (!groupName) {
+      return std::nullopt;
+    }
+
+    const auto groupEntry = firstLanguageEntry(tree, *groupName);
+    if (!groupEntry) {
+      return std::nullopt;
+    }
+
+    const auto group =
+        readDataEntry(r, tree, res->sections, *groupEntry, MaxIconGroup, true);
+    if (!group || group->size() < 6 || u16(*group, 2) != 1) {
+      return std::nullopt;
+    }
+
+    const auto imageType = findSubdirectory(tree, 0, [](auto&& e) {
+      return e.name == RT_ICON;
+    });
+    if (!imageType) {
+      return std::nullopt;
+    }
+
+    // GRPICONDIRENTRY (14 bytes): width, height, colors, reserved, planes, bits, size,
+    // id; the entries that do not fit in the group or the limit are ignored
+    const std::size_t declared = u16(*group, 4);
+    const std::size_t count =
+        std::min({declared, MaxIconGroupEntries, (std::size_t(group->size()) - 6) / 14});
+
+    struct Image
+    {
+      QByteArray entry;  // width, height, colors, reserved, planes, bits
+      QByteArray data;
+    };
+    std::vector<Image> images;
+
+    for (std::size_t i = 0; i < count; ++i) {
+      const std::size_t e = 6 + i * 14;
+      const std::uint16_t id = u16(*group, e + 12);
+
+      const auto name = findSubdirectory(tree, *imageType, [&](auto&& entry) {
+        return entry.name == id;
+      });
+      if (!name) {
+        continue;
+      }
+
+      const auto entry = firstLanguageEntry(tree, *name);
+      if (!entry) {
+        continue;
+      }
+
+      // the real size of the resource, not the declared one
+      auto data = readDataEntry(r, tree, res->sections, *entry, MaxIconImage, false);
+      if (!data || data->isEmpty()) {
+        continue;
+      }
+
+      images.push_back({group->mid(e, 8), std::move(*data)});
+    }
+
+    if (images.empty()) {
+      return std::nullopt;
+    }
+
+    const auto put16 = [](QByteArray& b, std::uint16_t v) {
+      b.append(char(v & 0xff));
+      b.append(char(v >> 8));
+    };
+    const auto put32 = [&](QByteArray& b, std::uint32_t v) {
+      put16(b, static_cast<std::uint16_t>(v & 0xffff));
+      put16(b, static_cast<std::uint16_t>(v >> 16));
+    };
+
+    QByteArray ico;
+    put16(ico, 0);
+    put16(ico, 1);
+    put16(ico, static_cast<std::uint16_t>(images.size()));
+
+    // ICONDIRENTRY (16 bytes): the group entry with the id replaced by the offset
+    std::uint32_t offset = static_cast<std::uint32_t>(6 + 16 * images.size());
+    for (const auto& image : images) {
+      ico.append(image.entry);  // width, height, colors, reserved, planes, bits
+      put32(ico, static_cast<std::uint32_t>(image.data.size()));
+      put32(ico, offset);
+      offset += static_cast<std::uint32_t>(image.data.size());
+    }
+
+    for (const auto& image : images) {
+      ico.append(image.data);
+    }
+
+    return ico;
   }
 
   std::size_t align4(std::size_t n)
@@ -472,6 +642,12 @@ std::optional<PeVersionInfo> readPeVersionInfo(const QString& path)
   info.productVersion = productVersion(*data, *root);
 
   return info;
+}
+
+std::optional<QByteArray> readPeIcon(const QString& path)
+{
+  Reader reader(path);
+  return readIconFile(reader);
 }
 
 }  // namespace MOBase::details

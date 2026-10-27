@@ -7,17 +7,21 @@
 #include <cstring>
 #include <optional>
 
+#include <QBuffer>
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QRegularExpression>
+#include <QSize>
 #include <QStandardPaths>
 #include <QString>
 #include <QTemporaryDir>
 #include <QUrl>
 
 #include <uibase/errorcodes.h>
+#include <uibase/linux/peicon.h>
 #include <uibase/log.h>
 #include <uibase/registry.h>
 #include <uibase/steamutility.h>
@@ -444,6 +448,76 @@ TEST(FileVersion, MalformedPeIsRejected)
     writeFile(path, bad);
     getFileVersion(path);
     getProductVersion(path);
+  }
+}
+
+// --- PE icons ----------------------------------------------------------------------
+
+TEST(PeIcon, ReadsGroup)
+{
+  const auto ico = details::readPeIcon(fixture("icon.exe"));
+  ASSERT_TRUE(ico.has_value());
+  ASSERT_GE(ico->size(), 6);
+  EXPECT_EQ(ico->left(6), QByteArray("\0\0\1\0\2\0", 6));
+
+  if (!QImageReader::supportedImageFormats().contains("ico")) {
+    GTEST_SKIP() << "the ico image format plugin is not available";
+  }
+
+  QByteArray bytes = *ico;
+  QBuffer buffer(&bytes);
+  ASSERT_TRUE(buffer.open(QIODevice::ReadOnly));
+  QImageReader reader(&buffer, "ico");
+  ASSERT_EQ(reader.imageCount(), 2);
+
+  QList<QSize> sizes;
+  for (int i = 0; i < reader.imageCount(); ++i) {
+    ASSERT_TRUE(reader.jumpToImage(i));
+    const QImage image = reader.read();
+    ASSERT_FALSE(image.isNull());
+    sizes.append(image.size());
+  }
+  EXPECT_TRUE(sizes.contains(QSize(16, 16)));
+  EXPECT_TRUE(sizes.contains(QSize(32, 32)));
+}
+
+TEST(PeIcon, NoIconResource)
+{
+  EXPECT_FALSE(details::readPeIcon(fixture("version.exe")).has_value());
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString text = tmp.filePath("text.exe");
+  writeFile(text, "this is not a PE file\n");
+  EXPECT_FALSE(details::readPeIcon(text).has_value());
+  EXPECT_FALSE(details::readPeIcon(tmp.filePath("missing.exe")).has_value());
+}
+
+TEST(PeIcon, MalformedIsRejected)
+{
+  const QByteArray pe = readFile(fixture("icon.exe"));
+  ASSERT_FALSE(pe.isEmpty());
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString path = tmp.filePath("bad.exe");
+
+  const auto check = [&](const QByteArray& data) {
+    writeFile(path, data);
+    const auto ico = details::readPeIcon(path);
+    if (ico) {
+      EXPECT_TRUE(ico->startsWith(QByteArray("\0\0\1\0", 4)));
+    }
+  };
+
+  for (qsizetype n = 0; n < pe.size(); n += 7) {
+    check(pe.left(n));
+  }
+
+  for (qsizetype i = 0; i + 4 <= pe.size(); i += 2) {
+    QByteArray bad = pe;
+    bad[i] = bad[i + 1] = bad[i + 2] = bad[i + 3] = char(0xff);
+    check(bad);
   }
 }
 
