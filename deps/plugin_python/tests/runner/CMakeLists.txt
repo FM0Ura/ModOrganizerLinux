@@ -10,6 +10,7 @@ mo2_target_sources(runner-tests
 	FOLDER src
 	PRIVATE
 		test_diagnose.cpp
+		test_environment.cpp
 		test_filemapper.cpp
 		test_game.cpp
 		test_installer.cpp
@@ -27,6 +28,7 @@ mo2_target_sources(runner-tests
 mo2_target_sources(runner-tests
 	FOLDER src/plugins
 	PRIVATE
+		plugins/dummy-cyclic-iplugin.py
 		plugins/dummy-diagnose.py
 		plugins/dummy-filemapper.py
 		plugins/dummy-game.py

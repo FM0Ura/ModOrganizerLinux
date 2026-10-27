@@ -37,8 +37,12 @@ namespace mo2::python {
     class PythonRunner : public IPythonRunner {
 
     public:
-        PythonRunner()  = default;
+        PythonRunner() = default;
+#ifdef _WIN32
         ~PythonRunner() = default;
+#else
+        ~PythonRunner() override;
+#endif
 
         QList<QObject*> load(const QString& identifier) override;
         void unload(const QString& identifier) override;
@@ -57,10 +61,18 @@ namespace mo2::python {
         void ensureFolderInPath(QString folder);
 
     private:
+#ifdef _WIN32
+        using PluginObjectRef = py::handle;
+#else
+        // Linux: weak references, since the runner unloads the remaining plugins when
+        // it is destroyed (see ~PythonRunner()), and some of them may already be gone
+        using PluginObjectRef = py::weakref;
+#endif
+
         // for each "identifier" (python file or python module folder), contains the
         // list of python objects - this does not keep the objects alive, it simply used
         // to unload plugins
-        std::unordered_map<QString, std::vector<py::handle>> m_PythonObjects;
+        std::unordered_map<QString, std::vector<PluginObjectRef>> m_PythonObjects;
     };
 
 #ifndef _WIN32
@@ -365,7 +377,11 @@ namespace mo2::python {
             for (py::object pluginObj : plugins) {
 
                 // save to be able to unload it
+#ifdef _WIN32
                 m_PythonObjects[identifier].push_back(pluginObj);
+#else
+                m_PythonObjects[identifier].push_back(py::weakref(pluginObj));
+#endif
 
                 QList<QObject*> interfaceList = py::module_::import("mobase.private")
                                                     .attr("extract_plugins")(pluginObj)
@@ -427,8 +443,15 @@ namespace mo2::python {
             // Boost.Python does not handle cyclic garbace collection, so we need to
             // release everything hold by the objects before deleting the objects
             // themselves (done when erasing from m_PythonObjects).
-            for (auto& obj : it->second) {
-                obj.attr("__dict__").attr("clear")();
+            for (auto& ref : it->second) {
+#ifdef _WIN32
+                ref.attr("__dict__").attr("clear")();
+#else
+                py::object obj = ref();
+                if (!obj.is_none()) {
+                    obj.attr("__dict__").attr("clear")();
+                }
+#endif
             }
 
             log::debug("Deleting {} python objects for {}.", it->second.size(),
@@ -436,6 +459,37 @@ namespace mo2::python {
             m_PythonObjects.erase(it);
         }
     }
+
+#ifndef _WIN32
+    // Linux: when Mod Organizer restarts itself (instance change), the plugin container
+    // unloads the proxy, and with it this runner, before deleting the plugins (they are
+    // its children) and without unloading them one by one: plugins whose objects
+    // reference each other (e.g., RootBuilder) would then stay alive in Python after
+    // their C++ object is deleted, until the garbage collector frees them and touches
+    // the deleted object (SIGSEGV in pybind11's clear_instance); the cycles are broken
+    // here, like in unload()
+    PythonRunner::~PythonRunner()
+    {
+        if (!Py_IsInitialized()) {
+            return;
+        }
+
+        std::vector<QString> identifiers;
+        for (const auto& [identifier, objects] : m_PythonObjects) {
+            identifiers.push_back(identifier);
+        }
+
+        for (const auto& identifier : identifiers) {
+            try {
+                unload(identifier);
+            }
+            catch (const py::error_already_set& ex) {
+                log::error("Failed to unload the python plugin {}: {}", identifier,
+                           ex.what());
+            }
+        }
+    }
+#endif
 
     bool PythonRunner::isInitialized() const
     {
