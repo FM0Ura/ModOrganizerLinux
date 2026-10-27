@@ -2,6 +2,7 @@
 
 #include "categories.h"
 #include "messagedialog.h"
+#include "nexuspage.h"
 #include "moddatacontent.h"
 #include "organizercore.h"
 #include "plugincontainer.h"
@@ -97,6 +98,7 @@ void ModInfoRegular::readMeta()
   m_IgnoredVersion   = metaFile.value("ignoredVersion", "").toString();
   m_InstallationFile = metaFile.value("installationFile", "").toString();
   m_NexusDescription = metaFile.value("nexusDescription", "").toString();
+  m_NexusPictureUrl  = metaFile.value("nexusPictureUrl", "").toString();
   m_NexusFileStatus  = metaFile.value("nexusFileStatus", "1").toInt();
   m_NexusCategory    = metaFile.value("nexusCategory", 0).toInt();
   m_Author           = metaFile.value("author", "").toString();
@@ -270,6 +272,7 @@ void ModInfoRegular::saveMeta()
       metaFile.setValue("comments", m_Comments);
       metaFile.setValue("notes", m_Notes);
       metaFile.setValue("nexusDescription", m_NexusDescription);
+      metaFile.setValue("nexusPictureUrl", m_NexusPictureUrl);
       metaFile.setValue("url", m_CustomURL);
       metaFile.setValue("hasCustomURL", m_HasCustomURL);
       metaFile.setValue("nexusFileStatus", m_NexusFileStatus);
@@ -355,6 +358,7 @@ void ModInfoRegular::nxmDescriptionAvailable(QString, int, QVariant,
 {
   QVariantMap result = resultData.toMap();
   setNexusDescription(result["description"].toString());
+  setNexusPictureUrl(result["picture_url"].toString());
 
   if ((m_EndorsedState != EndorsedState::ENDORSED_NEVER) &&
       (result.contains("endorsement"))) {
@@ -412,6 +416,13 @@ void ModInfoRegular::nxmTrackingToggled(QString, int, QVariant, bool tracked)
 void ModInfoRegular::nxmRequestFailed(QString, int, int, QVariant userData,
                                       int errorCode, const QString& errorMessage)
 {
+  if (nexuspage::isPanelRequest(userData)) {
+    // the Nexus panel shows the failure itself; no popup
+    emit nexusRequestFailed(errorMessage);
+    emit modDetailsUpdated(false);
+    return;
+  }
+
   QString fullMessage = errorMessage;
   if (userData.canConvert<int>() && (userData.toInt() == 1)) {
     fullMessage += "\nNexus will reject endorsements within 15 Minutes of a failed "
@@ -431,6 +442,13 @@ bool ModInfoRegular::updateNXMInfo()
   }
 
   return false;
+}
+
+void ModInfoRegular::requestNexusInfo(const QVariant& userData)
+{
+  if (m_NexusID > 0) {
+    m_NexusBridge.requestDescription(m_GameName, m_NexusID, userData);
+  }
 }
 
 bool ModInfoRegular::needsDescriptionUpdate() const
@@ -568,6 +586,14 @@ void ModInfoRegular::setNexusDescription(const QString& description)
   if (qHash(description) != qHash(m_NexusDescription)) {
     m_NexusDescription = description;
     m_MetaInfoChanged  = true;
+  }
+}
+
+void ModInfoRegular::setNexusPictureUrl(const QString& url)
+{
+  if (url != m_NexusPictureUrl) {
+    m_NexusPictureUrl = url;
+    m_MetaInfoChanged = true;
   }
 }
 
@@ -801,6 +827,11 @@ QDateTime ModInfoRegular::creationTime() const
 QString ModInfoRegular::getNexusDescription() const
 {
   return m_NexusDescription;
+}
+
+QString ModInfoRegular::getNexusPictureUrl() const
+{
+  return m_NexusPictureUrl;
 }
 
 QString ModInfoRegular::repository() const

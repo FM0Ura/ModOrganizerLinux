@@ -49,6 +49,7 @@ public:
   virtual void setNexusCategory(int) override {}
   virtual QDateTime creationTime() const override { return QDateTime(); }
   virtual QString getNexusDescription() const override { return QString(); }
+  virtual QString getNexusPictureUrl() const override { return QString(); }
   virtual QString author() const override { return QString(); }
   virtual void setAuthor(const QString&) override {}
   virtual QString uploader() const override { return QString(); }

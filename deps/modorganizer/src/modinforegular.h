@@ -154,6 +154,12 @@ public:
    */
   virtual void setNexusDescription(const QString& description) override;
 
+  virtual void setNexusPictureUrl(const QString& url) override;
+
+  virtual void requestNexusInfo(const QVariant& userData) override;
+
+  virtual bool needsDescriptionUpdate() const override;
+
   virtual void setInstallationFile(const QString& fileName) override;
 
   /**
@@ -335,6 +341,8 @@ public:
    */
   QString getNexusDescription() const override;
 
+  QString getNexusPictureUrl() const override;
+
   /**
    * @return repository from which the file was downloaded
    */
@@ -498,6 +506,7 @@ private:
   QString m_Comments;
   QString m_Notes;
   QString m_NexusDescription;
+  QString m_NexusPictureUrl;
   QString m_Repository;
   QString m_CustomURL;
   bool m_HasCustomURL;
@@ -538,8 +547,6 @@ private:
   MOBase::TrackedState m_TrackedState;
 
   NexusBridge m_NexusBridge;
-
-  bool needsDescriptionUpdate() const;
 };
 
 #endif  // MODINFOREGULAR_H

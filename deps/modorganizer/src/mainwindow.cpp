@@ -3440,6 +3440,7 @@ void MainWindow::nxmModInfoAvailable(QString gameName, int modID, QVariant userD
     mod->setLastNexusUpdate(QDateTime::currentDateTimeUtc());
 
     mod->setNexusDescription(result["description"].toString());
+    mod->setNexusPictureUrl(result["picture_url"].toString());
 
     mod->setNexusCategory(result["category_id"].toInt());
 
