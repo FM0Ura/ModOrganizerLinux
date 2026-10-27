@@ -152,6 +152,7 @@ set(_organizer_launch_sources
 set(_organizer_desktop_sources
 	linux/displaycheck_linux.cpp
 	linux/nxmhandler_linux.cpp
+	nexuspage.cpp
 	linux/secretstore_linux.cpp
 	linux/selfupdate_linux.cpp)
 
