@@ -98,13 +98,31 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   `PermissionError`), so that plugins written for Windows that import `winreg` at the
   top of a module (e.g., RootBuilder) load; its pytest is `tests/python/test_winreg.py`
   (`deps/plugin_python: Linux: an empty winreg`).
+  On Linux only, the plugins that are not shipped (the user's folder) get the
+  compatibility of the plugins of Windows, `src/libs/mo2_windows_compat.py` (installed in
+  `plugin_python/libs`; the runner installs it after `mobase`, the proxy registers each
+  plugin whose canonical path is not in the shipped plugin folder with
+  `IPythonRunner::addWindowsPluginRoot()`): `os.O_BINARY` and the other open flags of
+  Windows exist with the value 0 (whole process), and for the calls whose stack has a frame
+  of such a plugin, paths are looked up ignoring case as Wine does (the only item of a
+  folder with the same name ignoring case; reading and removing retry after
+  `FileNotFoundError`, creating resolves first), backslashes are separators, and
+  `os.chmod()` with a mode that would make the file unreadable has the meaning of Windows.
+  Native Windows code (`ctypes.windll`, `.pyd`, pywin32) cannot work. Pytest in
+  `tests/python/test_windows_compat.py`; the smoke test loads a probe plugin from the
+  user's folder (`deps/plugin_python: Linux: compatibility layer ...` and `... apply the
+  compatibility layer ...`). The data folder of the plugins is the user's
+  (`~/.local/share/ModOrganizer/plugins/data`, `deps/modorganizer`); the proxy also puts
+  the shipped `<bin>/plugins/data` in `sys.path` (DDS of `preview_dds`, pyCfgDialog of
+  `tool_configurator`).
 - **`fnistool`**, **`installer_wizard`**, **`script_extender_plugin_checker`** and
   **`tool_configurator`** (Python plugins) carry Linux fixes that are not upstream, each
   in `if sys.platform == "win32": ... else: ...`: `fnistool` passes `RedirectFiles` as a
   `Z:` path; `installer_wizard` opens the wizard script with the desktop and converts the
   backslashes of the wizard paths; `script_extender_plugin_checker` converts the Windows
   paths of the script extender log (drive `Z:`, `/home` against `/var/home`, case);
-  `tool_configurator` finds the INI files ignoring case. **`cmake_common`** also carries one:
+  `tool_configurator` finds the INI files ignoring case and reads its `settings.json`
+  from the shipped data folder (beside `pyCfgDialog`) when the user's has none. **`cmake_common`** also carries one:
   the success file of the pip requirements (`mo2_python.cmake`) is touched with
   `cmake -E touch` on Linux. A `git subtree pull` of any of them must keep these (see the
   `deps/<name>: Linux:` commits).

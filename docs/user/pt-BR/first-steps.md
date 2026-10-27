@@ -55,6 +55,14 @@ O AppImage é somente leitura, então os plugins do Mod Organizer (arquivos `.so
 Python como um arquivo `.py` ou uma pasta com `__init__.py`) vão em
 `~/.local/share/ModOrganizer/plugins`. A opção *Open MO2 Plugins folder* do menu de pastas abre
 essa pasta. Reinicie o Mod Organizer para carregar um plugin novo. Um plugin ali com o mesmo
-nome de um que vem com o Mod Organizer o substitui.
+nome de um que vem com o Mod Organizer o substitui. Os plugins guardam seus dados em
+`~/.local/share/ModOrganizer/plugins/data`.
+
+Plugins Python feitos para o Mod Organizer do Windows (por exemplo, o RootBuilder) funcionam
+ali sem alterações: para eles, nomes de arquivo ignoram maiúsculas como no Windows, `\` é
+separador e as partes do Python exclusivas do Windows que eles costumam usar (`winreg`,
+`os.O_BINARY`, `os.chmod` para o somente leitura) se comportam como no Windows. Plugins que
+usam código nativo do Windows (DLLs, `ctypes.windll`, pywin32) não têm como funcionar no
+Linux.
 
 Próximo: [Atualização](updating.md).

@@ -20,6 +20,11 @@ QString userPluginsPath()
          "/" + QString::fromStdWString(AppConfig::pluginPath());
 }
 
+QString userPluginDataPath()
+{
+  return userPluginsPath() + "/data";
+}
+
 QStringList pluginsPaths()
 {
   return {userPluginsPath(), builtInPluginsPath()};

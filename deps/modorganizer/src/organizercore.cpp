@@ -20,6 +20,7 @@
 #include "nexusinterface.h"
 #include "nxmaccessmanager.h"
 #include "plugincontainer.h"
+#include "pluginpaths.h"
 #include "previewdialog.h"
 #include "profile.h"
 #include "shared/appconfig.h"
@@ -895,8 +896,16 @@ void OrganizerCore::setPersistent(const QString& pluginName, const QString& key,
 
 QString OrganizerCore::pluginDataPath()
 {
+#ifdef _WIN32
   return qApp->applicationDirPath() + "/" + ToQString(AppConfig::pluginPath()) +
          "/data";
+#else
+  // Linux: the folder next to the binary is read-only in the AppImage, the plugins
+  // write their data in the user's folder
+  const QString path = userPluginDataPath();
+  QDir().mkpath(path);
+  return path;
+#endif
 }
 
 MOBase::IModInterface* OrganizerCore::installMod(const QString& archivePath,

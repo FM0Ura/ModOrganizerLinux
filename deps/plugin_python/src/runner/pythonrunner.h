@@ -41,6 +41,12 @@ namespace mo2::python {
         // called and succeeded
         virtual bool isInitialized() const = 0;
 
+#ifndef _WIN32
+        // Linux: the plugin (folder or file) is not shipped with Mod Organizer, it gets
+        // the compatibility of the plugins of Windows (mo2_windows_compat.add_root())
+        virtual void addWindowsPluginRoot(const QString& identifier) = 0;
+#endif
+
         virtual ~IPythonRunner() {}
     };
 

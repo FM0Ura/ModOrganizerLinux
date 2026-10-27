@@ -46,6 +46,9 @@ namespace mo2::python {
         bool initialize(std::vector<std::filesystem::path> const& pythonPaths) override;
         void addDllSearchPath(std::filesystem::path const& dllPath) override;
         bool isInitialized() const override;
+#ifndef _WIN32
+        void addWindowsPluginRoot(const QString& identifier) override;
+#endif
 
     private:
         /**
@@ -201,6 +204,19 @@ namespace mo2::python {
                 mo2::python::configure_python_stream();
                 mo2::python::configure_python_logging(mainNamespace["mobase"]);
             }
+
+#ifndef _WIN32
+            // Linux: the compatibility of the plugins of Windows (plugin_python/libs);
+            // the shipped plugins do not need it, a failure is only logged
+            try {
+                py::module_::import("mo2_windows_compat").attr("install")();
+            }
+            catch (const py::error_already_set& ex) {
+                MOBase::log::error(
+                    "failed to install the compatibility of the plugins of Windows: {}",
+                    ex.what());
+            }
+#endif
 
             // we need to release the GIL here - which is what this does
             //
@@ -425,6 +441,21 @@ namespace mo2::python {
     {
         return Py_IsInitialized() != 0;
     }
+
+#ifndef _WIN32
+    void PythonRunner::addWindowsPluginRoot(const QString& identifier)
+    {
+        py::gil_scoped_acquire lock;
+        try {
+            py::module_::import("mo2_windows_compat")
+                .attr("add_root")(ToString(identifier));
+        }
+        catch (const py::error_already_set& ex) {
+            MOBase::log::error("failed to register {} as a plugin of Windows: {}",
+                               identifier, ex.what());
+        }
+    }
+#endif
 
 }  // namespace mo2::python
 

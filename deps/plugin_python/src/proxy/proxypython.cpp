@@ -30,6 +30,8 @@ along with python proxy plugin.  If not, see <http://www.gnu.org/licenses/>.
 #include <QCoreApplication>
 #include <QDirIterator>
 #include <QFile>
+#include <QDir>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QWidget>
 #include <QtPlugin>
@@ -211,10 +213,13 @@ bool ProxyPython::init(IOrganizer* moInfo)
 #else
         // Linux: the proxy is plugins/plugin_python.so, next to the plugin_python
         // folder; the standard library is the system's (the runner filters sys.path),
-        // the paths are the bytes of the file system (UTF-8)
+        // the paths are the bytes of the file system (UTF-8); the data folder of the
+        // plugins is the user's, then the one shipped with Mod Organizer (modules such
+        // as DDS of preview_dds stay there)
         const std::vector<fs::path> paths{
             pluginFolder / "plugin_python" / "libs",
-            fs::path{QFile::encodeName(IOrganizer::getPluginDataPath()).toStdString()}};
+            fs::path{QFile::encodeName(IOrganizer::getPluginDataPath()).toStdString()},
+            pluginFolder / "data"};
 #endif
 #ifdef _WIN32
         m_Runner->initialize(paths);
@@ -314,6 +319,17 @@ QList<QObject*> ProxyPython::load(const QString& identifier)
     if (!m_Runner) {
         return {};
     }
+#ifndef _WIN32
+    // Linux: a plugin that is not shipped with Mod Organizer (the user's folder) gets
+    // the compatibility of the plugins of Windows; canonical paths, the folders may
+    // be reached through a link (/home and /var/home)
+    const QString shipped =
+        QDir(QFile::decodeName(QByteArray::fromStdString(getPluginFolder().string())))
+            .canonicalPath();
+    if (!QFileInfo(identifier).canonicalFilePath().startsWith(shipped + "/")) {
+        m_Runner->addWindowsPluginRoot(identifier);
+    }
+#endif
     return m_Runner->load(identifier);
 }
 
