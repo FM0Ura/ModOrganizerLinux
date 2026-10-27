@@ -1,6 +1,8 @@
 #include "modlistview.h"
 #include <QMimeData>
+#include <QHelpEvent>
 #include <QProxyStyle>
+#include <QToolTip>
 #include <QUrl>
 
 #include <widgetutility.h>
@@ -1418,8 +1420,81 @@ void ModListView::timerEvent(QTimerEvent* event)
   }
 }
 
+std::optional<unsigned int> ModListView::nexusIconModAt(const QPoint& pos) const
+{
+  const auto index = indexAt(pos);
+  if (!index.isValid() || index.column() != ModList::COL_NAME) {
+    return {};
+  }
+
+  bool ok      = false;
+  const int mi = index.data(ModList::IndexRole).toInt(&ok);
+  if (!ok || mi < 0 || mi >= static_cast<int>(ModInfo::getNumMods())) {
+    return {};
+  }
+
+  const auto info = ModInfo::getByIndex(mi);
+  if (!info->isRegular() || info->isSeparator() || info->isOverwrite() ||
+      info->isForeign() || info->isBackup() || info->nexusId() <= 0) {
+    return {};
+  }
+
+  // same option as the one used to paint the item: visualRect() already
+  // includes the shift for collapsible separators
+  auto* delegate = dynamic_cast<ModListStyledItemDelegate*>(itemDelegate());
+  if (!delegate) {
+    return {};
+  }
+  QStyleOptionViewItem opt;
+  initViewItemOption(&opt);
+  delegate->initStyleOption(&opt, index);
+  opt.rect = visualRect(index);
+  if (!(opt.features & QStyleOptionViewItem::HasDecoration)) {
+    return {};
+  }
+
+  const QRect rect =
+      style()->subElementRect(QStyle::SE_ItemViewItemDecoration, &opt, this);
+  if (!rect.contains(pos)) {
+    return {};
+  }
+
+  return static_cast<unsigned int>(mi);
+}
+
+void ModListView::mouseDoubleClickEvent(QMouseEvent* event)
+{
+  if (event->button() == Qt::LeftButton && nexusIconModAt(event->pos())) {
+    event->accept();
+    return;
+  }
+  QTreeView::mouseDoubleClickEvent(event);
+}
+
+bool ModListView::viewportEvent(QEvent* event)
+{
+  if (event->type() == QEvent::ToolTip) {
+    const auto* help = static_cast<QHelpEvent*>(event);
+    if (nexusIconModAt(help->pos())) {
+      QToolTip::showText(help->globalPos(), tr("View Nexus page"), viewport());
+      return true;
+    }
+  }
+  return QTreeView::viewportEvent(event);
+}
+
 void ModListView::mousePressEvent(QMouseEvent* event)
 {
+  // a click on the Nexus page icon only opens the page: no selection, drag
+  // or checkbox toggle
+  if (event->button() == Qt::LeftButton) {
+    if (const auto mi = nexusIconModAt(event->pos())) {
+      event->accept();
+      emit nexusPageRequested(*mi);
+      return;
+    }
+  }
+
   // allow alt+click to select all mods inside a separator
   // when using collapsible separators
   //
@@ -1457,6 +1532,11 @@ void ModListView::mousePressEvent(QMouseEvent* event)
 
 void ModListView::mouseReleaseEvent(QMouseEvent* event)
 {
+  if (event->button() == Qt::LeftButton && nexusIconModAt(event->pos())) {
+    event->accept();
+    return;
+  }
+
   // this is a duplicate of mousePressEvent because for some reason
   // the selection is not always triggered in mousePressEvent and only
   // doing it here create a small lag between the selection of the

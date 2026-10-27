@@ -37,6 +37,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <boost/signals2.hpp>
 #endif
 #include <QVector>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -118,6 +119,11 @@ public:
    * @param profile the profile to use
    **/
   void setProfile(Profile* profile);
+
+  // marks the mod whose Nexus page is shown in the Nexus panel, its icon
+  // is drawn highlighted in the name column
+  //
+  void setNexusPageMod(std::optional<unsigned int> modIndex);
 
   /**
    * @brief retrieve the current sorting mode
@@ -397,6 +403,7 @@ private:
 private:
   OrganizerCore* m_Organizer;
   Profile* m_Profile;
+  std::optional<unsigned int> m_NexusPageMod;
 
   NexusInterface* m_NexusInterface;
   std::set<int> m_RequestIDs;

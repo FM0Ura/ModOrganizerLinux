@@ -116,6 +116,10 @@ signals:
   //
   void dropEntered(const QMimeData* mimeData, bool dropExpanded, DropPosition position);
 
+  // emitted when the Nexus page icon of a mod is clicked
+  //
+  void nexusPageRequested(unsigned int modIndex);
+
 public slots:
 
   // invalidate (refresh) the filter (similar to a layout changed event)
@@ -180,6 +184,13 @@ protected:
   void dropEvent(QDropEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
+  bool viewportEvent(QEvent* event) override;
+
+  // returns the index of the mod whose Nexus page icon is under the given
+  // viewport position, if any
+  //
+  std::optional<unsigned int> nexusIconModAt(const QPoint& pos) const;
   bool event(QEvent* event) override;
 
 protected slots:
