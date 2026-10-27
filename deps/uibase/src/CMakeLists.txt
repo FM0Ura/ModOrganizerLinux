@@ -42,6 +42,7 @@ if (NOT WIN32)
 	set(linux_headers
 		../include/uibase/linux/filetime.h
 		../include/uibase/linux/inifile.h
+		../include/uibase/linux/peicon.h
 		../include/uibase/linux/steam.h
 		../include/uibase/linux/vdf.h
 	)

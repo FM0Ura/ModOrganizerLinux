@@ -3,19 +3,30 @@
 // system error messages and SYSTEMTIME formatting.
 
 #include "log.h"
+#include <uibase/linux/peicon.h>
 #include "peversion_linux.h"
 #include "utility.h"
 
 #include <QDate>
+#include <QBuffer>
 #include <QDateTime>
+#include <QFileInfo>
+#include <QIcon>
+#include <QImage>
+#include <QImageReader>
+#include <QPixmap>
 #include <QLocale>
 #include <QStandardPaths>
 #include <QTime>
 
 #include <cstring>
 #include <format>
+#include <map>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <tuple>
+#include <vector>
 
 namespace MOBase
 {
@@ -100,9 +111,89 @@ QString ToString(const SYSTEMTIME& time)
          locale.toString(t, QLocale::LongFormat);
 }
 
-QIcon iconForExecutable(const QString&)
+namespace details
 {
-  // icons are not extracted from PE resources on Linux
+
+  namespace
+  {
+    struct IconCacheKey
+    {
+      QString path;
+      QDateTime modified;
+      qint64 size;
+
+      bool operator<(const IconCacheKey& o) const
+      {
+        return std::tie(path, modified, size) < std::tie(o.path, o.modified, o.size);
+      }
+    };
+
+    std::vector<QImage> decodeIco(const QByteArray& ico)
+    {
+      std::vector<QImage> images;
+
+      QByteArray bytes = ico;
+      QBuffer buffer(&bytes);
+      if (!buffer.open(QIODevice::ReadOnly)) {
+        return images;
+      }
+
+      QImageReader reader(&buffer, "ico");
+      do {
+        const QImage image = reader.read();
+        if (!image.isNull()) {
+          images.push_back(image);
+        }
+      } while (reader.jumpToNextImage());
+
+      return images;
+    }
+  }  // namespace
+
+  std::vector<QImage> peIconImages(const QString& path)
+  {
+    static std::mutex mutex;
+    static std::map<IconCacheKey, std::vector<QImage>> cache;
+
+    const QFileInfo fi(path);
+    if (!fi.isFile()) {
+      return {};
+    }
+
+    const IconCacheKey key{fi.absoluteFilePath(), fi.lastModified(), fi.size()};
+
+    {
+      std::scoped_lock lock(mutex);
+      const auto itor = cache.find(key);
+      if (itor != cache.end()) {
+        return itor->second;
+      }
+    }
+
+    std::vector<QImage> images;
+    if (const auto ico = readPeIcon(path)) {
+      images = decodeIco(*ico);
+    }
+
+    std::scoped_lock lock(mutex);
+    cache[key] = images;
+    return images;
+  }
+
+}  // namespace details
+
+QIcon iconForExecutable(const QString& filePath)
+{
+  const auto images = details::peIconImages(filePath);
+
+  if (!images.empty()) {
+    QIcon icon;
+    for (const auto& image : images) {
+      icon.addPixmap(QPixmap::fromImage(image));
+    }
+    return icon;
+  }
+
   return QIcon::fromTheme("application-x-executable");
 }
 

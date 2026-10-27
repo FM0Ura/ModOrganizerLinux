@@ -65,7 +65,12 @@ private:
 
   void threadFun();
 
-  void checkCache(Cache& cache);
+  void checkCache(Cache& cache, bool files);
+
+#ifndef _WIN32
+  QPixmap linuxFileIcon(const QString& path) const;
+  QPixmap linuxExtensionIcon(const QString& ext) const;
+#endif
   void queue(Cache& cache, QString path) const;
 
   QVariant fileIcon(const QString& path) const;

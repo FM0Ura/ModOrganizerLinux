@@ -224,6 +224,11 @@ shows the same commit in the `git-subtree-split:` line of the latest squash comm
   except linuxdeploy-plugin-qt's, whose release has none. linuxdeploy runs with the
   container's `patchelf` (0.18, `PATCHELF`): the 0.15 inside linuxdeploy rewrites some
   libraries of Fedora 44 into ones that crash when loaded (`libcrypt.so.2`).
+- **Breeze icons**: `deps/modorganizer/src/resources/mime-*.svg` (the `filetype_*`
+  fallbacks of the Data tab file icons on Linux, used when the icon theme has no such
+  icon) are copies of the 16px `mimetypes` icons of KDE
+  [breeze-icons](https://invent.kde.org/frameworks/breeze-icons) 6.31
+  (LGPL-3.0-or-later), with the `mime-` prefix added to the file names.
 - Dependencies with a `vcpkg.json` (Windows-oriented) are not built through vcpkg on
   Linux; the native build takes system packages instead.
 
