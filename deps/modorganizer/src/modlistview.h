@@ -355,6 +355,9 @@ public:  // member variables
 
   bool m_inDragMoveEvent = false;
 
+  // true between a press consumed by a Nexus page icon and its release
+  bool m_nexusIconPressed = false;
+
   // replace the auto-expand timer from QTreeView to avoid
   // auto-collapsing
   QBasicTimer m_openTimer;

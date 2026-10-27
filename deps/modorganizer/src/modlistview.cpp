@@ -60,6 +60,13 @@ public:
     if (backgroundColor.isValid()) {
       option->backgroundBrush = backgroundColor;
     }
+
+    // group headers (category, Nexus ID) forward the decoration of their
+    // first child: no Nexus page icon on them
+    if (index.column() == ModList::COL_NAME && index.model()->hasChildren(index)) {
+      option->icon = QIcon();
+      option->features &= ~QStyleOptionViewItem::HasDecoration;
+    }
   }
 
   void paint(QPainter* painter, const QStyleOptionViewItem& option,
@@ -1423,7 +1430,8 @@ void ModListView::timerEvent(QTimerEvent* event)
 std::optional<unsigned int> ModListView::nexusIconModAt(const QPoint& pos) const
 {
   const auto index = indexAt(pos);
-  if (!index.isValid() || index.column() != ModList::COL_NAME) {
+  if (!index.isValid() || index.column() != ModList::COL_NAME ||
+      model()->hasChildren(index)) {
     return {};
   }
 
@@ -1465,6 +1473,8 @@ std::optional<unsigned int> ModListView::nexusIconModAt(const QPoint& pos) const
 void ModListView::mouseDoubleClickEvent(QMouseEvent* event)
 {
   if (event->button() == Qt::LeftButton && nexusIconModAt(event->pos())) {
+    // the matching release must be consumed too
+    m_nexusIconPressed = true;
     event->accept();
     return;
   }
@@ -1489,6 +1499,7 @@ void ModListView::mousePressEvent(QMouseEvent* event)
   // or checkbox toggle
   if (event->button() == Qt::LeftButton) {
     if (const auto mi = nexusIconModAt(event->pos())) {
+      m_nexusIconPressed = true;
       event->accept();
       emit nexusPageRequested(*mi);
       return;
@@ -1532,7 +1543,9 @@ void ModListView::mousePressEvent(QMouseEvent* event)
 
 void ModListView::mouseReleaseEvent(QMouseEvent* event)
 {
-  if (event->button() == Qt::LeftButton && nexusIconModAt(event->pos())) {
+  // only consume the release of a press that was consumed by the icon
+  if (event->button() == Qt::LeftButton && m_nexusIconPressed) {
+    m_nexusIconPressed = false;
     event->accept();
     return;
   }
