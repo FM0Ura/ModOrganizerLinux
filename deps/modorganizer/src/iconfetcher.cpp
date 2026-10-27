@@ -63,7 +63,16 @@ QVariant IconFetcher::icon(const QString& path) const
   if (hasOwnIcon(path)) {
     return fileIcon(path);
   } else {
+#ifdef _WIN32
     const auto dot = path.lastIndexOf(".");
+#else
+    // only a dot in the file name, not in a folder name (~/.local, "SkyUI 5.2/README")
+    const auto slash = path.lastIndexOf('/');
+    auto dot         = path.lastIndexOf('.');
+    if (dot < slash) {
+      dot = -1;
+    }
+#endif
 
     if (dot == -1) {
       // no extension
@@ -262,6 +271,15 @@ QPixmap IconFetcher::linuxExtensionIcon(const QString& ext) const
   for (const auto& name : fileicons::mimeIconNames(noDot)) {
     if (QIcon::hasThemeIcon(name)) {
       return QIcon::fromTheme(name).pixmap(m_iconSize);
+    }
+  }
+
+  // no theme icon: the built-in one of the kind of the type (image, text, archive)
+  if (const QString resource = fileicons::mimeFallbackResource(noDot);
+      !resource.isEmpty()) {
+    const QIcon icon(resource);
+    if (!icon.isNull()) {
+      return icon.pixmap(m_iconSize);
     }
   }
 
