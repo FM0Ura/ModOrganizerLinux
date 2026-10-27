@@ -83,6 +83,14 @@ int run(int argc, char* argv[])
   // restarting in the same process crashed in OzoneUtilQt::getQOpenGLContext at the
   // second aboutToQuit of QtWebEngine (STATE.md, manual tests of 2026-10-24, item 1)
   QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+
+  // QtWebEngine (the Nexus page panel, the Nexus tab of the mod information) rendered
+  // black pages from the AppImage: Chromium found no GBM and fell back to a Vulkan
+  // path that did not work (manual tests of 2026-10-27); software rendering is enough
+  // for these pages, unless the user chose other flags
+  if (qEnvironmentVariableIsEmpty("QTWEBENGINE_CHROMIUM_FLAGS")) {
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--disable-gpu");
+  }
 #endif
 
   MOApplication app(argc, argv);
