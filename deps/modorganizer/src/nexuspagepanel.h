@@ -33,6 +33,7 @@ protected:
 
 private:
   void ensureView();
+  QUrl baseUrl() const;
   void showHtml(const QString& html);
   void showEmpty();
   void reloadContent();

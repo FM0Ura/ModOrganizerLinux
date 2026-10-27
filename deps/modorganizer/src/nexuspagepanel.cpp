@@ -7,9 +7,11 @@
 #include "nxmaccessmanager.h"
 #include <utility.h>
 #include <QDateTime>
+#include <QDir>
 #include <QHBoxLayout>
 #include <QShowEvent>
 #include <QUrl>
+#include <QWebEngineSettings>
 #include <QWebEngineView>
 
 using namespace MOBase;
@@ -77,21 +79,28 @@ void NexusPagePanel::ensureView()
   m_View     = new QWebEngineView(this);
   auto* page = new NexusTabWebpage(m_View);
   m_View->setPage(page);
+  page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls,
+                                 true);
   connect(page, &NexusTabWebpage::linkClicked, this, [](const QUrl& url) {
     shell::Open(url);
   });
   m_ViewLayout->addWidget(m_View);
 
   if (!m_Html.isEmpty()) {
-    m_View->setHtml(m_Html);
+    m_View->setHtml(m_Html, baseUrl());
   }
+}
+
+QUrl NexusPagePanel::baseUrl() const
+{
+  return QUrl::fromLocalFile(QDir(m_Cache.cacheDir()).absolutePath() + "/");
 }
 
 void NexusPagePanel::showHtml(const QString& html)
 {
   m_Html = html;
   if (m_View) {
-    m_View->setHtml(m_Html);
+    m_View->setHtml(m_Html, baseUrl());
   }
 }
 

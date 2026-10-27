@@ -16,6 +16,8 @@ class NexusImageCache : public QObject
 public:
   explicit NexusImageCache(QString cacheDir, QObject* parent = nullptr);
 
+  QString cacheDir() const { return m_CacheDir; }
+
   // the absolute path of the cached picture if it exists, else {}
   QString cachedFile(const QString& gameName, int modId,
                      const QString& pictureUrl) const;
