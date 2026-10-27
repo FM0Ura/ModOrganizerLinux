@@ -32,6 +32,8 @@ namespace
   constexpr std::size_t MaxIconGroupEntries   = 64;
   constexpr std::size_t MaxIconImage          = 1u << 20;
   constexpr std::size_t MaxIconGroup          = 6 + 14 * MaxIconGroupEntries;
+  constexpr std::size_t MaxIconFile           = 4u << 20;
+  constexpr std::int64_t MaxIconDimension     = 256;
 
   // little-endian reads from a buffer; the caller checks the bounds
   std::uint16_t u16(const QByteArray& b, std::size_t off)
@@ -353,6 +355,44 @@ namespace
     return readDataEntry(r, tree, res->sections, *entry, MaxVersionResource, true);
   }
 
+  std::uint32_t u32be(const QByteArray& b, std::size_t off)
+  {
+    const auto* p = reinterpret_cast<const unsigned char*>(b.constData()) + off;
+    return (static_cast<std::uint32_t>(p[0]) << 24) |
+           (static_cast<std::uint32_t>(p[1]) << 16) |
+           (static_cast<std::uint32_t>(p[2]) << 8) | static_cast<std::uint32_t>(p[3]);
+  }
+
+  // whether an RT_ICON image is a PNG or a BMP (BITMAPINFOHEADER) of a sane size; the
+  // dimensions are checked here because decoding a small image that declares a huge
+  // size would allocate a lot of memory
+  bool acceptableIconImage(const QByteArray& data)
+  {
+    static const QByteArray pngSignature("\x89PNG\r\n\x1a\n", 8);
+
+    if (data.startsWith(pngSignature)) {
+      // signature, IHDR length and tag, then width and height (big-endian)
+      if (data.size() < 24) {
+        return false;
+      }
+      const std::uint32_t w = u32be(data, 16);
+      const std::uint32_t h = u32be(data, 20);
+      return w >= 1 && w <= MaxIconDimension && h >= 1 && h <= MaxIconDimension;
+    }
+
+    // BITMAPINFOHEADER: biSize, biWidth, biHeight (signed, twice the height: XOR and
+    // AND masks)
+    if (data.size() < 40 || u32(data, 0) < 40) {
+      return false;
+    }
+    const std::int64_t w = static_cast<std::int32_t>(u32(data, 4));
+    std::int64_t h       = static_cast<std::int32_t>(u32(data, 8));
+    if (h < 0) {
+      h = -h;
+    }
+    return w >= 1 && w <= MaxIconDimension && h >= 1 && h <= 2 * MaxIconDimension;
+  }
+
   // .ico file from the first RT_GROUP_ICON and the RT_ICON images it references
   std::optional<QByteArray> readIconFile(Reader& r)
   {
@@ -407,6 +447,7 @@ namespace
       QByteArray data;
     };
     std::vector<Image> images;
+    std::size_t total = 6;  // ICONDIR
 
     for (std::size_t i = 0; i < count; ++i) {
       const std::size_t e = 6 + i * 14;
@@ -426,9 +467,16 @@ namespace
 
       // the real size of the resource, not the declared one
       auto data = readDataEntry(r, tree, res->sections, *entry, MaxIconImage, false);
-      if (!data || data->isEmpty()) {
+      if (!data || data->isEmpty() || !acceptableIconImage(*data)) {
         continue;
       }
+
+      // the whole .ico stays under a limit: ICONDIRENTRY and the image
+      const std::size_t added = 16 + static_cast<std::size_t>(data->size());
+      if (total + added > MaxIconFile) {
+        break;
+      }
+      total += added;
 
       images.push_back({group->mid(e, 8), std::move(*data)});
     }
