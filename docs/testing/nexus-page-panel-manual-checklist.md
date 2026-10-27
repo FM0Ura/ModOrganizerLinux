@@ -22,3 +22,4 @@ Spec: [`../superpowers/specs/2026-10-27-nexus-page-panel-design.md`](../superpow
 - [ ] 11. Refresh com a rede desligada: o conteúdo fica e o estado mostra "Couldn't update: …", sem popup.
 - [ ] 12. Imagem: a primeira abertura baixa para `<cache>/nexus-images/`; a segunda não baixa de novo (o arquivo não muda de data).
 - [ ] 13. Diálogo de informações do mod → aba Nexus mostra a descrição como antes (Tarefa 2).
+- [ ] 14. Pressionar o ícone, mover 5 px com o botão apertado e soltar: nada é arrastado e a seleção não muda (press the icon, move 5 px, release: no drag, selection unchanged).

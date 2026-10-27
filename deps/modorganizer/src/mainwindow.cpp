@@ -2228,7 +2228,9 @@ void MainWindow::readSettings()
   ui->modList->restoreState(s);
 
   {
-    s.geometry().restoreVisibility(ui->leftPanelTabs, false);
+    // the visibility of the filters panel was saved for categoriesGroup before
+    // the tabs existed
+    s.geometry().restoreVisibility(ui->leftPanelTabs, ui->categoriesGroup, false);
     const auto v = ui->leftPanelTabs->isVisible();
     setCategoryListVisible(v);
     ui->displayCategoriesBtn->setChecked(v);

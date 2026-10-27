@@ -1506,6 +1506,8 @@ void ModListView::mousePressEvent(QMouseEvent* event)
     }
   }
 
+  m_nexusIconPressed = false;
+
   // allow alt+click to select all mods inside a separator
   // when using collapsible separators
   //
@@ -1539,6 +1541,17 @@ void ModListView::mousePressEvent(QMouseEvent* event)
         model()->index(model()->rowCount(index) - 1, index.column(), index));
     selectionModel()->select(selection, flag | QItemSelectionModel::Rows);
   }
+}
+
+void ModListView::mouseMoveEvent(QMouseEvent* event)
+{
+  // the press on the icon was not seen by QTreeView: moving with the button held
+  // must not start a drag or a selection from a stale pressed item
+  if (m_nexusIconPressed && (event->buttons() & Qt::LeftButton)) {
+    event->accept();
+    return;
+  }
+  QTreeView::mouseMoveEvent(event);
 }
 
 void ModListView::mouseReleaseEvent(QMouseEvent* event)

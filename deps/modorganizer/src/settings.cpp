@@ -883,6 +883,22 @@ bool GeometrySettings::restoreVisibility(QWidget* w, std::optional<bool> def) co
   return false;
 }
 
+bool GeometrySettings::restoreVisibility(QWidget* w, const QWidget* previous,
+                                         std::optional<bool> def) const
+{
+  if (restoreVisibility(w)) {
+    return true;
+  }
+
+  if (auto v = getOptional<bool>(m_Settings, "Geometry",
+                                 visibilitySettingName(previous), def)) {
+    w->setVisible(*v);
+    return true;
+  }
+
+  return false;
+}
+
 void GeometrySettings::restoreToolbars(QMainWindow* w) const
 {
   // all toolbars have the same size and button style settings
