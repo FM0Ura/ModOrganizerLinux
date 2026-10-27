@@ -1,7 +1,7 @@
 # Ícones de arquivos e executáveis no Linux — Design
 
 - **Data:** 2026-10-27
-- **Status:** aguardando aprovação do usuário
+- **Status:** aprovado pelo usuário (2026-10-27)
 - **Branch (decisão do Claude):** `fix-linux-icons`, a partir de `main` (2485a9f). Separado da aba Nexus (`docs/superpowers/specs/2026-10-27-nexus-page-panel-design.md`), que vem primeiro (sugestão do Claude; o usuário pode inverter).
 
 ## 1. Objetivo e porquê
