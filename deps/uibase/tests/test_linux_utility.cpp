@@ -451,6 +451,54 @@ TEST(FileVersion, MalformedPeIsRejected)
   }
 }
 
+// --- iconForExecutable -------------------------------------------------------------
+
+TEST(IconForExecutable, ImagesFromFixture)
+{
+  if (!QImageReader::supportedImageFormats().contains("ico")) {
+    GTEST_SKIP() << "the ico image format plugin is not available";
+  }
+
+  const auto images = details::peIconImages(fixture("icon.exe"));
+  ASSERT_EQ(images.size(), 2u);
+  QList<QSize> sizes;
+  for (const auto& image : images) {
+    EXPECT_FALSE(image.isNull());
+    sizes.append(image.size());
+  }
+  EXPECT_TRUE(sizes.contains(QSize(16, 16)));
+  EXPECT_TRUE(sizes.contains(QSize(32, 32)));
+}
+
+TEST(IconForExecutable, NoIconGivesNoImages)
+{
+  EXPECT_TRUE(details::peIconImages(fixture("version.exe")).empty());
+  EXPECT_TRUE(details::peIconImages("/nonexistent/missing.exe").empty());
+}
+
+TEST(IconForExecutable, CacheFollowsFileChanges)
+{
+  if (!QImageReader::supportedImageFormats().contains("ico")) {
+    GTEST_SKIP() << "the ico image format plugin is not available";
+  }
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString copy = tmp.filePath("copy.exe");
+  ASSERT_TRUE(QFile::copy(fixture("icon.exe"), copy));
+  EXPECT_EQ(details::peIconImages(copy).size(), 2u);
+
+  const QDateTime before = QFileInfo(copy).lastModified();
+  ASSERT_TRUE(QFile::remove(copy));
+  ASSERT_TRUE(QFile::copy(fixture("version.exe"), copy));
+  QFile f(copy);
+  ASSERT_TRUE(f.open(QIODevice::ReadWrite));
+  ASSERT_TRUE(f.setFileTime(before.addSecs(1), QFileDevice::FileModificationTime));
+  f.close();
+
+  EXPECT_TRUE(details::peIconImages(copy).empty());
+}
+
 // --- PE icons ----------------------------------------------------------------------
 
 TEST(PeIcon, ReadsGroup)

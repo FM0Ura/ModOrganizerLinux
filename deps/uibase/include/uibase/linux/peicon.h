@@ -7,9 +7,11 @@
 #include <uibase/dllimport.h>
 
 #include <QByteArray>
+#include <QImage>
 #include <QString>
 
 #include <optional>
+#include <vector>
 
 namespace MOBase::details
 {
@@ -19,6 +21,11 @@ namespace MOBase::details
 // file cannot be read, is not a PE file, has no icon group or none of its images can be
 // read. At most 64 entries per group and 1 MiB per image are considered.
 QDLLEXPORT std::optional<QByteArray> readPeIcon(const QString& path);
+
+// All the images of the icon embedded in the file (see readPeIcon), decoded with the
+// ico image format plugin; empty if there is none. The result is cached in memory per
+// path, modification time and size (including the "no icon" result); thread safe.
+QDLLEXPORT std::vector<QImage> peIconImages(const QString& path);
 
 }  // namespace MOBase::details
 
