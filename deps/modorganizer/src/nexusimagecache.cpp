@@ -14,6 +14,9 @@ namespace
 {
 // time limit of the response
 constexpr int kTimeoutMs = 30000;
+
+// bigger downloads are aborted
+constexpr qint64 kMaxBytes = 20 * 1024 * 1024;
 }  // namespace
 
 NexusImageCache::NexusImageCache(QString cacheDir, QObject* parent)
@@ -59,6 +62,13 @@ void NexusImageCache::fetch(const QString& gameName, int modId,
     return;
   }
 
+  const QUrl url(pictureUrl);
+  if (url.scheme() != "http" && url.scheme() != "https") {
+    log::debug("nexus image cache: refusing picture url {}", pictureUrl);
+    emit imageFailed(gameName, modId);
+    return;
+  }
+
   if (!QDir().mkpath(m_CacheDir)) {
     log::error("nexus image cache: cannot create {}", m_CacheDir);
     emit imageFailed(gameName, modId);
@@ -67,9 +77,17 @@ void NexusImageCache::fetch(const QString& gameName, int modId,
 
   m_InProgress.insert(path);
 
-  QNetworkRequest request{QUrl(pictureUrl)};
+  QNetworkRequest request{url};
   request.setTransferTimeout(kTimeoutMs);
   QNetworkReply* reply = m_Manager->get(request);
+
+  connect(reply, &QNetworkReply::downloadProgress, this,
+          [reply, pictureUrl](qint64 received, qint64 total) {
+            if (received > kMaxBytes || total > kMaxBytes) {
+              log::debug("nexus image cache: {} is too big", pictureUrl);
+              reply->abort();
+            }
+          });
 
   connect(reply, &QNetworkReply::finished, this, [=, this] {
     reply->deleteLater();

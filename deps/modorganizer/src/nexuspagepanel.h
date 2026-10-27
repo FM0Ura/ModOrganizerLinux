@@ -6,10 +6,28 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QWebEnginePage>
 #include <QWidget>
 
 class NexusImageCache;
 class QWebEngineView;
+
+// the page of the Nexus panel: a clicked link is emitted to be opened outside, and
+// every other navigation (meta refresh, form submit, frames...) is refused, except
+// the load of the HTML set by the panel itself
+class NexusPanelWebpage : public QWebEnginePage
+{
+  Q_OBJECT
+
+public:
+  explicit NexusPanelWebpage(QObject* parent = nullptr) : QWebEnginePage(parent) {}
+
+  bool acceptNavigationRequest(const QUrl& url, QWebEnginePage::NavigationType type,
+                               bool isMainFrame) override;
+
+signals:
+  void linkClicked(const QUrl&);
+};
 
 // The "Nexus" tab of the side panel: picture and description of the selected mod,
 // shown from what is saved and refreshed from Nexus when needed
@@ -42,6 +60,8 @@ private:
   void showHtml(const QString& html);
   void showEmpty();
   void reloadContent();
+  QString pictureFileUrl() const;
+  void showLoginStatus();
   void requestInfo();
   void fetchImage();
   void showNormalStatus();

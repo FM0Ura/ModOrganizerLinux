@@ -16,6 +16,12 @@ TEST(NexusPage, CacheFileExtension)
             "skyrimspecialedition_42.jpg");
 }
 
+TEST(NexusPage, CacheFileGameNameSeparators)
+{
+  EXPECT_EQ(cacheFileName("a/b", 1, "https://x/p.png"), "a_b_1.png");
+  EXPECT_EQ(cacheFileName("a\\b", 1, "https://x/p.png"), "a_b_1.png");
+}
+
 TEST(NexusPage, NeedsImageDownload)
 {
   EXPECT_TRUE(needsImageDownload("u", "", false));

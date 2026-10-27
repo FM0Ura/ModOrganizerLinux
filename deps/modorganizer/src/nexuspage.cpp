@@ -198,7 +198,11 @@ QString cacheFileName(const QString& gameName, int modId, const QString& picture
     ext = QStringLiteral("jpg");
   }
 
-  return gameName + "_" + QString::number(modId) + "." + ext;
+  // the game name must not leave the cache folder
+  QString game = gameName;
+  game.replace('/', '_').replace('\\', '_');
+
+  return game + "_" + QString::number(modId) + "." + ext;
 }
 
 bool needsImageDownload(const QString& pictureUrl, const QString& cachedFromUrl,

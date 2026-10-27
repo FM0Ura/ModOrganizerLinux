@@ -1,6 +1,5 @@
 #include "nexuspagepanel.h"
 #include "bbcode.h"
-#include "modinfodialognexus.h"
 #include "nexusimagecache.h"
 #include "nexusinterface.h"
 #include "nexuspage.h"
@@ -8,6 +7,7 @@
 #include <utility.h>
 #include <QDateTime>
 #include <QDir>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QShowEvent>
 #include <QUrl>
@@ -24,7 +24,25 @@ QString headerHtml(const ModInfo& mod)
       .arg(mod.name().toHtmlEscaped(), mod.author().toHtmlEscaped(),
            mod.version().canonicalString().toHtmlEscaped());
 }
+
+NXMAccessManager* accessManager()
+{
+  return NexusInterface::instance().getAccessManager();
+}
 }  // namespace
+
+bool NexusPanelWebpage::acceptNavigationRequest(const QUrl& url,
+                                                QWebEnginePage::NavigationType type,
+                                                bool isMainFrame)
+{
+  if (type == QWebEnginePage::NavigationTypeLinkClicked) {
+    emit linkClicked(url);
+    return false;
+  }
+
+  // setHtml() loads its content as a typed navigation of the main frame
+  return isMainFrame && type == QWebEnginePage::NavigationTypeTyped;
+}
 
 NexusPagePanel::NexusPagePanel(NexusImageCache& cache, QWidget* parent)
     : QWidget(parent), m_Cache(cache), m_View(nullptr), m_WaitingForLogin(false),
@@ -77,11 +95,13 @@ void NexusPagePanel::ensureView()
   }
 
   m_View     = new QWebEngineView(this);
-  auto* page = new NexusTabWebpage(m_View);
+  auto* page = new NexusPanelWebpage(m_View);
   m_View->setPage(page);
+  // the description is third-party HTML loaded with a file:// base URL
+  page->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled, false);
   page->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls,
                                  true);
-  connect(page, &NexusTabWebpage::linkClicked, this, [](const QUrl& url) {
+  connect(page, &NexusPanelWebpage::linkClicked, this, [](const QUrl& url) {
     shell::Open(url);
   });
   m_ViewLayout->addWidget(m_View);
@@ -151,7 +171,7 @@ void NexusPagePanel::rebindMod(ModInfo::Ptr mod)
   m_ModConnections.append(connect(mod.get(), &ModInfo::nexusRequestFailed, this,
                                   &NexusPagePanel::onRequestFailed));
 
-  if (m_LoadingFromNexus) {
+  if (m_LoadingFromNexus && accessManager()->isValidated()) {
     // the reply would go to the old object: ask again, keeping the running timeout
     mod->requestNexusInfo(nexuspage::panelRequestTag());
   }
@@ -180,21 +200,21 @@ void NexusPagePanel::setMod(ModInfo::Ptr mod)
   m_OpenOnNexus->setEnabled(true);
   m_Refresh->setEnabled(true);
   showNormalStatus();
-  reloadContent();
 
-  if (!NexusInterface::instance().getAccessManager()->validated()) {
+  if (!accessManager()->isValidated()) {
+    // the saved content stays visible; the login message is only for an empty page
     m_WaitingForLogin = true;
     m_Refresh->setEnabled(false);
-    showHtml(nexuspage::pageHtml(
-        QString(), headerHtml(*mod),
-        tr("Log in to Nexus (Settings → Nexus) to see this mod's page.")
-            .toHtmlEscaped()));
+    showLoginStatus();
+    reloadContent();
+  } else if (mod->getNexusDescription().isEmpty() || mod->needsDescriptionUpdate()) {
+    requestInfo();
   } else {
-    if (mod->getNexusDescription().isEmpty() || mod->needsDescriptionUpdate()) {
-      requestInfo();
-    }
-    fetchImage();
+    reloadContent();
   }
+
+  // the picture comes from the CDN, which needs no login
+  fetchImage();
 
   emit modChanged(mod);
 }
@@ -217,18 +237,41 @@ void NexusPagePanel::reloadContent()
   }
 
   QString body;
-  if (m_Mod->getNexusDescription().isEmpty() && m_LoadingFromNexus) {
+  if (m_Mod->getNexusDescription().isEmpty() && m_WaitingForLogin) {
+    body = tr("Log in to Nexus (Settings → Nexus) to see this mod's page.")
+               .toHtmlEscaped();
+  } else if (m_Mod->getNexusDescription().isEmpty() && m_LoadingFromNexus) {
     body = tr("Loading from Nexus…").toHtmlEscaped();
   } else {
     body = BBCode::convertToHTML(m_Mod->getNexusDescription());
   }
 
+  showHtml(nexuspage::pageHtml(pictureFileUrl(), headerHtml(*m_Mod), body));
+}
+
+QString NexusPagePanel::pictureFileUrl() const
+{
   const QString file = m_Cache.cachedFile(m_Mod->gameName(), m_Mod->nexusId(),
                                           m_Mod->getNexusPictureUrl());
-  const QString pictureUrl =
-      file.isEmpty() ? QString() : QUrl::fromLocalFile(file).toString();
+  if (file.isEmpty()) {
+    return {};
+  }
 
-  showHtml(nexuspage::pageHtml(pictureUrl, headerHtml(*m_Mod), body));
+  // the time of the file tells the page apart from one showing an older download
+  QUrl url = QUrl::fromLocalFile(file);
+  url.setQuery(
+      "t=" + QString::number(QFileInfo(file).lastModified().toMSecsSinceEpoch()));
+  return url.toString();
+}
+
+void NexusPagePanel::showLoginStatus()
+{
+  const QString hint = tr("Log in to Nexus (Settings → Nexus) to update this page.");
+  if (m_Mod && !m_Mod->getNexusDescription().isEmpty()) {
+    m_Status->setText(m_Status->text() + " · " + hint);
+  } else {
+    m_Status->setText(hint);
+  }
 }
 
 void NexusPagePanel::requestInfo()
@@ -294,7 +337,7 @@ void NexusPagePanel::onTimeout()
 
 void NexusPagePanel::onRefresh()
 {
-  if (!m_Mod || !NexusInterface::instance().getAccessManager()->validated()) {
+  if (!m_Mod || !accessManager()->isValidated()) {
     return;
   }
   requestInfo();
@@ -318,7 +361,16 @@ void NexusPagePanel::onCredentialsReceived()
 
 void NexusPagePanel::onImageReady(const QString& gameName, int modId)
 {
-  if (m_Mod && m_Mod->gameName() == gameName && m_Mod->nexusId() == modId) {
-    reloadContent();
+  if (!m_Mod || m_Mod->gameName() != gameName || m_Mod->nexusId() != modId) {
+    return;
   }
+
+  // a picture already on the page (cached, emitted at once by fetch()) needs no
+  // reload, which would also lose the scroll position
+  const QString url = pictureFileUrl();
+  if (!url.isEmpty() && m_Html.contains("<img src=\"" + url + "\"")) {
+    return;
+  }
+
+  reloadContent();
 }
