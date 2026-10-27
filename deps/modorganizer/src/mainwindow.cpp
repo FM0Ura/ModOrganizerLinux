@@ -52,7 +52,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "modlistcontextmenu.h"
 #include "modlistviewactions.h"
 #include "motddialog.h"
+#include "nexusimagecache.h"
 #include "nexusinterface.h"
+#include "nexuspagepanel.h"
 #include "nxmaccessmanager.h"
 #include "organizercore.h"
 #include "pluginpaths.h"
@@ -567,6 +569,51 @@ void MainWindow::setupModList()
   connect(m_OrganizerCore.modList(), &ModList::modPrioritiesChanged, [&]() {
     m_ArchiveListWriter.write();
   });
+
+  // Nexus page tab of the left side panel
+  m_NexusImageCache = new NexusImageCache(
+      Settings::instance().paths().cache() + "/nexus-images", this);
+  m_NexusPagePanel = new NexusPagePanel(*m_NexusImageCache, ui->leftPanelTabs);
+
+  {
+    // replace the empty placeholder page of the .ui with the panel
+    QWidget* placeholder = ui->nexusTab;
+    const int i          = ui->leftPanelTabs->indexOf(placeholder);
+    ui->leftPanelTabs->removeTab(i);
+    ui->leftPanelTabs->insertTab(i, m_NexusPagePanel, tr("Nexus"));
+    delete placeholder;
+  }
+
+  connect(ui->modList, &ModListView::nexusPageRequested, this,
+          &MainWindow::showNexusPage);
+  connect(m_NexusPagePanel, &NexusPagePanel::modChanged, this,
+          [this](ModInfo::Ptr mod) {
+            std::optional<unsigned int> index;
+            if (mod) {
+              const auto i = ModInfo::getIndex(mod->name());
+              if (i != UINT_MAX) {
+                index = i;
+              }
+            }
+            m_OrganizerCore.modList()->setNexusPageMod(index);
+          });
+
+  // ModInfo indices can shift whenever the list changes (install, remove, rename,
+  // profile change), so the index kept by the mod list is synchronized afterwards
+  {
+    auto* list = m_OrganizerCore.modList();
+    auto sync  = [this]() {
+      QTimer::singleShot(0, this, [this]() {
+        syncNexusPage();
+      });
+    };
+    connect(list, &QAbstractItemModel::modelReset, this, sync);
+    connect(list, &QAbstractItemModel::rowsInserted, this, sync);
+    connect(list, &QAbstractItemModel::rowsRemoved, this, sync);
+    connect(list, &ModList::modRenamed, this, sync);
+    connect(list, &ModList::modUninstalled, this, sync);
+    connect(&m_OrganizerCore, &OrganizerCore::refreshTriggered, this, sync);
+  }
 }
 
 void MainWindow::resetActionIcons()
@@ -2176,12 +2223,13 @@ void MainWindow::readSettings()
   }
 
   s.widgets().restoreIndex(ui->tabWidget);
+  s.widgets().restoreIndex(ui->leftPanelTabs);
 
   ui->modList->restoreState(s);
 
   {
-    s.geometry().restoreVisibility(ui->categoriesGroup, false);
-    const auto v = ui->categoriesGroup->isVisible();
+    s.geometry().restoreVisibility(ui->leftPanelTabs, false);
+    const auto v = ui->leftPanelTabs->isVisible();
     setCategoryListVisible(v);
     ui->displayCategoriesBtn->setChecked(v);
   }
@@ -2249,7 +2297,7 @@ void MainWindow::storeSettings()
   s.geometry().saveState(ui->splitter);
   s.geometry().saveState(ui->categoriesSplitter);
   s.geometry().saveMainWindowMonitor(this);
-  s.geometry().saveVisibility(ui->categoriesGroup);
+  s.geometry().saveVisibility(ui->leftPanelTabs);
 
   s.geometry().saveState(ui->espList->header());
   s.geometry().saveState(ui->downloadView->header());
@@ -2257,6 +2305,7 @@ void MainWindow::storeSettings()
 
   s.widgets().saveIndex(ui->executablesListBox);
   s.widgets().saveIndex(ui->tabWidget);
+  s.widgets().saveIndex(ui->leftPanelTabs);
 
   m_DataTab->saveState(s);
   ui->modList->saveState(s);
@@ -3779,10 +3828,10 @@ void MainWindow::on_actionChange_Game_triggered()
 void MainWindow::setCategoryListVisible(bool visible)
 {
   if (visible) {
-    ui->categoriesGroup->show();
+    ui->leftPanelTabs->show();
     ui->displayCategoriesBtn->setText(ToQString(L"\u00ab"));
   } else {
-    ui->categoriesGroup->hide();
+    ui->leftPanelTabs->hide();
     ui->displayCategoriesBtn->setText(ToQString(L"\u00bb"));
   }
 }
@@ -3790,6 +3839,47 @@ void MainWindow::setCategoryListVisible(bool visible)
 void MainWindow::on_displayCategoriesBtn_toggled(bool checked)
 {
   setCategoryListVisible(checked);
+}
+
+void MainWindow::showNexusPage(unsigned int modIndex)
+{
+  const ModInfo::Ptr mod = ModInfo::getByIndex(modIndex);
+
+  if (ui->leftPanelTabs->isVisible() &&
+      ui->leftPanelTabs->currentWidget() == m_NexusPagePanel &&
+      m_NexusPagePanel->mod() == mod) {
+    // second click on the icon of the mod being shown: hide the panel
+    ui->displayCategoriesBtn->setChecked(false);
+    return;
+  }
+
+  ui->displayCategoriesBtn->setChecked(true);
+  ui->leftPanelTabs->setCurrentWidget(m_NexusPagePanel);
+  m_NexusPagePanel->setMod(mod);
+}
+
+void MainWindow::syncNexusPage()
+{
+  const ModInfo::Ptr shown = m_NexusPagePanel->mod();
+  if (!shown) {
+    m_OrganizerCore.modList()->setNexusPageMod(std::nullopt);
+    return;
+  }
+
+  const auto index = ModInfo::getIndex(shown->name());
+  if (index == UINT_MAX) {
+    // the mod is gone
+    m_NexusPagePanel->clear();
+    return;
+  }
+
+  const ModInfo::Ptr current = ModInfo::getByIndex(index);
+  if (current == shown) {
+    m_OrganizerCore.modList()->setNexusPageMod(index);
+  } else {
+    // a full refresh recreates the ModInfo objects, follow the mod by its name
+    m_NexusPagePanel->setMod(current);
+  }
 }
 
 void MainWindow::removeFromToolbar(QAction* action)

@@ -43,6 +43,8 @@ class FilterList;
 class DataTab;
 class DownloadsTab;
 class SavesTab;
+class NexusImageCache;
+class NexusPagePanel;
 class BrowserDialog;
 
 class PluginListSortProxy;
@@ -237,6 +239,10 @@ private:
 
   void setCategoryListVisible(bool visible);
 
+  // shows or hides the Nexus page of the given mod in the left side panel
+  void showNexusPage(unsigned int modIndex);
+  void syncNexusPage();
+
   bool errorReported(QString& logFile);
 
   static void setupNetworkProxy(bool activate);
@@ -282,6 +288,8 @@ private:
   std::unique_ptr<DataTab> m_DataTab;
   std::unique_ptr<DownloadsTab> m_DownloadsTab;
   std::unique_ptr<SavesTab> m_SavesTab;
+  NexusImageCache* m_NexusImageCache = nullptr;
+  NexusPagePanel* m_NexusPagePanel   = nullptr;
 
   int m_OldProfileIndex;
 
