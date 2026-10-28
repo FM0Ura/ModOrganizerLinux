@@ -1,7 +1,7 @@
 # Fase 6b — Nexus Collections — Design
 
 - **Data:** 2026-10-25
-- **Status:** em revisão
+- **Status:** substituída por [`2026-10-28-modlists-design.md`](2026-10-28-modlists-design.md) (2026-10-28), que generaliza esta fase (núcleo comum, Skyrim SE, sem exigir Premium, formato próprio `.mo2list`); as decisões daqui valem onde aquela não diz o contrário
 - **Spec geral:** [`2026-10-14-mo2-linux-port-design.md`](2026-10-14-mo2-linux-port-design.md)
 - **Depende de:** Fase 6a (Stellar Blade, [`2026-10-25-phase6a-stellar-blade-design.md`](2026-10-25-phase6a-stellar-blade-design.md)); Fase 4a (Nexus, `nxm://`, keyring).
 - **Divisão (decisão do usuário, 2026-10-25):** fase separada, depois da 6a.
