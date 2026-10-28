@@ -20,10 +20,11 @@ A ideia central (decisão do Claude, apresentada ao usuário em 2026-10-28): tod
 ### 1.1 Fluxo de quem importa
 
 1. Cola a URL de uma Collection, abre um link `nxm://…/collections/…`, ou abre um arquivo `.mo2list` (§6).
-2. Revisa a lista: desmarca o que já tem ou não quer, escolhe o destino (instância nova ou perfil atual).
-3. Baixa: automático com Premium; **sem Premium, o MO2 guia um clique por mod** (§5.1; decisão do usuário, 2026-10-28).
-4. Espera a instalação e recebe o resumo (o que entrou, o que foi reaproveitado, o que falhou).
-5. Abre o jogo com a montagem como o autor deixou: mesmos mods, prioridade, escolhas de FOMOD, ordem de plugins e configurações.
+2. **Escolhe o destino** (decisão do usuário, 2026-10-28: ao importar, o MO2 pergunta): **instância nova** ou **um perfil** desta instância (§5.0).
+3. Revisa a lista: desmarca o que já tem ou não quer.
+4. Baixa: automático com Premium; **sem Premium, o MO2 guia um clique por mod** (§5.1; decisão do usuário, 2026-10-28).
+5. Espera a instalação e recebe o resumo (o que entrou, o que foi reaproveitado, o que falhou).
+6. Abre o jogo com a montagem como o autor deixou: mesmos mods, prioridade, escolhas de FOMOD, ordem de plugins e configurações.
 
 ### 1.2 Fluxo de quem exporta
 
@@ -109,13 +110,22 @@ Um modelo em memória, serializável em JSON (é o `manifest.json` do `.mo2list`
 
 ## 5. Instalador do plano
 
+### 5.0 Destino
+
+A primeira tela do import (de `.mo2list` ou de Collection), antes da janela de revisão, pergunta onde instalar, **sem opção pré-marcada** (decisão do usuário, 2026-10-28):
+
+- **Instância nova:** o MO2 pede o nome (sugestão: o nome da lista) e cria uma instância do mesmo jogo, apontando para a mesma pasta do jogo, com pastas de mods, downloads, perfis e `overwrite` novas. O perfil criado já sai com **INIs locais e saves locais ligados** (decisão do usuário, 2026-10-28), para não mexer nos INIs nem nos saves das outras instâncias do mesmo jogo, que ficam no prefixo do Proton.
+- **Um perfil desta instância:** o usuário escolhe um perfil existente ou cria um perfil novo (decisão do Claude: "perfil novo" é a opção mais segura para quem não quer misturar com a montagem que já tem). Um perfil novo criado pelo import também sai com INIs e saves locais ligados. Num perfil existente, as opções do perfil do usuário não mudam sem perguntar (§5.5).
+
+Nas seções seguintes, "perfil atual" quer dizer o perfil escolhido aqui. Um perfil novo é tratado como uma instância nova quanto à prioridade e à ordem de plugins (só os mods da lista ativos, na ordem do plano), mas os mods que a instância já tem continuam instalados para os outros perfis.
+
 ### 5.1 Downloads
 
 - **Premium:** como na 6b: links diretos da API, pela fila normal, respeitando o limite de downloads simultâneos; conferência de MD5/tamanho quando o plano tiver.
 - **Sem Premium (decisão do usuário, 2026-10-28: "cliques em cada um"):** uma janela de downloads guiados lista os mods pendentes e, um por vez, abre no navegador a página **do arquivo certo** na Nexus (aba de arquivos, com o `fileId`). O usuário clica em "Mod Manager Download"; o link `nxm://` chega ao MO2, que o casa com o item pendente pelo `modId`/`fileId`, põe na fila e abre a página do próximo. Na janela: progresso (N de M), "Abrir de novo", "Pular", e a lista do que falta.
   - Um `nxm://` de um arquivo que não é o pendente: se for de outro item da lista, aceita e marca aquele; se não for da lista, segue o fluxo normal de download do MO2 e não conta como item.
   - O construtor confirma como o link de arquivo da Nexus abre a página no ponto do botão de download; se não houver URL que leve direto ao botão, a página do arquivo basta.
-- **Antes de baixar:** o MO2 procura na pasta de downloads da instância atual um arquivo com o mesmo MD5 (ou mesmo `modId`/`fileId` no `.meta` do download) e o reaproveita (decisão do Claude; vale para Premium e não Premium, e reduz os cliques de quem já tem parte da lista).
+- **Antes de baixar:** os downloads não são compartilhados entre instâncias. Por isso o MO2 procura, na pasta de downloads da instância atual, um arquivo com o mesmo MD5 (ou com o mesmo `modId`/`fileId` no `.meta` do download) e o reaproveita, copiando-o para a instância nova quando esse for o destino (confirmado pelo usuário em 2026-10-28; vale para Premium e não Premium, e reduz os cliques de quem já tem parte da lista).
 - Mods `manual`: aparecem na mesma janela guiada com "Abrir página" e "Escolher arquivo baixado…"; conferência por MD5.
 
 ### 5.2 Instalação de cada mod
