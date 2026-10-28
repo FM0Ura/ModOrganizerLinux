@@ -28,6 +28,7 @@ public:
   virtual void setNewestVersion(const MOBase::VersionInfo&) override {}
   virtual void ignoreUpdate(bool) override {}
   virtual void setNexusDescription(const QString&) override {}
+  virtual void setNexusPictureUrl(const QString&) override {}
   virtual void setInstallationFile(const QString&) override {}
   virtual void addNexusCategory(int) override {}
   virtual void setIsEndorsed(bool) override {}
@@ -68,6 +69,7 @@ public:
   virtual QDateTime getNexusLastModified() const override { return QDateTime(); }
   virtual void setNexusLastModified(QDateTime) override {}
   virtual QString getNexusDescription() const override { return QString(); }
+  virtual QString getNexusPictureUrl() const override { return QString(); }
   virtual void setNexusCategory(int) override {}
   virtual int getNexusCategory() const override { return 0; }
   virtual QString author() const override { return QString(); }

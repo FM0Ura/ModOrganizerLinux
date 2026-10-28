@@ -902,6 +902,11 @@ bool NXMAccessManager::validated() const
   return false;
 }
 
+bool NXMAccessManager::isValidated() const
+{
+  return (m_ValidationState == Valid);
+}
+
 void NXMAccessManager::refuseValidation()
 {
   m_ValidationState = Invalid;

@@ -133,6 +133,11 @@ public:
   void saveVisibility(const QWidget* w);
   bool restoreVisibility(QWidget* w, std::optional<bool> def = {}) const;
 
+  // same, but when nothing is saved for w, reads the setting saved for
+  // `previous`, a widget whose place w took
+  bool restoreVisibility(QWidget* w, const QWidget* previous,
+                         std::optional<bool> def) const;
+
   void saveToolbars(const QMainWindow* w);
   void restoreToolbars(QMainWindow* w) const;
 

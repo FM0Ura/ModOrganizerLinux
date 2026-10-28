@@ -184,6 +184,9 @@ public:
 
   bool validated() const;
 
+  // same as validated(), but never opens the validation progress dialog
+  bool isValidated() const;
+
   bool validateAttempted() const;
   bool validateWaiting() const;
 

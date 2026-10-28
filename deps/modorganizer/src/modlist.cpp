@@ -179,6 +179,19 @@ QString ModList::getConflictFlagText(ModInfo::EConflictFlag flag,
   }
 }
 
+void ModList::setNexusPageMod(std::optional<unsigned int> modIndex)
+{
+  const auto old = m_NexusPageMod;
+  m_NexusPageMod = modIndex;
+
+  for (const auto& row : {old, modIndex}) {
+    if (row && *row < static_cast<unsigned int>(rowCount())) {
+      const QModelIndex idx = index(*row, COL_NAME);
+      emit dataChanged(idx, idx, {Qt::DecorationRole});
+    }
+  }
+}
+
 QVariant ModList::data(const QModelIndex& modelIndex, int role) const
 {
   if (m_Profile == nullptr)
@@ -343,7 +356,21 @@ QVariant ModList::data(const QModelIndex& modelIndex, int role) const
     }
     return result;
   } else if (role == Qt::DecorationRole) {
-    if (column == COL_VERSION) {
+    if (column == COL_NAME) {
+      if (modInfo->isRegular() && !modInfo->isSeparator() && !modInfo->isOverwrite() &&
+          !modInfo->isForeign() && !modInfo->isBackup() && modInfo->nexusId() > 0) {
+        const QIcon icon =
+            QIcon::fromTheme("document-preview", QIcon(":/MO/gui/emblem_notes"));
+        if (m_NexusPageMod && *m_NexusPageMod == modIndex) {
+          // highlighted: the mod whose page is open in the Nexus panel
+          const QSize size = icon.actualSize(QSize(32, 32));
+          QIcon selected;
+          selected.addPixmap(icon.pixmap(size, QIcon::Selected));
+          return selected;
+        }
+        return icon;
+      }
+    } else if (column == COL_VERSION) {
       if (modInfo->updateAvailable()) {
         return QIcon(":/MO/gui/update_available");
       } else if (modInfo->downgradeAvailable()) {

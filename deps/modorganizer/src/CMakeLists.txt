@@ -150,8 +150,10 @@ set(_organizer_launch_sources
 # and the display check of main() (displaycheck_linux.cpp, Phase 4c.2), and the update
 # of the AppImage (selfupdate_linux.cpp, Phase 5)
 set(_organizer_desktop_sources
+	fileicons.cpp
 	linux/displaycheck_linux.cpp
 	linux/nxmhandler_linux.cpp
+	nexuspage.cpp
 	linux/secretstore_linux.cpp
 	linux/selfupdate_linux.cpp)
 
@@ -537,6 +539,8 @@ mo2_add_filter(NAME src/modinfo/dialog GROUPS
 	modinfodialogfwd
 	modinfodialogimages
 	modinfodialognexus
+	nexusimagecache
+	nexuspagepanel
 	modinfodialogtab
 	modinfodialogtextfiles
 )

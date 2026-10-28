@@ -38,6 +38,7 @@ public:
   virtual QDateTime getNexusLastModified() const override { return QDateTime(); }
   virtual void setNexusLastModified(QDateTime) override {}
   virtual QString getNexusDescription() const override { return QString(); }
+  virtual QString getNexusPictureUrl() const override { return QString(); }
   virtual void setNexusCategory(int) override {}
   virtual int getNexusCategory() const override { return 0; }
   virtual QString author() const override { return QString(); }

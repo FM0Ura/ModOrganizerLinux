@@ -4,20 +4,25 @@
 #include <gtest/gtest.h>
 
 #include <cerrno>
+#include <cstdint>
 #include <cstring>
 #include <optional>
 
+#include <QBuffer>
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QRegularExpression>
+#include <QSize>
 #include <QStandardPaths>
 #include <QString>
 #include <QTemporaryDir>
 #include <QUrl>
 
 #include <uibase/errorcodes.h>
+#include <uibase/linux/peicon.h>
 #include <uibase/log.h>
 #include <uibase/registry.h>
 #include <uibase/steamutility.h>
@@ -445,6 +450,216 @@ TEST(FileVersion, MalformedPeIsRejected)
     getFileVersion(path);
     getProductVersion(path);
   }
+}
+
+// --- iconForExecutable -------------------------------------------------------------
+
+TEST(IconForExecutable, ImagesFromFixture)
+{
+  if (!QImageReader::supportedImageFormats().contains("ico")) {
+    GTEST_SKIP() << "the ico image format plugin is not available";
+  }
+
+  const auto images = details::peIconImages(fixture("icon.exe"));
+  ASSERT_EQ(images.size(), 2u);
+  QList<QSize> sizes;
+  for (const auto& image : images) {
+    EXPECT_FALSE(image.isNull());
+    sizes.append(image.size());
+  }
+  EXPECT_TRUE(sizes.contains(QSize(16, 16)));
+  EXPECT_TRUE(sizes.contains(QSize(32, 32)));
+}
+
+TEST(IconForExecutable, NoIconGivesNoImages)
+{
+  EXPECT_TRUE(details::peIconImages(fixture("version.exe")).empty());
+  EXPECT_TRUE(details::peIconImages("/nonexistent/missing.exe").empty());
+}
+
+TEST(IconForExecutable, CacheFollowsFileChanges)
+{
+  if (!QImageReader::supportedImageFormats().contains("ico")) {
+    GTEST_SKIP() << "the ico image format plugin is not available";
+  }
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString copy = tmp.filePath("copy.exe");
+  ASSERT_TRUE(QFile::copy(fixture("icon.exe"), copy));
+  EXPECT_EQ(details::peIconImages(copy).size(), 2u);
+
+  const QDateTime before = QFileInfo(copy).lastModified();
+  ASSERT_TRUE(QFile::remove(copy));
+  ASSERT_TRUE(QFile::copy(fixture("version.exe"), copy));
+  QFile f(copy);
+  ASSERT_TRUE(f.open(QIODevice::ReadWrite));
+  ASSERT_TRUE(f.setFileTime(before.addSecs(1), QFileDevice::FileModificationTime));
+  f.close();
+
+  EXPECT_TRUE(details::peIconImages(copy).empty());
+}
+
+// --- PE icons ----------------------------------------------------------------------
+
+TEST(PeIcon, ReadsGroup)
+{
+  const auto ico = details::readPeIcon(fixture("icon.exe"));
+  ASSERT_TRUE(ico.has_value());
+  ASSERT_GE(ico->size(), 6);
+  EXPECT_EQ(ico->left(6), QByteArray("\0\0\1\0\2\0", 6));
+
+  if (!QImageReader::supportedImageFormats().contains("ico")) {
+    GTEST_SKIP() << "the ico image format plugin is not available";
+  }
+
+  QByteArray bytes = *ico;
+  QBuffer buffer(&bytes);
+  ASSERT_TRUE(buffer.open(QIODevice::ReadOnly));
+  QImageReader reader(&buffer, "ico");
+  ASSERT_EQ(reader.imageCount(), 2);
+
+  QList<QSize> sizes;
+  for (int i = 0; i < reader.imageCount(); ++i) {
+    ASSERT_TRUE(reader.jumpToImage(i));
+    const QImage image = reader.read();
+    ASSERT_FALSE(image.isNull());
+    sizes.append(image.size());
+  }
+  EXPECT_TRUE(sizes.contains(QSize(16, 16)));
+  EXPECT_TRUE(sizes.contains(QSize(32, 32)));
+}
+
+TEST(PeIcon, NoIconResource)
+{
+  EXPECT_FALSE(details::readPeIcon(fixture("version.exe")).has_value());
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString text = tmp.filePath("text.exe");
+  writeFile(text, "this is not a PE file\n");
+  EXPECT_FALSE(details::readPeIcon(text).has_value());
+  EXPECT_FALSE(details::readPeIcon(tmp.filePath("missing.exe")).has_value());
+}
+
+TEST(PeIcon, MalformedIsRejected)
+{
+  const QByteArray pe = readFile(fixture("icon.exe"));
+  ASSERT_FALSE(pe.isEmpty());
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString path = tmp.filePath("bad.exe");
+
+  const auto check = [&](const QByteArray& data) {
+    writeFile(path, data);
+    const auto ico = details::readPeIcon(path);
+    if (ico) {
+      EXPECT_TRUE(ico->startsWith(QByteArray("\0\0\1\0", 4)));
+    }
+  };
+
+  for (qsizetype n = 0; n < pe.size(); n += 7) {
+    check(pe.left(n));
+  }
+
+  for (qsizetype i = 0; i + 4 <= pe.size(); i += 2) {
+    QByteArray bad = pe;
+    bad[i] = bad[i + 1] = bad[i + 2] = bad[i + 3] = char(0xff);
+    check(bad);
+  }
+}
+
+namespace
+{
+
+// sets the IHDR width and height of the `index`-th PNG in `pe` (big-endian)
+void patchPngSize(QByteArray& pe, int index, std::uint32_t size)
+{
+  qsizetype at = -1;
+  for (int i = 0; i <= index; ++i) {
+    at = pe.indexOf("IHDR", at + 1);
+    ASSERT_GE(at, 0);
+  }
+  for (int k = 0; k < 2; ++k) {
+    for (int b = 0; b < 4; ++b) {
+      pe[at + 4 + 4 * k + b] = char((size >> (24 - 8 * b)) & 0xff);
+    }
+  }
+}
+
+// size of the `i`-th ICONDIRENTRY of an .ico
+std::uint32_t icoEntrySize(const QByteArray& ico, int i)
+{
+  const auto* p = reinterpret_cast<const unsigned char*>(ico.constData()) + 6 + 16 * i + 8;
+  return std::uint32_t(p[0]) | (std::uint32_t(p[1]) << 8) | (std::uint32_t(p[2]) << 16) |
+         (std::uint32_t(p[3]) << 24);
+}
+
+}  // namespace
+
+TEST(PeIcon, OversizedImageIsSkipped)
+{
+  const QByteArray pe = readFile(fixture("icon.exe"));
+  ASSERT_FALSE(pe.isEmpty());
+  const auto original = details::readPeIcon(fixture("icon.exe"));
+  ASSERT_TRUE(original.has_value());
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString path = tmp.filePath("big.exe");
+
+  // the first image (16x16) declares 8192x8192: only the second one is left
+  QByteArray one = pe;
+  patchPngSize(one, 0, 8192);
+  writeFile(path, one);
+  const auto ico = details::readPeIcon(path);
+  ASSERT_TRUE(ico.has_value());
+  ASSERT_GE(ico->size(), 6 + 16);
+  EXPECT_EQ(ico->left(6), QByteArray("\0\0\1\0\1\0", 6));
+  EXPECT_EQ(ico->at(6), char(32));  // width of the remaining entry
+  EXPECT_EQ(ico->size(), 6 + 16 + qsizetype(icoEntrySize(*ico, 0)));
+
+  // both oversized: nothing
+  QByteArray both = pe;
+  patchPngSize(both, 0, 8192);
+  patchPngSize(both, 1, 8192);
+  writeFile(path, both);
+  EXPECT_FALSE(details::readPeIcon(path).has_value());
+
+  // zero is not a size either
+  QByteArray zero = pe;
+  patchPngSize(zero, 0, 0);
+  patchPngSize(zero, 1, 0);
+  writeFile(path, zero);
+  EXPECT_FALSE(details::readPeIcon(path).has_value());
+}
+
+TEST(PeIcon, DeclaredSizeIsIgnored)
+{
+  QByteArray pe = readFile(fixture("icon.exe"));
+  ASSERT_FALSE(pe.isEmpty());
+  const auto original = details::readPeIcon(fixture("icon.exe"));
+  ASSERT_TRUE(original.has_value());
+
+  // GRPICONDIRENTRY of the 16x16 image: width, height, colours, reserved, planes (1),
+  // bits (32), then dwBytesInRes
+  const qsizetype entry = pe.indexOf(QByteArray("\x10\x10\0\0\1\0\x20\0", 8));
+  ASSERT_GE(entry, 0);
+  for (int b = 0; b < 4; ++b) {
+    pe[entry + 8 + b] = char(0xff);
+  }
+
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString path = tmp.filePath("declared.exe");
+  writeFile(path, pe);
+
+  const auto ico = details::readPeIcon(path);
+  ASSERT_TRUE(ico.has_value());
+  EXPECT_EQ(*ico, *original);
+  EXPECT_EQ(icoEntrySize(*ico, 0), icoEntrySize(*original, 0));
+  EXPECT_LT(icoEntrySize(*ico, 0), 0x10000u);
 }
 
 // --- Steam -----------------------------------------------------------------------

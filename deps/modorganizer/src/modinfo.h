@@ -872,6 +872,30 @@ public:  // Nexus stuff
   virtual void setNexusDescription(const QString& description) = 0;
 
   /**
+   * @brief Changes the URL of the mod picture on Nexus.
+   *
+   * @param url The picture URL.
+   */
+  virtual void setNexusPictureUrl(const QString& url) = 0;
+
+  /**
+   * @return the URL of the mod picture on Nexus (empty if unknown).
+   */
+  virtual QString getNexusPictureUrl() const = 0;
+
+  /**
+   * @brief Requests the Nexus info of this mod now, ignoring the one day rule.
+   *
+   * @param userData Passed back to the request signals; marks who asked.
+   */
+  virtual void requestNexusInfo(const QVariant& userData) {}
+
+  /**
+   * @return true if the Nexus info is old enough to be requested again.
+   */
+  virtual bool needsDescriptionUpdate() const { return false; }
+
+  /**
    * @return the nexus file status (aka category ID).
    */
   virtual int getNexusFileStatus() const = 0;
@@ -986,6 +1010,13 @@ signals:
    * @param success true if the mod details were updated successfully, false if not.
    */
   void modDetailsUpdated(bool success);
+
+  /**
+   * @brief Emitted when a Nexus request made by the Nexus panel fails.
+   *
+   * @param message The error message.
+   */
+  void nexusRequestFailed(const QString& message);
 
 protected:
   /**
