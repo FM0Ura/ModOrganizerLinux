@@ -427,8 +427,9 @@ void ModlistInstaller::applyExecutables()
     // anything else could make the program or Proton load code from elsewhere
     QStringList environment, dropped;
     for (const auto& variable : exe.environment) {
-      const QString name = variable.section('=', 0, 0).trimmed();
-      if (isAllowedImportedEnv(name)) {
+      const QString name  = variable.section('=', 0, 0).trimmed();
+      const QString value = variable.section('=', 1);
+      if (isAllowedImportedEnv(name, value)) {
         environment.append(restore(variable));
       } else if (!name.isEmpty()) {
         dropped.append(name);

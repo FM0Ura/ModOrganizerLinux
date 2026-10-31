@@ -213,15 +213,34 @@ findReusableDownload(const Source& source,
   return std::nullopt;
 }
 
-bool isAllowedImportedEnv(const QString& name)
+bool isAllowedImportedEnv(const QString& name, const QString& value)
 {
-  static const QRegularExpression allowed(
-      QRegularExpression::anchoredPattern(
-          "DXVK_\\w*|VKD3D_\\w*|PROTON_\\w*|MANGOHUD|MANGOHUD_CONFIG|WINEDLLOVERRIDES|"
-          "WINEDEBUG|WINEESYNC|WINEFSYNC|RADV_PERFTEST|mesa_glthread|"
-          "__GL_SHADER_DISK_CACHE|__GL_SHADER_DISK_CACHE_SKIP_CLEANUP|ENABLE_VKBASALT"),
-      QRegularExpression::CaseInsensitiveOption);
-  return !name.isEmpty() && allowed.match(name).hasMatch();
+  const auto anchored = [](const QString& pattern) {
+    return QRegularExpression(QRegularExpression::anchoredPattern(pattern),
+                              QRegularExpression::CaseInsensitiveOption);
+  };
+  static const QRegularExpression exact = anchored(
+      "PROTON_LOG|PROTON_USE_WINED3D|PROTON_ENABLE_NVAPI|PROTON_NO_ESYNC|"
+      "PROTON_NO_FSYNC|PROTON_HIDE_NVIDIA_GPU|PROTON_ENABLE_WAYLAND|MANGOHUD|"
+      "WINEDEBUG|WINEESYNC|WINEFSYNC|RADV_PERFTEST|mesa_glthread|"
+      "__GL_SHADER_DISK_CACHE|__GL_SHADER_DISK_CACHE_SKIP_CLEANUP|ENABLE_VKBASALT");
+  static const QRegularExpression prefixed = anchored("(DXVK|VKD3D)_\\w*");
+  static const QRegularExpression pathLike = anchored("\\w*_(PATH|FILE|CMD|DIR|DIRS)");
+  // only dll names and load orders, never a path
+  static const QRegularExpression overrides(QRegularExpression::anchoredPattern(
+      "[A-Za-z0-9_.*-]+(,[A-Za-z0-9_.*-]+)*=[nbd]?(,[nbd])*"
+      "(;[A-Za-z0-9_.*-]+(,[A-Za-z0-9_.*-]+)*=[nbd]?(,[nbd])*)*;?"));
+
+  if (name.isEmpty()) {
+    return false;
+  }
+  if (name.compare("WINEDLLOVERRIDES", Qt::CaseInsensitive) == 0) {
+    return overrides.match(value).hasMatch();
+  }
+  if (exact.match(name).hasMatch()) {
+    return true;
+  }
+  return prefixed.match(name).hasMatch() && !pathLike.match(name).hasMatch();
 }
 
 QUrl nexusFilePageUrl(const QString& nexusDomain, int modId, int fileId)

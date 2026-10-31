@@ -231,16 +231,27 @@ TEST(ImportPlan, AllowedImportedEnv)
 {
   for (const char* name :
        {"DXVK_HUD", "dxvk_async", "VKD3D_CONFIG", "PROTON_LOG", "proton_use_wined3d",
-        "PROTON_ENABLE_NVAPI", "MANGOHUD", "mangohud", "MANGOHUD_CONFIG",
-        "WINEDLLOVERRIDES", "WINEDEBUG", "WINEESYNC", "WINEFSYNC", "RADV_PERFTEST",
-        "mesa_glthread", "__GL_SHADER_DISK_CACHE",
-        "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "ENABLE_VKBASALT"}) {
-    EXPECT_TRUE(isAllowedImportedEnv(name)) << name;
+        "PROTON_ENABLE_NVAPI", "PROTON_NO_ESYNC", "PROTON_NO_FSYNC",
+        "PROTON_HIDE_NVIDIA_GPU", "PROTON_ENABLE_WAYLAND", "MANGOHUD", "mangohud",
+        "WINEDEBUG", "WINEESYNC", "WINEFSYNC", "RADV_PERFTEST", "mesa_glthread",
+        "__GL_SHADER_DISK_CACHE", "__GL_SHADER_DISK_CACHE_SKIP_CLEANUP",
+        "ENABLE_VKBASALT"}) {
+    EXPECT_TRUE(isAllowedImportedEnv(name, "1")) << name;
   }
   for (const char* name :
        {"PROTONPATH", "WINEPREFIX", "WINELOADER", "WINEDLLPATH",
         "STEAM_COMPAT_DATA_PATH", "VK_ICD_FILENAMES", "LD_PRELOAD", "PATH", "GAMEID",
-        "SteamAppId", "MANGOHUD_DLSYM", "XDG_DATA_DIRS", "PYTHONPATH", "", "DXVK"}) {
-    EXPECT_FALSE(isAllowedImportedEnv(name)) << name;
+        "SteamAppId", "PROTON_REMOTE_DEBUG_CMD", "PROTON_LOG_DIR", "DXVK_CONFIG_FILE",
+        "DXVK_LOG_PATH", "VKD3D_SHADER_CACHE_PATH", "DXVK_STATE_CACHE_DIR",
+        "MANGOHUD_CONFIG", "MANGOHUD_DLSYM", "XDG_DATA_DIRS", "PYTHONPATH", "", "DXVK"}) {
+    EXPECT_FALSE(isAllowedImportedEnv(name, "1")) << name;
   }
+
+  EXPECT_TRUE(isAllowedImportedEnv("WINEDLLOVERRIDES", "dinput8=n,b"));
+  EXPECT_TRUE(isAllowedImportedEnv("WINEDLLOVERRIDES", "d3d11,dxgi=n;xinput1_3=b;"));
+  EXPECT_TRUE(isAllowedImportedEnv("WINEDLLOVERRIDES", "winemenubuilder.exe=d"));
+  EXPECT_TRUE(isAllowedImportedEnv("WINEDLLOVERRIDES", "mscoree="));
+  EXPECT_FALSE(isAllowedImportedEnv("WINEDLLOVERRIDES", "/tmp/x.dll=n"));
+  EXPECT_FALSE(isAllowedImportedEnv("WINEDLLOVERRIDES", "C:\\x.dll=n"));
+  EXPECT_FALSE(isAllowedImportedEnv("WINEDLLOVERRIDES", ""));
 }

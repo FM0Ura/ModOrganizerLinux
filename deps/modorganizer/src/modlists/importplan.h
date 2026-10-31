@@ -101,11 +101,15 @@ findReusableDownload(const Source& source,
                      const std::function<QString(const QString& path)>& md5Of);
 
 // True for an environment variable an imported executable may keep (an allowlist,
-// case-insensitive): DXVK_*, VKD3D_*, PROTON_* (not PROTONPATH), MANGOHUD,
-// MANGOHUD_CONFIG, WINEDLLOVERRIDES, WINEDEBUG, WINEESYNC, WINEFSYNC, RADV_PERFTEST,
-// mesa_glthread, __GL_SHADER_DISK_CACHE, __GL_SHADER_DISK_CACHE_SKIP_CLEANUP and
-// ENABLE_VKBASALT. Anything else could point the program or Proton elsewhere.
-bool isAllowedImportedEnv(const QString& name);
+// names case-insensitive):
+// - DXVK_* and VKD3D_*, except names ending in _PATH, _FILE, _CMD, _DIR or _DIRS;
+// - PROTON_LOG, PROTON_USE_WINED3D, PROTON_ENABLE_NVAPI, PROTON_NO_ESYNC,
+//   PROTON_NO_FSYNC, PROTON_HIDE_NVIDIA_GPU, PROTON_ENABLE_WAYLAND;
+// - MANGOHUD, WINEDEBUG, WINEESYNC, WINEFSYNC, RADV_PERFTEST, mesa_glthread,
+//   __GL_SHADER_DISK_CACHE, __GL_SHADER_DISK_CACHE_SKIP_CLEANUP, ENABLE_VKBASALT;
+// - WINEDLLOVERRIDES when the value is only "dll,dll=n,b;..." (no paths).
+// Anything else could point the program or Proton elsewhere.
+bool isAllowedImportedEnv(const QString& name, const QString& value);
 
 // NOTE: this URL has not been confirmed in a browser yet; it must be checked
 // manually (manual checklist, Task 12): it has to open the file with the
