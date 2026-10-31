@@ -491,6 +491,7 @@ TEST(NxmHandlerRegistration, Mo2listIsRegisteredWithTheHandler)
   ASSERT_TRUE(xml.open(QIODevice::ReadOnly));
   EXPECT_TRUE(QString::fromUtf8(xml.readAll()).contains("*.mo2list"));
   EXPECT_TRUE(t.calls().contains("update-mime-database "));
+  EXPECT_EQ(t.calls().count("update-desktop-database "), 1);
   EXPECT_TRUE(t.calls().contains(
       "xdg-mime default org.modorganizer.ModOrganizer2.mo2list.desktop "
       "application/x-mo2list"));

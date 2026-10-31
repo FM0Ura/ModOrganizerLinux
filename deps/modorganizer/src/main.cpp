@@ -15,7 +15,6 @@
 #include "linux/displaycheck_linux.h"
 #include "linux/selfupdate_linux.h"
 #include <QProcessEnvironment>
-#include <QTimer>
 #endif
 
 using namespace MOBase;
@@ -176,12 +175,10 @@ int run(int argc, char* argv[])
         return *r;
       }
 
-      // a .mo2list given on the command line goes through the same path as one
-      // forwarded by another instance, once the main window is up
+      // a .mo2list given on the command line is imported once the main window is up
+      // (cl.clear() on a restart drops it, and run() uses it only once)
       if (const auto list = cl.mo2listPath()) {
-        QTimer::singleShot(0, &app, [&app, path = *list] {
-          app.externalMessage(path);
-        });
+        app.setStartupMo2list(*list);
       }
 
       // run the main window

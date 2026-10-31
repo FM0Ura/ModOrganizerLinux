@@ -57,6 +57,9 @@ public:
   //
   int run(MOMultiProcess& multiProcess);
 
+  // a .mo2list to import after the main window of the next run() is shown; used once
+  void setStartupMo2list(const QString& path);
+
   // called from main() when MO "restarts", must clean up everything so setup()
   // starts fresh
   //
@@ -85,6 +88,7 @@ private:
   QString m_defaultStyle;
   std::unique_ptr<env::ModuleNotification> m_modules;
 
+  QString m_startupMo2list;
   std::shared_ptr<Instance> m_instance;
   std::unique_ptr<Settings> m_settings;
   std::unique_ptr<NexusInterface> m_nexus;

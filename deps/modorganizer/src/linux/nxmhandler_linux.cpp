@@ -147,28 +147,34 @@ namespace
       return;
     }
 
-    QString error;
-    if (!writeFile(mo2listDesktopFilePath(), content, error) ||
-        !writeFile(mo2listMimePackagePath(), mo2listMimeXml(), error)) {
-      MOBase::log::warn("cannot register Mod Organizer for .mo2list files: {}", error);
-      done();
-      return;
-    }
+    // the query first, so that nothing is written on a host without xdg-mime
+    run(query, [force, content, done](bool ok, const QString& current,
+                                      const QString& queryError) {
+      if (!ok) {
+        MOBase::log::warn("cannot register Mod Organizer for .mo2list files: {}",
+                          queryError);
+        done();
+        return;
+      }
 
-    // the default handler is set after the MIME database is updated, with the same
-    // rule as nxm links
-    auto setDefault = [force, query, done] {
-      run(query, [force, done](bool ok, const QString& current, const QString& error) {
-        if (!ok) {
-          MOBase::log::warn("cannot register Mod Organizer for .mo2list files: {}",
-                            error);
-          done();
-          return;
-        }
+      QString error;
+      if (!writeFile(mo2listDesktopFilePath(), content, error) ||
+          !writeFile(mo2listMimePackagePath(), mo2listMimeXml(), error)) {
+        MOBase::log::warn("cannot register Mod Organizer for .mo2list files: {}",
+                          error);
+        done();
+        return;
+      }
 
-        // the same rule as nxm links; nothing to do when it is already ours
-        if (decide(current, force) != Action::WriteFileAndSetDefault) {
-          MOBase::log::debug(".mo2list files are handled by {}, not changed", current);
+      // the default handler is set after the MIME database is updated, with the same
+      // rule as nxm links (nothing to do when it is already ours)
+      const bool setIt = decide(current, force) == Action::WriteFileAndSetDefault;
+      if (!setIt) {
+        MOBase::log::debug(".mo2list files are handled by {}, not changed", current);
+      }
+
+      auto setDefault = [setIt, done] {
+        if (!setIt) {
           done();
           return;
         }
@@ -190,26 +196,26 @@ namespace
           }
           done();
         });
-      });
-    };
+      };
 
-    vfsbridge::Command update;
-    try {
-      update = updateMimeDatabaseCommand(mimeDir());
-    } catch (const std::exception& e) {
-      MOBase::log::warn("update-mime-database not run: {}", e.what());
-      setDefault();
-      return;
-    }
-
-    run(update, [setDefault](bool ok, const QString&, const QString& error) {
-      if (!ok) {
-        // the menu entry keeps working without it
-        MOBase::log::warn("update-mime-database failed, .mo2list files may not be "
-                          "recognized until the MIME database is updated: {}",
-                          error);
+      vfsbridge::Command update;
+      try {
+        update = updateMimeDatabaseCommand(mimeDir());
+      } catch (const std::exception& e) {
+        MOBase::log::warn("update-mime-database not run: {}", e.what());
+        setDefault();
+        return;
       }
-      setDefault();
+
+      run(update, [setDefault](bool ok, const QString&, const QString& error) {
+        if (!ok) {
+          // the menu entry keeps working without it
+          MOBase::log::warn("update-mime-database failed, .mo2list files may not be "
+                            "recognized until the MIME database is updated: {}",
+                            error);
+        }
+        setDefault();
+      });
     });
   }
 
@@ -429,7 +435,7 @@ static void registerNxm(bool force, Done done)
         }
 
         if (action == Action::WriteFile) {
-          updateDatabase(done);
+          done(true, {});
           return;
         }
 
@@ -447,7 +453,7 @@ static void registerNxm(bool force, Done done)
             return;
           }
           MOBase::log::debug("Mod Organizer is now the handler of nxm links");
-          updateDatabase(done);
+          done(true, {});
         });
       });
 }
@@ -456,14 +462,15 @@ void registerHandler(bool force, Done done)
 {
   registerNxm(force, [force, done](bool ok, const QString& message) {
     if (!ok) {
-      done(false, message);
-      return;
+      MOBase::log::warn("cannot register Mod Organizer for nxm links: {}", message);
     }
 
-    // after the nxm handler, whose result does not depend on this one
-    // (and its own update-desktop-database, which refreshes the MIME cache)
-    registerMo2list(force, [done] {
-      updateDatabase(done);
+    // independent of the nxm result, which is what `done` gets
+    registerMo2list(force, [done, ok, message] {
+      // once, for both desktop files
+      updateDatabase([done, ok, message](bool, const QString&) {
+        done(ok, message);
+      });
     });
   });
 }
