@@ -66,6 +66,7 @@ private:
   void refreshPreview();
   void queueRefresh();
 
+  void showWarnings(const std::vector<ExportWarning>& warnings);
   void setBusy(bool busy);
   void save();
   // fillMd5() off the GUI thread with a cancellable progress dialog; false if

@@ -7,6 +7,7 @@
 #include <uibase/log.h>
 #include <uibase/utility.h>
 
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QDir>
 #include <QDirIterator>
@@ -38,6 +39,23 @@ namespace
 
   // the relative path of an overwrite file, on its tree item
   constexpr int RelativePathRole = Qt::UserRole;
+
+  // a progress dialog that does not hide when cancelled: Escape and the close button
+  // only emit canceled()
+  class CancellingProgress : public QProgressDialog
+  {
+  public:
+    using QProgressDialog::QProgressDialog;
+
+    void reject() override { emit canceled(); }
+
+  protected:
+    void closeEvent(QCloseEvent* event) override
+    {
+      event->ignore();
+      emit canceled();
+    }
+  };
 
   // runs `work` on another thread and returns when it is done, the GUI responsive
   // meanwhile; `tick` runs on the GUI thread every 100 ms
@@ -280,19 +298,15 @@ void ExportDialog::refreshPreview()
       buildExport(withPendingMd5(m_mods), m_plugins, m_inis, m_executables, m_config,
                   m_markers, m_overwriteDir, o, m_base);
 
-  ui->bundledWarning->setVisible(std::any_of(m_mods.begin(), m_mods.end(), [&](auto& m) {
-    return isExported(m, o) && !hasNexusFiles(m) && m.nonNexus == NonNexusChoice::Bundled;
-  }));
+  // overwrite files are bundled too
+  ui->bundledWarning->setVisible(
+      !o.overwriteFiles.empty() ||
+      std::any_of(m_mods.begin(), m_mods.end(), [&](auto& m) {
+        return isExported(m, o) && !hasNexusFiles(m) &&
+               m.nonNexus == NonNexusChoice::Bundled;
+      }));
 
-  ui->warningsList->clear();
-  for (const auto& w : r.warnings) {
-    ui->warningsList->addItem(warningText(w));
-  }
-  if (r.warnings.empty()) {
-    ui->warningsList->addItem(tr("No warnings."));
-  }
-  ui->tabs->setTabText(ui->tabs->indexOf(ui->warningsTab),
-                       tr("Warnings (%1)").arg(r.warnings.size()));
+  showWarnings(r.warnings);
 
   ui->executablesText->setPlainText(executablesReport(r.package.plan.executables));
 
@@ -306,6 +320,19 @@ void ExportDialog::refreshPreview()
           .arg(r.excludedCount)
           .arg(localizedByteSize(
               static_cast<unsigned long long>(packageSize(r.package)))));
+}
+
+void ExportDialog::showWarnings(const std::vector<ExportWarning>& warnings)
+{
+  ui->warningsList->clear();
+  for (const auto& w : warnings) {
+    ui->warningsList->addItem(warningText(w));
+  }
+  if (warnings.empty()) {
+    ui->warningsList->addItem(tr("No warnings."));
+  }
+  ui->tabs->setTabText(ui->tabs->indexOf(ui->warningsTab),
+                       tr("Warnings (%1)").arg(warnings.size()));
 }
 
 void ExportDialog::setBusy(bool busy)
@@ -352,15 +379,35 @@ void ExportDialog::save()
     }
   }
 
+  // the missing MD5 the preview already showed (archives not in the downloads folder)
+  const auto noMd5 = [](const ExportResult& result) {
+    return std::count_if(result.warnings.begin(), result.warnings.end(), [](auto& w) {
+      return w.kind == ExportWarning::Kind::NoMd5;
+    });
+  };
+  const auto expected =
+      noMd5(buildExport(withPendingMd5(m_mods), m_plugins, m_inis, m_executables,
+                        m_config, m_markers, m_overwriteDir, o, m_base));
+
   if (!computeMd5(o)) {
     return;
   }
 
   const ExportResult r = buildExport(m_mods, m_plugins, m_inis, m_executables, m_config,
                                      m_markers, m_overwriteDir, o, m_base);
-  // shows the warnings of the final package (an archive that could not be read has
-  // no MD5)
-  refreshPreview();
+  showWarnings(r.warnings);
+
+  const auto failed = noMd5(r) - expected;
+  if (failed > 0 &&
+      QMessageBox::question(
+          this, tr("Export modlist"),
+          tr("%1 archive(s) could not be checksummed; the importer cannot verify those "
+             "downloads. Save anyway?")
+              .arg(failed),
+          QMessageBox::Save | QMessageBox::Cancel,
+          QMessageBox::Cancel) != QMessageBox::Save) {
+    return;
+  }
 
   if (!confirmLeaks(r.package)) {
     return;
@@ -378,15 +425,21 @@ bool ExportDialog::computeMd5(const ExportOptions& options)
   std::atomic<bool> cancelled{false};
   std::atomic<int> done{0}, total{0};
 
-  QProgressDialog progress(tr("Computing the checksums of the archives..."),
-                           tr("Cancel"), 0, 0, this);
+  CancellingProgress progress(tr("Computing the checksums of the archives..."),
+                              QString(), 0, 0, this);
+  auto* cancel = new QPushButton(tr("Cancel"));
+  progress.setCancelButton(cancel);
   progress.setWindowTitle(tr("Export modlist"));
   progress.setWindowModality(Qt::WindowModal);
   progress.setMinimumDuration(0);
   progress.setAutoClose(false);
   progress.setAutoReset(false);
+  // stays visible until the worker stops (after the archive it is hashing)
+  disconnect(&progress, SIGNAL(canceled()), &progress, SLOT(cancel()));
   connect(&progress, &QProgressDialog::canceled, this, [&] {
     cancelled = true;
+    progress.setLabelText(tr("Cancelling..."));
+    cancel->setEnabled(false);
   });
   progress.show();
 

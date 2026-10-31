@@ -39,9 +39,14 @@ QString executablesReport(const std::vector<ExecutableEntry>& executables);
 // $USER, or the last component of `home` when it is empty
 QString leakUserName(const QString& envUser, const QString& home);
 
+// bundled files larger than this are not scanned for leaks
+inline constexpr qint64 MaxLeakScanSize = qint64(2) << 20;
+
 // findLeaks() on every profile file ("profile/<name>"), on the binary, arguments,
-// working directory and environment (one line per variable) of every executable, and
-// on the README
+// working directory and environment (one line per variable) of every executable, on
+// the README, on the manifest ("manifest.json") and on every bundled file that looks
+// like text ("bundled/<path inside bundled/>": at most MaxLeakScanSize bytes, no NUL
+// byte in its first 8 KiB; UTF-8, or Latin-1 when it is not valid UTF-8)
 std::vector<Leak> findPackageLeaks(const PackageInput& package, const QString& userName,
                                    const QString& home);
 

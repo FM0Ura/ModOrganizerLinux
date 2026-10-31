@@ -74,7 +74,14 @@ TEST(ExportReview, FindsLeaksInInisExecutablesAndReadme)
   in.plan.executables.push_back(e);
   in.readme = "made by me\n";
 
-  const auto leaks = findPackageLeaks(in, "alice", "/home/alice");
+  // the manifest repeats the executables; it is checked in FindsLeaksInManifest
+  const auto withoutManifest = [](std::vector<Leak> leaks) {
+    std::erase_if(leaks, [](const Leak& l) {
+      return l.file == "manifest.json";
+    });
+    return leaks;
+  };
+  const auto leaks = withoutManifest(findPackageLeaks(in, "alice", "/home/alice"));
   ASSERT_EQ(leaks.size(), 3u);
 
   bool ini = false, args = false, env = false;
@@ -92,7 +99,69 @@ TEST(ExportReview, FindsLeaksInInisExecutablesAndReadme)
   EXPECT_TRUE(env);
 
   in.readme = "ask alice\n";
-  EXPECT_EQ(findPackageLeaks(in, "alice", "/home/alice").size(), 4u);
+  EXPECT_EQ(withoutManifest(findPackageLeaks(in, "alice", "/home/alice")).size(), 4u);
+}
+
+TEST(ExportReview, FindsLeaksInManifest)
+{
+  PackageInput in;
+  ModEntry m;
+  m.name = "Local";
+  Source s;
+  s.kind = SourceKind::Manual;
+  s.url  = "file:///home/alice/x";
+  m.sources = {s};
+  in.plan.mods.push_back(m);
+
+  const auto leaks = findPackageLeaks(in, "alice", "/home/alice");
+  ASSERT_EQ(leaks.size(), 1u);
+  EXPECT_EQ(leaks[0].file, "manifest.json");
+  EXPECT_TRUE(leaks[0].excerpt.contains("file:///home/alice/x"));
+
+  in.plan.mods[0].sources[0].url = "https://example.com/x";
+  EXPECT_TRUE(findPackageLeaks(in, "alice", "/home/alice").empty());
+}
+
+TEST(ExportReview, FindsLeaksInBundledText)
+{
+  QTemporaryDir tmp;
+  const auto write = [&](const QString& name, const QByteArray& data) {
+    const QString path = tmp.filePath(name);
+    QFile f(path);
+    EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(data);
+    return path;
+  };
+
+  PackageInput in;
+  in.bundledFiles.push_back(
+      {"Mine-1234abcd/notes.txt", write("notes.txt", "first\nsee /home/alice/mods\n")});
+  // binary: a NUL byte in the first 8 KiB
+  in.bundledFiles.push_back(
+      {"Mine-1234abcd/data.bin",
+       write("data.bin", QByteArray("ab\0cd /home/alice/x\n", 20))});
+  // not valid UTF-8: read as Latin-1
+  in.bundledFiles.push_back(
+      {"Mine-1234abcd/latin.ini",
+       write("latin.ini", "[C\xe2" "mara]\npath=/home/alice/y\n")});
+  // too large to scan
+  QByteArray big(static_cast<qsizetype>(MaxLeakScanSize) + 1, 'x');
+  big.prepend("/home/alice/z\n");
+  in.bundledFiles.push_back({"Mine-1234abcd/big.txt", write("big.txt", big)});
+
+  const auto leaks = findPackageLeaks(in, "alice", "/home/alice");
+  std::vector<Leak> bundled;
+  for (const auto& l : leaks) {
+    if (l.file.startsWith("bundled/")) {
+      bundled.push_back(l);
+    }
+  }
+  ASSERT_EQ(bundled.size(), 2u);
+  EXPECT_EQ(bundled[0].file, "bundled/Mine-1234abcd/notes.txt");
+  EXPECT_EQ(bundled[0].line, 2);
+  EXPECT_EQ(bundled[1].file, "bundled/Mine-1234abcd/latin.ini");
+  EXPECT_EQ(bundled[1].line, 2);
+  EXPECT_TRUE(bundled[1].excerpt.contains("/home/alice/y"));
 }
 
 TEST(ExportReview, PendingMd5OnlyForArchivesPresent)

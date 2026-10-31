@@ -2,10 +2,12 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 
 #include <algorithm>
+#include <optional>
 
 namespace modlists
 {
@@ -22,6 +24,25 @@ namespace
   {
     out.insert(out.end(), std::make_move_iterator(leaks.begin()),
                std::make_move_iterator(leaks.end()));
+  }
+
+  // the text of a bundled file that looks like text: at most MaxLeakScanSize bytes and
+  // no NUL byte in the first 8 KiB; UTF-8, or Latin-1 when it is not valid UTF-8
+  std::optional<QString> bundledText(const QString& path)
+  {
+    QFile file(path);
+    if (file.size() > MaxLeakScanSize || !file.open(QIODevice::ReadOnly)) {
+      return {};
+    }
+    const QByteArray data = file.readAll();
+    if (data.left(8 * 1024).contains('\0')) {
+      return {};
+    }
+    const QString utf8 = QString::fromUtf8(data);
+    if (utf8.contains(QChar::ReplacementCharacter)) {
+      return QString::fromLatin1(data);
+    }
+    return utf8;
   }
 
 }  // namespace
@@ -165,6 +186,19 @@ std::vector<Leak> findPackageLeaks(const PackageInput& package, const QString& u
   }
 
   append(out, findLeaks("README.md", package.readme, userName, home));
+
+  // the manifest holds the links and names the author typed
+  append(out, findLeaks("manifest.json",
+                        QString::fromUtf8(QJsonDocument(toJson(package.plan)).toJson()),
+                        userName, home));
+
+  for (const auto& [inside, disk] : package.bundledFiles) {
+    const auto text = bundledText(disk);
+    if (text) {
+      append(out, findLeaks("bundled/" + inside, *text, userName, home));
+    }
+  }
+
   return out;
 }
 
