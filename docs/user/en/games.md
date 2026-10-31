@@ -1,6 +1,6 @@
 # Games and tools that work
 
-[Português](../pt-BR/games.md) · **English** · Previous: [Updating](updating.md) · Next: [Troubleshooting](troubleshooting.md)
+[Português](../pt-BR/games.md) · **English** · Previous: [Updating](updating.md) · Next: [Modlists](modlists.md)
 
 ## Working games
 
@@ -133,4 +133,4 @@ pending); the other games are supported, not validated (automated tests only). A
 file above 4 GiB is not created (the reason goes to the log:
 `failed to write archive <path>: <message>`).
 
-Next: [Troubleshooting](troubleshooting.md).
+Next: [Modlists](modlists.md).

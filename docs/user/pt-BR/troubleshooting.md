@@ -1,6 +1,6 @@
 # Problemas conhecidos e solução de problemas
 
-**Português** · [English](../en/troubleshooting.md) · Anterior: [Jogos](games.md)
+**Português** · [English](../en/troubleshooting.md) · Anterior: [Modlists](modlists.md)
 
 ## Não abre
 
