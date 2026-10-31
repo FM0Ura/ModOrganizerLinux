@@ -1,5 +1,7 @@
 #include "importplan.h"
 
+#include <QRegularExpression>
+
 #include <algorithm>
 
 namespace modlists
@@ -209,6 +211,16 @@ findReusableDownload(const Source& source,
     }
   }
   return std::nullopt;
+}
+
+bool isUnsafeImportedEnv(const QString& name)
+{
+  static const QRegularExpression unsafe(
+      QRegularExpression::anchoredPattern(
+          "LD_.*|BASH_ENV|ENV|GCONV_PATH|PATH|PYTHON.*|PERL.*|.*_PLUGIN_PATH|GIO_.*|"
+          "GTK.*MODULES|QT_PLUGIN_PATH|XDG_.*"),
+      QRegularExpression::CaseInsensitiveOption);
+  return !name.isEmpty() && unsafe.match(name).hasMatch();
 }
 
 QUrl nexusFilePageUrl(const QString& nexusDomain, int modId, int fileId)

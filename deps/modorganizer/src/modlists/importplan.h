@@ -100,6 +100,13 @@ findReusableDownload(const Source& source,
                      const std::vector<DownloadCandidate>& candidates,
                      const std::function<QString(const QString& path)>& md5Of);
 
+// True for an environment variable of an imported executable that could make the
+// program load code from elsewhere (case-insensitive): LD_*, BASH_ENV, ENV,
+// GCONV_PATH, PATH, PYTHON*, PERL*, *_PLUGIN_PATH, GIO_*, GTK*MODULES (GTK_MODULES,
+// GTK3_MODULES...), QT_PLUGIN_PATH and XDG_*. WINE*, PROTON_*, DXVK_*, VKD3D_* and
+// the rest are kept.
+bool isUnsafeImportedEnv(const QString& name);
+
 // NOTE: this URL has not been confirmed in a browser yet; it must be checked
 // manually (manual checklist, Task 12): it has to open the file with the
 // "Mod Manager Download" button.

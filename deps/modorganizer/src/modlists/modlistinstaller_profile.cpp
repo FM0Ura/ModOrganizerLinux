@@ -391,9 +391,12 @@ void ModlistInstaller::applyExecutables()
     return fromMarkers(s, markers);
   };
 
-  // the program of an imported executable is in the game or in the instance
+  // the program of an imported executable is in the game, the instance, or the mods
+  // and overwrite folders of the instance (which can be set outside of it)
   QStringList roots;
-  for (const auto& dir : {markers.game, markers.instance}) {
+  const auto& paths = m_core.settings().paths();
+  for (const auto& dir :
+       {markers.game, markers.instance, paths.mods(), paths.overwrite()}) {
     const QString canonical = QDir(dir).canonicalPath();
     if (!dir.isEmpty() && !canonical.isEmpty()) {
       roots.append(canonical);
@@ -419,11 +422,11 @@ void ModlistInstaller::applyExecutables()
       continue;
     }
 
-    // the dynamic loader variables make any program load any library
+    // the variables that make a program load code from elsewhere are left out
     QStringList environment, dropped;
     for (const auto& variable : exe.environment) {
       const QString name = variable.section('=', 0, 0).trimmed();
-      if (name.startsWith("LD_", Qt::CaseInsensitive)) {
+      if (isUnsafeImportedEnv(name)) {
         dropped.append(name);
       } else {
         environment.append(restore(variable));

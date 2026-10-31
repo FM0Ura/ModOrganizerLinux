@@ -226,3 +226,21 @@ TEST(ImportPlan, MergeModOrderRepeatedPlanName)
   EXPECT_EQ(mergeModOrder({"A"}, plan, {}, Destination::ExistingProfile, true).order,
             (Names{"A", "X", "Y"}));
 }
+
+TEST(ImportPlan, UnsafeImportedEnv)
+{
+  for (const char* name :
+       {"LD_PRELOAD", "ld_library_path", "LD_AUDIT", "BASH_ENV", "ENV", "env",
+        "GCONV_PATH", "PATH", "PYTHONPATH", "PYTHONHOME", "PERL5LIB", "PERL5OPT",
+        "GST_PLUGIN_PATH", "VK_ICD_PLUGIN_PATH", "GIO_EXTRA_MODULES", "GIO_MODULE_DIR",
+        "GTK_MODULES", "GTK3_MODULES", "GTK_PATH_MODULES", "QT_PLUGIN_PATH",
+        "qt_plugin_path", "XDG_DATA_DIRS", "XDG_CONFIG_HOME"}) {
+    EXPECT_TRUE(isUnsafeImportedEnv(name)) << name;
+  }
+  for (const char* name :
+       {"WINEDLLOVERRIDES", "WINEPREFIX", "PROTON_LOG", "PROTON_USE_WINED3D",
+        "DXVK_HUD", "VKD3D_CONFIG", "MANGOHUD", "SteamAppId", "ENVIRONMENT",
+        "MYPATH", "GTK_THEME", "", "XDG"}) {
+    EXPECT_FALSE(isUnsafeImportedEnv(name)) << name;
+  }
+}
