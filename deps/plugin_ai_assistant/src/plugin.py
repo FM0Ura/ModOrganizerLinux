@@ -1,19 +1,42 @@
 from __future__ import annotations
 
+from pathlib import Path
 import mobase
-from PyQt6.QtCore import QCoreApplication
+from PyQt6.QtCore import QCoreApplication, Qt
 from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QMainWindow
+
+from .agent.mcp_server import LocalMcpServer
+from .tools import MainThreadDispatcher, build_default_registry
+from .ui.dock_widget import AiAssistantDock
 
 
 class AiAssistantPlugin(mobase.IPluginTool):
     def __init__(self) -> None:
         super().__init__()
         self._organizer: mobase.IOrganizer | None = None
-        self._dock = None
+        self._dock: AiAssistantDock | None = None
+        self._dispatcher: MainThreadDispatcher | None = None
+        self._mcp_server: LocalMcpServer | None = None
 
     def init(self, organizer: mobase.IOrganizer) -> bool:
         self._organizer = organizer
+        organizer.onUserInterfaceInitialized(self._on_ui_initialized)
         return True
+
+    def _on_ui_initialized(self, main_window: QMainWindow) -> None:
+        if self._dock is None:
+            data_dir = Path(self._organizer.pluginDataPath()) / "ai_assistant"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            reg = build_default_registry()
+            self._dispatcher = MainThreadDispatcher(self._organizer, reg, permission_mode="safe")
+            self._mcp_server = LocalMcpServer(self._dispatcher)
+            self._mcp_server.start()
+            self._dock = AiAssistantDock(self._dispatcher, self._mcp_server, data_dir, main_window)
+            main_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
+        else:
+            self._dock.setParent(main_window)
+            main_window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
 
     def name(self) -> str:
         return "AI Assistant"
