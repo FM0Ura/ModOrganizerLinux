@@ -974,6 +974,10 @@ InstallationResult InstallationManager::install(const QString& fileName,
             iniTweakEntry != nullptr && !iniTweakEntry->astree()->empty();
       }
       installResult.m_result = IPluginInstaller::RESULT_SUCCESS;
+      // a detail left by an installer that did not handle the archive is stale
+      if (outermost) {
+        m_LastInstallerDetail.clear();
+      }
       return installResult;
     } break;
     case IPluginInstaller::RESULT_NOTATTEMPTED:
