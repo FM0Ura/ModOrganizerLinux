@@ -112,6 +112,8 @@ def register_diagnostic_tools(reg: ToolRegistry) -> None:
             filtered = [p for p in candidates if "mo_" in p.name.lower() or "mo2" in p.name.lower()] or candidates
         elif kind == "skse":
             filtered = [p for p in candidates if "skse" in p.name.lower()] or candidates
+        elif kind in ("vfs", "usvfs"):
+            filtered = [p for p in candidates if "usvfs" in p.name.lower() or "vfs" in p.name.lower()] or candidates
 
         filtered.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         chosen = filtered[0]

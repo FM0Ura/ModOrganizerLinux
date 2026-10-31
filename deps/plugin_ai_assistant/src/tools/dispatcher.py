@@ -64,7 +64,14 @@ class MainThreadDispatcher(QObject):
         if spec is None:
             return {"ok": False, "error": f"Unknown tool: {tool_name}"}
 
-        validated_args = spec.args_schema(**(args or {})).model_dump()
+        try:
+            validated_args = (
+                spec.args_schema(**(args or {})).model_dump()
+                if spec.args_schema is not None
+                else (args or {})
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"Invalid arguments for {tool_name}: {exc}"}
 
         if spec.is_mutating and self._vfs_check():
             return {
