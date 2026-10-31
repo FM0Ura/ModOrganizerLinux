@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include <QList>
 #include <QString>
+#include <QVariantMap>
 
 #include "ifiletree.h"
 #include "iplugininstaller.h"
@@ -121,6 +122,34 @@ public:
   virtual IPluginInstaller::EInstallResult
   installArchive(MOBase::GuessedValue<QString>& modName, const QString& archiveFile,
                  int modID = 0) = 0;
+
+  /**
+   * @brief Options given to an installer for the current installation.
+   *
+   * Besides the options set by the caller of the installation (for example the
+   * choices recorded in a modlist), the map always holds "fileKey" (QString, the key
+   * of the downloaded file: "<modId>_<fileId>", or "archive_<hash>" when the ids are
+   * unknown) and "batch" (bool, true when the installation must not show dialogs).
+   *
+   * @param installerName Name of the installer, as returned by IPlugin::name().
+   *
+   * @return the options for that installer.
+   */
+  virtual QVariantMap
+  installerOptions([[maybe_unused]] const QString& installerName) const
+  {
+    return {};
+  }
+
+  /**
+   * @brief Sets a description of why the installation failed or could not be done
+   * without the user (for example a FOMOD choice that no longer exists).
+   *
+   * The caller of a batch installation shows it in its summary.
+   *
+   * @param detail The description.
+   */
+  virtual void setInstallerDetail([[maybe_unused]] const QString& detail) {}
 };
 
 }  // namespace MOBase
