@@ -160,6 +160,7 @@ set(_organizer_desktop_sources
 # the modlists (export a profile as a .mo2list and import it): the model and the
 # code without interface. Append the .cpp files of modlists/ that do not use widgets.
 set(_organizer_modlists_sources
+	modlists/installorder.cpp
 	modlists/mo2listzip.cpp
 	modlists/pathmarkers.cpp
 	modlists/plan.cpp)
