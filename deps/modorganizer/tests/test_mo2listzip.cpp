@@ -64,10 +64,17 @@ QString makePackage(const QTemporaryDir& tmp, const std::map<QString, QByteArray
 }
 
 
-// QZipWriter normalizes entry names ("../x" and "/x" never reach the file), so the
-// hostile archives are assembled by hand: stored entries, local headers + central
-// directory.
-QByteArray rawZip(const std::vector<std::pair<QByteArray, QByteArray>>& entries)
+// Hostile archives are assembled by hand (stored entries, local headers + central
+// directory), because QZipWriter normalizes names. `declared` overrides the size in the
+// headers (without the data), `madeBy`/`external` set the host system and attributes
+// (a Unix symbolic link).
+struct RawEntry
+{
+  QByteArray name, data;
+  qint64 declared = -1;
+};
+
+QByteArray rawZip(const std::vector<RawEntry>& entries)
 {
   auto crc32 = [](const QByteArray& d) {
     quint32 c = 0xffffffffu;
@@ -83,25 +90,35 @@ QByteArray rawZip(const std::vector<std::pair<QByteArray, QByteArray>>& entries)
   QDataStream o(&out, QIODevice::WriteOnly), c(&central, QIODevice::WriteOnly);
   o.setByteOrder(QDataStream::LittleEndian);
   c.setByteOrder(QDataStream::LittleEndian);
-  for (const auto& [name, data] : entries) {
+  for (const auto& e : entries) {
     const quint32 offset = static_cast<quint32>(out.size());
-    const quint32 crc    = crc32(data);
+    const quint32 crc    = crc32(e.data);
+    const quint32 size   = static_cast<quint32>(e.declared >= 0 ? e.declared : e.data.size());
     o << quint32(0x04034b50) << quint16(20) << quint16(0) << quint16(0) << quint16(0)
-      << quint16(0x21) << crc << quint32(data.size()) << quint32(data.size())
-      << quint16(name.size()) << quint16(0);
-    out.append(name);
-    out.append(data);
+      << quint16(0x21) << crc << quint32(e.data.size()) << quint32(e.data.size())
+      << quint16(e.name.size()) << quint16(0);
+    o.writeRawData(e.name.constData(), e.name.size());
+    o.writeRawData(e.data.constData(), e.data.size());
     c << quint32(0x02014b50) << quint16(20) << quint16(20) << quint16(0) << quint16(0)
-      << quint16(0) << quint16(0x21) << crc << quint32(data.size())
-      << quint32(data.size()) << quint16(name.size()) << quint16(0) << quint16(0)
-      << quint16(0) << quint16(0) << quint32(0) << offset;
-    central.append(name);
+      << quint16(0) << quint16(0x21) << crc << quint32(e.data.size()) << size
+      << quint16(e.name.size()) << quint16(0) << quint16(0) << quint16(0) << quint16(0)
+      << quint32(0) << offset;
+    c.writeRawData(e.name.constData(), e.name.size());
   }
   const quint32 cdOffset = static_cast<quint32>(out.size());
-  out.append(central);
+  o.writeRawData(central.constData(), central.size());
   o << quint32(0x06054b50) << quint16(0) << quint16(0) << quint16(entries.size())
     << quint16(entries.size()) << quint32(central.size()) << cdOffset << quint16(0);
   return out;
+}
+
+QString rawPackage(const QTemporaryDir& tmp, std::vector<RawEntry> entries,
+                   const QString& file = "raw.mo2list")
+{
+  entries.insert(entries.begin(), RawEntry{"manifest.json", manifest(), -1});
+  const QString path = tmp.filePath(file);
+  writeFile(path, rawZip(entries));
+  return path;
 }
 
 }  // namespace
@@ -148,18 +165,43 @@ TEST(Mo2ListZip, BundledNameRoundTrip)
 TEST(Mo2ListZip, RejectsTraversal)
 {
   QTemporaryDir tmp;
-  const QStringList bad = {"../evil", "/abs", "\\abs", "C:/x", "C:\\x", "a/../../b"};
-  int i                 = 0;
+  // names QZipReader keeps verbatim
+  const QStringList bad = {"bundled/m/sub/../../x", "a\\..\\b", "\\abs", "C:/x", "C:\\x"};
   for (const auto& entry : bad) {
-    const QString path = tmp.filePath(QString("bad%1.mo2list").arg(i++));
-    writeFile(path, rawZip({{"manifest.json", manifest()}, {entry.toUtf8(), "x"}}));
+    const auto path = rawPackage(tmp, {{entry.toUtf8(), "x", -1}});
     try {
       Mo2ListPackage::open(path);
       ADD_FAILURE() << "accepted " << entry.toStdString();
     } catch (const PlanError& e) {
       EXPECT_EQ(e.kind(), PlanError::Kind::Invalid) << entry.toStdString();
+      EXPECT_TRUE(QString(e.what()).contains("Unsafe entry") &&
+                  QString(e.what()).contains(entry))
+          << e.what();
     }
   }
+}
+
+TEST(Mo2ListZip, StrippedNamesStayInside)
+{
+  // QZipReader strips leading '.' and '/': "../evil" -> "evil", "/abs" -> "abs"
+  QTemporaryDir tmp;
+  const auto path = rawPackage(tmp, {{"../evil", "1", -1}, {"/abs", "2", -1}});
+  const auto pkg  = Mo2ListPackage::open(path);
+  EXPECT_TRUE(pkg.entries().contains("evil"));
+  EXPECT_TRUE(pkg.entries().contains("abs"));
+  EXPECT_FALSE(pkg.entries().contains("../evil"));
+
+  const QString dest = tmp.filePath("sub/dest");
+  pkg.extractBundled("m", dest);  // nothing under bundled/m/
+  EXPECT_TRUE(QDir(dest).entryList(QDir::AllEntries | QDir::NoDotAndDotDot).isEmpty());
+  EXPECT_FALSE(QFile::exists(tmp.filePath("sub/evil")));
+  EXPECT_FALSE(QFile::exists(tmp.filePath("evil")));
+  EXPECT_FALSE(QFile::exists("/abs"));
+}
+
+TEST(Mo2ListZip, RejectsSymlinkDuplicateAndLimits)
+{
+  QTemporaryDir tmp;
 
   const QString link = tmp.filePath("link.mo2list");
   {
@@ -172,19 +214,37 @@ TEST(Mo2ListZip, RejectsTraversal)
     ADD_FAILURE() << "accepted a symlink";
   } catch (const PlanError& e) {
     EXPECT_EQ(e.kind(), PlanError::Kind::Invalid);
-    EXPECT_NE(QString(e.what()).contains("bundled/x/l"), false);
+    EXPECT_TRUE(QString(e.what()).contains("bundled/x/l"));
   }
 
-  const QString none = tmp.filePath("none.mo2list");
+  const auto none = tmp.filePath("none.mo2list");
   {
     QZipWriter zip(none);
     zip.addFile("README.md", "x");
   }
+  EXPECT_THROW(Mo2ListPackage::open(none), PlanError);
+
+  // a second manifest.json and a repeated name
+  for (const QByteArray& name : {QByteArray("manifest.json"), QByteArray("bundled/m/a")}) {
+    const auto path = rawPackage(tmp, {{"bundled/m/a", "1", -1}, {name, "2", -1}});
+    try {
+      Mo2ListPackage::open(path);
+      ADD_FAILURE() << "accepted a duplicate " << name.toStdString();
+    } catch (const PlanError& e) {
+      EXPECT_EQ(e.kind(), PlanError::Kind::Invalid);
+      EXPECT_TRUE(QString(e.what()).contains("Duplicate")) << e.what();
+    }
+  }
+
+  // declared manifest.json size over 32 MiB
+  const auto big = tmp.filePath("big.mo2list");
+  writeFile(big, rawZip({{"manifest.json", manifest(), MaxManifestSize + 1}}));
   try {
-    Mo2ListPackage::open(none);
-    ADD_FAILURE() << "accepted no manifest";
+    Mo2ListPackage::open(big);
+    ADD_FAILURE() << "accepted a huge manifest";
   } catch (const PlanError& e) {
     EXPECT_EQ(e.kind(), PlanError::Kind::Invalid);
+    EXPECT_TRUE(QString(e.what()).contains("32 MiB")) << e.what();
   }
 }
 
@@ -250,4 +310,70 @@ TEST(Mo2ListZip, FindsExecutableContent)
   const auto clean = makePackage(tmp2, {{"m/a.esp", "TES4"}, {"m/t.dds", "DDS "}},
                                  makePlan());
   EXPECT_TRUE(findExecutableContent(Mo2ListPackage::open(clean)).empty());
+}
+
+TEST(Mo2ListZip, FindsMoreExecutableContent)
+{
+  QTemporaryDir tmp;
+  const auto path = rawPackage(
+      tmp,
+      {{"bundled/m/a.asi", "x", -1},
+       {"bundled/m/mz", "MZ..", -1},
+       {"bundled/m/script", "#!/bin/sh\n", -1},
+       {"bundled/m/huge.bin", "abcd", MaxScanSize + 1},
+       {"bundled/m/huge.dds", "abcd", MaxScanSize + 1},
+       {"bundled/m/plain.txt", "MZ..", -1},
+       {"profile/Skyrim.ini", "[A]\nk=%GAME%/x\nrun=tool.exe\nok=1\n", -1}});
+  const auto found = findExecutableContent(Mo2ListPackage::open(path));
+
+  auto has = [&](ExecFinding::Kind kind, const QString& what, const QString& detail = {}) {
+    for (const auto& f : found) {
+      if (f.kind == kind && f.what == what && (detail.isEmpty() || f.detail == detail)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  EXPECT_TRUE(has(ExecFinding::Kind::NativeFile, "bundled/m/a.asi"));
+  EXPECT_TRUE(has(ExecFinding::Kind::NativeFile, "bundled/m/mz", "executable header"));
+  EXPECT_TRUE(has(ExecFinding::Kind::NativeFile, "bundled/m/script", "executable header"));
+  EXPECT_TRUE(has(ExecFinding::Kind::NativeFile, "bundled/m/huge.bin", "too large to scan"));
+  EXPECT_FALSE(has(ExecFinding::Kind::NativeFile, "bundled/m/huge.dds"));
+  EXPECT_FALSE(has(ExecFinding::Kind::NativeFile, "bundled/m/plain.txt"));
+  EXPECT_TRUE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "k=%GAME%/x"));
+  EXPECT_TRUE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "run=tool.exe"));
+  EXPECT_FALSE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "ok=1"));
+}
+
+TEST(Mo2ListZip, ExtractRefusesShortData)
+{
+  // declared size larger than the stored data: fileData cannot deliver it
+  QTemporaryDir tmp;
+  const auto path = rawPackage(tmp, {{"bundled/m/a.txt", "abc", 10}});
+  const auto pkg  = Mo2ListPackage::open(path);
+  const QString dest = tmp.filePath("dest");
+  EXPECT_THROW(pkg.extractBundled("m", dest), std::runtime_error);
+  EXPECT_FALSE(QFile::exists(dest + "/a.txt"));
+  EXPECT_FALSE(QFile::exists(dest + "/a.txt.part"));
+}
+
+TEST(Mo2ListZip, WriteKeepsOldFileOnFailure)
+{
+  QTemporaryDir tmp;
+  const QString path = tmp.filePath("a.mo2list");
+  PackageInput in;
+  in.plan = makePlan();
+  writeMo2List(path, in);
+  const auto before = [&] {
+    QFile f(path);
+    f.open(QIODevice::ReadOnly);
+    return f.readAll();
+  }();
+
+  in.bundledFiles.push_back({"m/x", tmp.filePath("missing")});
+  EXPECT_THROW(writeMo2List(path, in), std::runtime_error);
+  QFile f(path);
+  ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+  EXPECT_EQ(f.readAll(), before);
+  EXPECT_FALSE(QFile::exists(path + ".part"));
 }

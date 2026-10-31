@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <filesystem>
 #include <stdexcept>
 
 namespace modlists
@@ -47,21 +48,54 @@ bool unsafeEntry(const QString& name)
 
 bool hasMagic(const QByteArray& data)
 {
-  return data.startsWith("MZ") || data.startsWith("\x7f"
-                                                  "ELF");
+  return data.startsWith("MZ") || data.startsWith("#!") ||
+         data.startsWith("\x7f"
+                         "ELF");
 }
 
 const QSet<QString>& nativeExtensions()
 {
-  static const QSet<QString> set = {"dll", "exe", "bat", "cmd", "sh",
-                                    "ps1", "py",  "so",  "jar", "vbs"};
+  static const QSet<QString> set = {
+      "dll", "exe", "bat", "cmd",     "sh",  "ps1", "py",  "so",
+      "jar", "vbs", "asi", "pyw",     "pyc", "com", "scr", "msi",
+      "reg", "lnk", "desktop", "dylib", "cpl", "appimage"};
   return set;
+}
+
+const QSet<QString>& dataExtensions()
+{
+  static const QSet<QString> set = {
+      "esp", "esm", "esl", "bsa", "ba2", "dds", "png", "jpg", "jpeg", "tga", "nif", "hkx",
+      "wav", "xwm", "fuz", "lip", "txt", "ini", "json", "xml", "pex", "psc", "seq", "tri",
+      "egm", "bik", "swf", "ttf", "otf"};
+  return set;
+}
+
+void replaceFile(const QString& from, const QString& to)
+{
+  std::error_code ec;
+  std::filesystem::rename(from.toStdString(), to.toStdString(), ec);
+  if (ec) {
+    QFile::remove(from);
+    throw std::runtime_error("Cannot create " + to.toStdString());
+  }
 }
 
 bool hasMarker(const QString& value)
 {
   return value.contains("%INSTANCE%") || value.contains("%GAME%") ||
          value.contains("%PROTON_PREFIX%") || value.contains("%HOME%");
+}
+
+bool hasCodeExtension(const QString& value)
+{
+  for (const char* ext :
+       {".dll", ".exe", ".so", ".asi", ".bat", ".cmd", ".sh", ".ps1"}) {
+    if (value.contains(QLatin1String(ext), Qt::CaseInsensitive)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -99,6 +133,10 @@ void writeMo2List(const QString& path, const PackageInput& input)
 {
   const QString part = path + ".part";
   QFile::remove(part);
+  auto fail = [&](const QString& what) {
+    QFile::remove(part);
+    throw std::runtime_error(what.toStdString());
+  };
 
   {
     QZipWriter zip(part);
@@ -118,24 +156,24 @@ void writeMo2List(const QString& path, const PackageInput& input)
       QFile file(disk);
       if (!file.open(QIODevice::ReadOnly)) {
         zip.close();
-        QFile::remove(part);
-        throw std::runtime_error("Cannot read " + disk.toStdString());
+        fail("Cannot read " + disk);
       }
       zip.addFile("bundled/" + name, &file);
+      if (file.error() != QFileDevice::NoError || !file.atEnd() ||
+          zip.status() != QZipWriter::NoError) {
+        zip.close();
+        fail("Cannot add " + disk);
+      }
     }
     zip.close();
 
     if (zip.status() != QZipWriter::NoError) {
-      QFile::remove(part);
-      throw std::runtime_error("Cannot write " + part.toStdString());
+      fail("Cannot write " + part);
     }
   }
 
-  QFile::remove(path);
-  if (!QFile::rename(part, path)) {
-    QFile::remove(part);
-    throw std::runtime_error("Cannot create " + path.toStdString());
-  }
+  // atomic: the old file stays if this fails
+  replaceFile(part, path);
 }
 
 Mo2ListPackage Mo2ListPackage::open(const QString& path)
@@ -147,18 +185,40 @@ Mo2ListPackage Mo2ListPackage::open(const QString& path)
 
   Mo2ListPackage package;
   bool hasManifest = false;
+  qint64 total     = 0;
+  QSet<QString> seen;
 
-  for (const auto& info : zip->fileInfoList()) {
+  const auto infos = zip->fileInfoList();
+  if (infos.size() > MaxEntries) {
+    invalid(QString("Too many entries in the modlist (limit %1)").arg(MaxEntries));
+  }
+
+  for (const auto& info : infos) {
     if (unsafeEntry(info.filePath)) {
       invalid("Unsafe entry in the modlist: " + info.filePath);
     }
     if (info.isSymLink) {
       invalid("Symbolic link in the modlist: " + info.filePath);
     }
+    if (seen.contains(info.filePath)) {
+      invalid("Duplicate entry in the modlist: " + info.filePath);
+    }
+    seen.insert(info.filePath);
     if (info.isDir) {
       continue;
     }
+    if (info.filePath == "manifest.json" && info.size > MaxManifestSize) {
+      invalid("manifest.json is over the limit of 32 MiB");
+    }
+    if (info.size > MaxEntrySize) {
+      invalid("Entry over the limit of 8 GiB: " + info.filePath);
+    }
+    total += info.size;
+    if (total > MaxTotalSize) {
+      invalid("The modlist is over the limit of 32 GiB (at " + info.filePath + ")");
+    }
     package.m_files.append(info.filePath);
+    package.m_sizes.insert(info.filePath, info.size);
     if (info.filePath == "manifest.json") {
       hasManifest = true;
     }
@@ -185,6 +245,11 @@ QByteArray Mo2ListPackage::entryData(const QString& entry) const
     return {};
   }
   return reader(m_reader)->fileData(entry);
+}
+
+qint64 Mo2ListPackage::entrySize(const QString& entry) const
+{
+  return m_sizes.value(entry, -1);
 }
 
 QString Mo2ListPackage::readme() const
@@ -227,14 +292,25 @@ void Mo2ListPackage::extractBundled(const QString& bundledDir,
       throw std::runtime_error("Cannot create the folder of " + target.toStdString());
     }
 
-    QFile file(target);
+    const QString entry   = "bundled/" + bundledDir + "/" + rel;
+    const QByteArray data = entryData(entry);
+    if (data.size() != entrySize(entry)) {
+      throw std::runtime_error("Cannot read " + entry.toStdString() +
+                               " from the modlist");
+    }
+
+    const QString part = target + ".part";
+    QFile file(part);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
       throw std::runtime_error("Cannot write " + target.toStdString());
     }
-    const QByteArray data = entryData("bundled/" + bundledDir + "/" + rel);
-    if (file.write(data) != data.size()) {
+    if (file.write(data) != data.size() || !file.flush()) {
+      file.close();
+      QFile::remove(part);
       throw std::runtime_error("Cannot write " + target.toStdString());
     }
+    file.close();
+    replaceFile(part, target);
   }
 }
 
@@ -249,6 +325,10 @@ std::vector<ExecFinding> findExecutableContent(const Mo2ListPackage& package)
     const QString ext = QFileInfo(entry).suffix().toLower();
     if (nativeExtensions().contains(ext)) {
       out.push_back({ExecFinding::Kind::NativeFile, entry, "." + ext});
+    } else if (dataExtensions().contains(ext)) {
+      continue;
+    } else if (package.entrySize(entry) > MaxScanSize) {
+      out.push_back({ExecFinding::Kind::NativeFile, entry, "too large to scan"});
     } else if (hasMagic(package.entryData(entry).left(4))) {
       out.push_back({ExecFinding::Kind::NativeFile, entry, "executable header"});
     }
@@ -278,7 +358,7 @@ std::vector<ExecFinding> findExecutableContent(const Mo2ListPackage& package)
         continue;
       }
       const QString value = line.mid(eq + 1);
-      if (value.contains(".dll", Qt::CaseInsensitive) || hasMarker(value)) {
+      if (hasCodeExtension(value) || hasMarker(value)) {
         out.push_back({ExecFinding::Kind::IniLoadsCode, entry, line});
       }
     }

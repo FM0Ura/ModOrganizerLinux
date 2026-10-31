@@ -4,6 +4,7 @@
 #include "plan.h"
 
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -18,6 +19,16 @@
 // executes anything.
 namespace modlists
 {
+
+// Limits checked by open() from the sizes declared in the ZIP headers, before anything
+// is read.
+inline constexpr qint64 MaxManifestSize = qint64(32) << 20;
+inline constexpr qint64 MaxEntrySize    = qint64(8) << 30;
+inline constexpr qint64 MaxTotalSize    = qint64(32) << 30;
+inline constexpr int MaxEntries         = 200000;
+// bundled files larger than this and without a known data extension are not read to
+// look for a native header
+inline constexpr qint64 MaxScanSize = qint64(64) << 20;
 
 // Safe folder name for bundled/<name>/: path characters and control characters become
 // '_', spaces and dots at the ends are trimmed and "-<8 hex of the sha1 of the name>"
@@ -42,9 +53,12 @@ void writeMo2List(const QString& path, const PackageInput& input);
 class Mo2ListPackage
 {
 public:
-  // Throws PlanError(Invalid) for a missing or bad manifest.json and for an entry with
-  // "..", a leading '/' or '\', a drive letter or a symbolic link (the message names
-  // the entry); PlanError(NewerSchema) for a newer schemaVersion.
+  // Throws PlanError(Invalid) for a missing or bad manifest.json, for an entry with a
+  // ".." segment (as '/' or '\' separated), a leading '\', a drive letter or a
+  // symbolic link, for a duplicate entry and for a size/count over the limits above (the
+  // message names the entry or the limit); PlanError(NewerSchema) for a newer
+  // schemaVersion. Note: QZipReader itself strips leading '.' and '/' from names
+  // ("../x" and "/x" are read as "x"), so those entries cannot escape.
   static Mo2ListPackage open(const QString& path);
 
   const Plan& plan() const { return m_plan; }
@@ -60,6 +74,8 @@ public:
   // every file entry of the ZIP
   QStringList entries() const { return m_files; }
   QByteArray entryData(const QString& entry) const;
+  // size declared in the ZIP header; -1 for an unknown entry
+  qint64 entrySize(const QString& entry) const;
 
 private:
   Mo2ListPackage() = default;
@@ -67,6 +83,7 @@ private:
   std::shared_ptr<void> m_reader;  // QZipReader
   Plan m_plan;
   QStringList m_files;
+  QHash<QString, qint64> m_sizes;
 };
 
 struct ExecFinding
