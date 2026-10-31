@@ -322,8 +322,11 @@ TEST(Mo2ListZip, FindsMoreExecutableContent)
        {"bundled/m/script", "#!/bin/sh\n", -1},
        {"bundled/m/huge.bin", "abcd", MaxScanSize + 1},
        {"bundled/m/huge.dds", "abcd", MaxScanSize + 1},
-       {"bundled/m/plain.txt", "MZ..", -1},
-       {"profile/Skyrim.ini", "[A]\nk=%GAME%/x\nrun=tool.exe\nok=1\n", -1}});
+       {"bundled/m/plain.txt", "DATA", -1},
+       {"bundled/m/disguised.dds", "MZ..", -1},
+       {"bundled/m/real.dds", "DDS ", -1},
+       {"profile/Skyrim.ini",
+        "[A]\nk=%GAME%/x\nrun=tool.exe\nok=1\nsShader=foo.shader\nx=run.sh\ny=\"a.dll\" \n", -1}});
   const auto found = findExecutableContent(Mo2ListPackage::open(path));
 
   auto has = [&](ExecFinding::Kind kind, const QString& what, const QString& detail = {}) {
@@ -340,6 +343,13 @@ TEST(Mo2ListZip, FindsMoreExecutableContent)
   EXPECT_TRUE(has(ExecFinding::Kind::NativeFile, "bundled/m/huge.bin", "too large to scan"));
   EXPECT_FALSE(has(ExecFinding::Kind::NativeFile, "bundled/m/huge.dds"));
   EXPECT_FALSE(has(ExecFinding::Kind::NativeFile, "bundled/m/plain.txt"));
+  EXPECT_TRUE(has(ExecFinding::Kind::NativeFile, "bundled/m/disguised.dds",
+                  "executable header"));
+  EXPECT_FALSE(has(ExecFinding::Kind::NativeFile, "bundled/m/real.dds"));
+  EXPECT_FALSE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini",
+                   "sShader=foo.shader"));
+  EXPECT_TRUE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "x=run.sh"));
+  EXPECT_TRUE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "y=\"a.dll\""));
   EXPECT_TRUE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "k=%GAME%/x"));
   EXPECT_TRUE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "run=tool.exe"));
   EXPECT_FALSE(has(ExecFinding::Kind::IniLoadsCode, "profile/Skyrim.ini", "ok=1"));
@@ -376,4 +386,21 @@ TEST(Mo2ListZip, WriteKeepsOldFileOnFailure)
   ASSERT_TRUE(f.open(QIODevice::ReadOnly));
   EXPECT_EQ(f.readAll(), before);
   EXPECT_FALSE(QFile::exists(path + ".part"));
+}
+
+TEST(Mo2ListZip, ExtractKeepsBothAAndAPart)
+{
+  QTemporaryDir tmp;
+  const auto path = rawPackage(tmp, {{"bundled/m/a", "one", -1}, {"bundled/m/a.part", "two", -1}});
+  const auto pkg  = Mo2ListPackage::open(path);
+  const QString dest = tmp.filePath("dest");
+  pkg.extractBundled("m", dest);
+  auto read = [&](const QString& n) {
+    QFile f(dest + "/" + n);
+    f.open(QIODevice::ReadOnly);
+    return f.readAll();
+  };
+  EXPECT_EQ(read("a"), QByteArray("one"));
+  EXPECT_EQ(read("a.part"), QByteArray("two"));
+  EXPECT_EQ(QDir(dest).entryList(QDir::Files | QDir::Hidden).size(), 2);
 }

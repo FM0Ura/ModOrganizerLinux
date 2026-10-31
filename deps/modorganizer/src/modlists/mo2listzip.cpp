@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
+#include <QTemporaryFile>
 
 #include <filesystem>
 #include <stdexcept>
@@ -87,12 +88,24 @@ bool hasMarker(const QString& value)
          value.contains("%PROTON_PREFIX%") || value.contains("%HOME%");
 }
 
+// the extension counts only when it ends the value or is followed by something that
+// cannot continue an identifier (".sh" in "run.sh", not in ".shader")
 bool hasCodeExtension(const QString& value)
 {
   for (const char* ext :
        {".dll", ".exe", ".so", ".asi", ".bat", ".cmd", ".sh", ".ps1"}) {
-    if (value.contains(QLatin1String(ext), Qt::CaseInsensitive)) {
-      return true;
+    const QLatin1String needle(ext);
+    int from = 0;
+    for (;;) {
+      const int i = value.indexOf(needle, from, Qt::CaseInsensitive);
+      if (i < 0) {
+        break;
+      }
+      const int end = i + needle.size();
+      if (end >= value.size() || !(value[end].isLetterOrNumber() || value[end] == '_')) {
+        return true;
+      }
+      from = i + 1;
     }
   }
   return false;
@@ -299,11 +312,13 @@ void Mo2ListPackage::extractBundled(const QString& bundledDir,
                                " from the modlist");
     }
 
-    const QString part = target + ".part";
-    QFile file(part);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    // unique temp name (created exclusively), so it cannot clash with another entry
+    QTemporaryFile file(QFileInfo(target).absolutePath() + "/.mo2list-tmp-XXXXXX");
+    file.setAutoRemove(false);
+    if (!file.open()) {
       throw std::runtime_error("Cannot write " + target.toStdString());
     }
+    const QString part = file.fileName();
     if (file.write(data) != data.size() || !file.flush()) {
       file.close();
       QFile::remove(part);
@@ -325,10 +340,10 @@ std::vector<ExecFinding> findExecutableContent(const Mo2ListPackage& package)
     const QString ext = QFileInfo(entry).suffix().toLower();
     if (nativeExtensions().contains(ext)) {
       out.push_back({ExecFinding::Kind::NativeFile, entry, "." + ext});
-    } else if (dataExtensions().contains(ext)) {
-      continue;
     } else if (package.entrySize(entry) > MaxScanSize) {
-      out.push_back({ExecFinding::Kind::NativeFile, entry, "too large to scan"});
+      if (!dataExtensions().contains(ext)) {
+        out.push_back({ExecFinding::Kind::NativeFile, entry, "too large to scan"});
+      }
     } else if (hasMagic(package.entryData(entry).left(4))) {
       out.push_back({ExecFinding::Kind::NativeFile, entry, "executable header"});
     }
