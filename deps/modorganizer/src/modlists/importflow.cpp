@@ -160,14 +160,22 @@ QString ImportFlow::packageCopyPath() const
   return QDir(m_core.settings().paths().base()).filePath(PackageCopy);
 }
 
-void ImportFlow::discardPending()
+void ImportFlow::discardPending(const QString& keep)
 {
   if (QFile::exists(pendingPath()) && !QFile::remove(pendingPath())) {
     log::error("cannot remove {}", pendingPath());
   }
-  // the copy the import made, under its own name; the user's file is never removed
-  if (QFile::exists(packageCopyPath()) && !QFile::remove(packageCopyPath())) {
-    log::error("cannot remove {}", packageCopyPath());
+  // the copy the import made, under its own name; the user's file is never removed,
+  // nor the copy when it is the file being imported now
+  const QFileInfo copy(packageCopyPath());
+  if (!copy.exists()) {
+    return;
+  }
+  if (!keep.isEmpty() && QFileInfo(keep).canonicalFilePath() == copy.canonicalFilePath()) {
+    return;
+  }
+  if (!QFile::remove(copy.absoluteFilePath())) {
+    log::error("cannot remove {}", copy.absoluteFilePath());
   }
 }
 
@@ -246,7 +254,7 @@ void ImportFlow::startFromFile(const QString& path)
     if (r != QMessageBox::Yes) {
       return;
     }
-    discardPending();
+    discardPending(path);
   }
 
   const bool premium = NexusInterface::instance().getAPIUserAccount().type() ==

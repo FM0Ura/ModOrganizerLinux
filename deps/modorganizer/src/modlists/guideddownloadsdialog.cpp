@@ -11,6 +11,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QPointer>
 #include <QProgressDialog>
 #include <QUrl>
 
@@ -30,6 +31,24 @@ namespace
   bool isNexus(const GuidedItem& item) { return item.modId > 0 && item.fileId > 0; }
 
 }  // namespace
+
+// counts a nested event loop of the window for its lifetime
+class GuidedDownloadsDialog::NestedLoop
+{
+public:
+  explicit NestedLoop(GuidedDownloadsDialog& d) : m_dialog(&d) { ++d.m_nested; }
+  ~NestedLoop()
+  {
+    if (m_dialog) {
+      --m_dialog->m_nested;
+    }
+  }
+  NestedLoop(const NestedLoop&)            = delete;
+  NestedLoop& operator=(const NestedLoop&) = delete;
+
+private:
+  QPointer<GuidedDownloadsDialog> m_dialog;
+};
 
 GuidedDownloadsDialog::GuidedDownloadsDialog(GuidedQueue& queue, const Plan& plan,
                                              QWidget* parent)
@@ -71,21 +90,73 @@ GuidedDownloadsDialog::GuidedDownloadsDialog(GuidedQueue& queue, const Plan& pla
     reject();
   });
   connect(ui->stopWaiting, &QPushButton::clicked, this, [this] {
-    const auto r = QMessageBox::question(
-        this, tr("Stop waiting"),
-        tr("Give up on the files that are not downloaded yet? The downloads of this "
-           "import that are still running are left out too; the rest of the list is "
-           "installed."),
-        QMessageBox::Yes | QMessageBox::No);
-    if (r == QMessageBox::Yes) {
+    const auto yes =
+        ask(tr("Stop waiting"),
+            tr("Give up on the files that are not downloaded yet? The downloads of "
+               "this import that are still running are left out too; the rest of "
+               "the list is installed."));
+    if (!yes) {
+      return;  // the window is gone
+    }
+    if (*yes) {
       finishGuided(true);
     }
+    runDeferred();
   });
 
   refresh();
 }
 
 GuidedDownloadsDialog::~GuidedDownloadsDialog() = default;
+
+std::optional<bool> GuidedDownloadsDialog::ask(const QString& title,
+                                               const QString& text)
+{
+  QPointer<GuidedDownloadsDialog> self(this);
+  QMessageBox::StandardButton r;
+  {
+    NestedLoop nested(*this);
+    r = QMessageBox::question(this, title, text, QMessageBox::Yes | QMessageBox::No);
+  }
+  if (!self) {
+    return std::nullopt;
+  }
+  return r == QMessageBox::Yes;
+}
+
+void GuidedDownloadsDialog::runDeferred()
+{
+  if (m_nested > 0) {
+    return;
+  }
+  if (m_finishPending) {
+    m_finishPending = false;
+    finishGuided(m_finishStop);
+  }
+  if (m_dismissPending) {
+    m_dismissPending = false;
+    dismiss();
+  }
+}
+
+bool GuidedDownloadsDialog::stopFromOutside()
+{
+  if (m_over) {
+    return false;
+  }
+  finishGuided(true);
+  return true;
+}
+
+void GuidedDownloadsDialog::dismiss()
+{
+  if (m_nested > 0) {
+    m_dismissPending = true;
+    return;
+  }
+  m_over = true;
+  QDialog::reject();
+}
 
 void GuidedDownloadsDialog::start()
 {
@@ -196,21 +267,34 @@ void GuidedDownloadsDialog::chooseFile()
   const GuidedItem item = m_queue.items()[*cur];
   const Source& source  = sourceOf(item);
 
-  const QString path = QFileDialog::getOpenFileName(
-      this, tr("The downloaded file of %1").arg(describe(item)),
-      QString(), tr("Archives (*.7z *.zip *.rar *.fomod *.001);;All files (*)"));
-  if (path.isEmpty()) {
+  // the file dialog and the MD5 progress run nested event loops
+  QPointer<GuidedDownloadsDialog> self(this);
+  QString path, why;
+  bool ok = false;
+  {
+    NestedLoop nested(*this);
+    path = QFileDialog::getOpenFileName(
+        this, tr("The downloaded file of %1").arg(describe(item)), QString(),
+        tr("Archives (*.7z *.zip *.rar *.fomod *.001);;All files (*)"));
+    if (self && !path.isEmpty()) {
+      ok = checkFile(source, path, why);
+    }
+  }
+  if (!self) {
+    return;
+  }
+  if (path.isEmpty() || !ok) {
+    if (!why.isEmpty()) {
+      ui->messageLabel->setText(why);
+    }
+    runDeferred();
     return;
   }
 
-  QString why;
-  if (!checkFile(source, path, why)) {
-    ui->messageLabel->setText(why);
-    return;
-  }
-
-  // the item may have changed while the MD5 was computed
-  if (m_queue.current() != cur || !m_queue.setQueued(*cur)) {
+  // the item may have changed (or the window ended) while the MD5 was computed
+  if (m_over || m_finishPending || m_dismissPending || m_queue.current() != cur ||
+      !m_queue.setQueued(*cur)) {
+    runDeferred();
     return;
   }
   ui->messageLabel->setText(tr("%1: file accepted.").arg(describe(item)));
@@ -349,16 +433,24 @@ void GuidedDownloadsDialog::reject()
     pending += item.state == GuidedItem::Pending ? 1 : 0;
   }
   if (pending > 0) {
-    const auto r = QMessageBox::question(
-        this, tr("Files left"),
-        tr("%1 files of the list are not downloaded yet. Continue without them?")
-            .arg(pending),
-        QMessageBox::Yes | QMessageBox::No);
-    if (r != QMessageBox::Yes) {
+    // a second close while the question is open is ignored
+    if (m_nested > 0) {
+      return;
+    }
+    const auto yes =
+        ask(tr("Files left"),
+            tr("%1 files of the list are not downloaded yet. Continue without them?")
+                .arg(pending));
+    if (!yes) {
+      return;  // the window is gone
+    }
+    if (!*yes) {
+      runDeferred();
       return;
     }
   }
   finishGuided(false);
+  runDeferred();
 }
 
 void GuidedDownloadsDialog::finishGuided(bool stop)
@@ -366,6 +458,13 @@ void GuidedDownloadsDialog::finishGuided(bool stop)
   if (m_over) {
     return;
   }
+  if (m_nested > 0) {
+    // closing now would delete the window under its own nested loop
+    m_finishPending = true;
+    m_finishStop    = m_finishStop || stop;
+    return;
+  }
+  stop   = stop || m_finishStop;
   m_over = true;
   emit guidedFinished();
   if (stop) {

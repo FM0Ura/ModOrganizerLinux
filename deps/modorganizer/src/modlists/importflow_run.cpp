@@ -95,24 +95,59 @@ void ImportFlow::showProgress()
     progress->setMinimumDuration(0);
     progress->setAttribute(Qt::WA_DeleteOnClose);
     connect(progress, &QProgressDialog::canceled, this, [this] {
-      if (!m_installer) {
-        return;
-      }
-      const auto r = QMessageBox::question(
-          m_progress, tr("Stop waiting"),
-          tr("Give up on the downloads of this import that are not over (paused, "
-             "removed or still running)? The rest of the list is installed."),
-          QMessageBox::Yes | QMessageBox::No);
-      if (r == QMessageBox::Yes && m_installer) {
-        if (m_guided) {
-          m_guided->deleteLater();
-        }
-        m_installer->stopWaitingForDownloads();
-      }
+      stopWaiting();
     });
     m_progress = progress;
   }
   m_progress->show();
+}
+
+void ImportFlow::stopWaiting()
+{
+  if (!m_installer || m_nested > 0) {
+    return;
+  }
+
+  // the question runs a nested event loop in which the import can finish
+  // (onFinished() -> closeProgress()): parented to the main window, and the progress
+  // window is only deleted once the question returned
+  QPointer<ImportFlow> self(this);
+  QMessageBox::StandardButton r;
+  ++m_nested;
+  r = QMessageBox::question(
+      m_parent, tr("Stop waiting"),
+      tr("Give up on the downloads of this import that are not over (paused, "
+         "removed or still running)? The rest of the list is installed."),
+      QMessageBox::Yes | QMessageBox::No);
+  if (!self) {
+    return;
+  }
+  --m_nested;
+
+  // not once the import is over (onFinished() ran during the question)
+  if (r == QMessageBox::Yes && m_installer && !m_closeProgressPending) {
+    // the same way as the guided window's "Stop waiting / Cancel": the guided items
+    // first, then the downloads still running
+    if (!(m_guided && m_guided->stopFromOutside())) {
+      m_installer->stopWaitingForDownloads();
+    }
+  }
+  if (m_closeProgressPending) {
+    closeProgress();
+  }
+}
+
+void ImportFlow::closeProgress()
+{
+  if (m_nested > 0) {
+    m_closeProgressPending = true;
+    return;
+  }
+  m_closeProgressPending = false;
+  if (m_progress) {
+    m_progress->deleteLater();
+    m_progress = nullptr;
+  }
 }
 
 void ImportFlow::showGuided(std::vector<GuidedItem> items)
@@ -120,11 +155,17 @@ void ImportFlow::showGuided(std::vector<GuidedItem> items)
   if (!m_installer) {
     return;
   }
-  delete m_guided.data();
-  m_queue = std::make_unique<GuidedQueue>(std::move(items));
+  // a window of an earlier run is over; it keeps its queue until it is destroyed
+  if (m_guided) {
+    m_guided->dismiss();
+  }
+  m_queue = std::make_shared<GuidedQueue>(std::move(items));
 
   auto* dialog = new GuidedDownloadsDialog(*m_queue, m_installer->plan(), m_parent);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this, [queue = m_queue] {
+    (void)queue;
+  });
   m_guided = dialog;
 
   connect(dialog, &GuidedDownloadsDialog::manualFileChosen, this,
@@ -133,13 +174,14 @@ void ImportFlow::showGuided(std::vector<GuidedItem> items)
               m_installer->setManualFile(entry, source, file);
             }
           });
-  connect(dialog, &GuidedDownloadsDialog::guidedFinished, this, [this] {
-    m_nxmConnection.disconnect();
-    if (m_installer && m_queue) {
-      showProgress();
-      m_installer->guidedDownloadsFinished(m_queue->items());
-    }
-  });
+  connect(dialog, &GuidedDownloadsDialog::guidedFinished, this,
+          [this, queue = m_queue.get()] {
+            m_nxmConnection.disconnect();
+            if (m_installer && m_queue.get() == queue) {
+              showProgress();
+              m_installer->guidedDownloadsFinished(m_queue->items());
+            }
+          });
   connect(dialog, &GuidedDownloadsDialog::stopWaiting, this, [this] {
     if (m_installer) {
       m_installer->stopWaitingForDownloads();
@@ -166,13 +208,11 @@ void ImportFlow::showGuided(std::vector<GuidedItem> items)
 void ImportFlow::onFinished(const Summary& summary)
 {
   m_nxmConnection.disconnect();
+  // both close later if a nested loop of theirs is open
   if (m_guided) {
-    m_guided->deleteLater();
+    m_guided->dismiss();
   }
-  if (m_progress) {
-    m_progress->deleteLater();
-    m_progress = nullptr;
-  }
+  closeProgress();
   emit executablesChanged();
 
   if (!m_installer) {

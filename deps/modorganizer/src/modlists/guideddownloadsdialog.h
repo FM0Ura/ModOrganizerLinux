@@ -7,6 +7,7 @@
 #include <QDialog>
 
 #include <memory>
+#include <optional>
 
 namespace Ui
 {
@@ -38,6 +39,15 @@ public:
   // asks before leaving files out, then emits guidedFinished()
   void reject() override;
 
+  // ends the window as "Stop waiting / Cancel" does, without asking: emits
+  // guidedFinished() then stopWaiting(); false if the window was already over (then
+  // nothing is emitted). Deferred while a nested window of this one is open.
+  bool stopFromOutside();
+
+  // closes the window without emitting anything (the import is over); deferred while
+  // a nested window of this one is open
+  void dismiss();
+
 signals:
   void manualFileChosen(int entryIndex, int sourceIndex, const QString& path);
   // the window is over: the queue says what is queued, skipped or left pending
@@ -50,6 +60,21 @@ private:
   GuidedQueue& m_queue;
   const Plan& m_plan;
   bool m_over = false;
+
+  // Nested event loops (question boxes, the file dialog, the MD5 progress): an
+  // nxm:// arriving in them can end the window (advanced() -> finishGuided()); the
+  // window must not be closed (WA_DeleteOnClose deletes it) under its own nested
+  // loop, so the end is remembered and done when the last nested loop returns.
+  int m_nested         = 0;
+  bool m_finishPending = false;
+  bool m_finishStop    = false;
+  bool m_dismissPending = false;
+
+  class NestedLoop;
+  // QMessageBox::question() under the guard; nullopt when the window is gone
+  std::optional<bool> ask(const QString& title, const QString& text);
+  // runs the end remembered while a nested loop was open
+  void runDeferred();
 
   const Source& sourceOf(const GuidedItem& item) const;
   QString describe(const GuidedItem& item) const;

@@ -61,18 +61,24 @@ private:
   OrganizerCore& m_core;
   QPointer<QWidget> m_parent;
   QPointer<ModlistInstaller> m_installer;
-  std::unique_ptr<GuidedQueue> m_queue;
+  // shared with the guided window until it is destroyed (it may outlive a retry)
+  std::shared_ptr<GuidedQueue> m_queue;
   QPointer<GuidedDownloadsDialog> m_guided;
   QPointer<SummaryDialog> m_summary;
   QPointer<QProgressDialog> m_progress;
   boost::signals2::scoped_connection m_nxmConnection;
   // the summary on screen, for "Retry failed"
   Summary m_lastSummary;
+  // the "Stop waiting" question of the progress window is open (a nested event
+  // loop): the progress window is not deleted under it, closeProgress() waits
+  int m_nested               = 0;
+  bool m_closeProgressPending = false;
 
   QString pendingPath() const;
   QString packageCopyPath() const;
-  // removes the record and the copy of the package (never the user's file)
-  void discardPending();
+  // removes the record and the copy of the package (never the user's file); the
+  // copy stays when it is `keep` (the file being opened)
+  void discardPending(const QString& keep = {});
 
   // creates the instance, records the import in it and restarts into it
   void startInNewInstance(const QString& name, MOBase::IPluginGame* game,
@@ -82,6 +88,10 @@ private:
 
   void run(Mo2ListPackage package, PendingImport pending);
   void showProgress();
+  // deletes the progress window, or does it once its question is answered
+  void closeProgress();
+  // "Stop waiting for downloads" of the progress window
+  void stopWaiting();
   void showGuided(std::vector<GuidedItem> items);
   void onFinished(const Summary& summary);
   void installManually(const QString& mod);
