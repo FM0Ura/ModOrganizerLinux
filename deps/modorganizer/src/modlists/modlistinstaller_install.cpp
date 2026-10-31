@@ -33,6 +33,8 @@ namespace
   const QString FomodInstaller  = QStringLiteral("Fomod Installer");
   const QString SettingsSection = QStringLiteral("Modlists");
   const QString ModlistKey      = QStringLiteral("modlist");
+  // set while a mod of several files misses some of them (a later file failed)
+  const QString IncompleteKey   = QStringLiteral("incomplete");
   const QString SeparatorSuffix = QStringLiteral("_separator");
 
   // setBatch(false), clearInstallerOptions() and setBatchMessages(false) on every way
@@ -122,6 +124,19 @@ namespace
     return first;
   }
 
+  // by a scan, not getIndex(): a mod made by createMod() is in the collection but not
+  // in the index by name until the next refresh
+  ModInfo::Ptr modByName(const QString& name)
+  {
+    for (unsigned int i = 0; i < ModInfo::getNumMods(); ++i) {
+      auto mod = ModInfo::getByIndex(i);
+      if (mod->name().compare(name, Qt::CaseInsensitive) == 0) {
+        return mod;
+      }
+    }
+    return nullptr;
+  }
+
   // moves the files of `from` into `to` (same file system: rename, else copy);
   // existing files of `to` with the same path are replaced
   bool moveTree(const QString& from, const QString& to)
@@ -175,7 +190,19 @@ bool ModlistInstaller::willInstall(int entry) const
 
 void ModlistInstaller::classifyEntries(const std::vector<int>& entries)
 {
-  const auto installed = installedMods(m_ownMods);
+  // neither this import's mods nor the ones it left incomplete count as the user's
+  auto exclude = m_ownMods;
+  for (unsigned int i = 0; i < ModInfo::getNumMods(); ++i) {
+    const auto mod = ModInfo::getByIndex(i);
+    if (mod->isRegular() &&
+        mod->pluginSetting(SettingsSection, ModlistKey, QVariant()).toString() ==
+            plan().header.name &&
+        mod->pluginSetting(SettingsSection, IncompleteKey, false).toBool()) {
+      exclude.insert(mod->name());
+    }
+  }
+
+  const auto installed = installedMods(exclude);
   for (int e : entries) {
     const ModEntry& entry = plan().mods[e];
     EntryWork work;
@@ -210,18 +237,8 @@ void ModlistInstaller::resolveEarlierEntries()
         own   = true;
       }
     } else {
-      for (unsigned int i = 0; i < ModInfo::getNumMods() && found.isEmpty(); ++i) {
-        const auto mod = ModInfo::getByIndex(i);
-        const QString name = mod->name();
-        if (mod->isRegular() &&
-            mod->pluginSetting(SettingsSection, ModlistKey, QVariant()).toString() ==
-                listName &&
-            (name.compare(base, Qt::CaseInsensitive) == 0 ||
-             name.startsWith(base + " [", Qt::CaseInsensitive))) {
-          found = name;
-          own   = true;
-        }
-      }
+      found = findOwnMod(entry, false);
+      own   = !found.isEmpty();
       if (found.isEmpty()) {
         found = matchedMod(entry, installed);
       }
@@ -255,6 +272,43 @@ void ModlistInstaller::resolveEarlierEntries()
   }
 
   m_pending.installedEntries = kept;
+}
+
+QString ModlistInstaller::regularInstallName(
+    const ModEntry& entry, const std::set<QString, CaseInsensitive>& taken) const
+{
+  const QString name = installName(entry, plan().header.name, taken);
+  if (ModInfo::isRegularName(name)) {
+    return name;
+  }
+  ModEntry renamed = entry;
+  renamed.name     = name + " (mod)";
+  return installName(renamed, plan().header.name, taken);
+}
+
+QString ModlistInstaller::findOwnMod(const ModEntry& entry, bool incompleteOnly) const
+{
+  const QString listName = plan().header.name;
+  const QString base     = regularInstallName(entry, {});
+
+  for (unsigned int i = 0; i < ModInfo::getNumMods(); ++i) {
+    const auto mod     = ModInfo::getByIndex(i);
+    const QString name = mod->name();
+    if (!mod->isRegular() || mod->isSeparator() ||
+        mod->pluginSetting(SettingsSection, ModlistKey, QVariant()).toString() !=
+            listName) {
+      continue;
+    }
+    if (incompleteOnly &&
+        !mod->pluginSetting(SettingsSection, IncompleteKey, false).toBool()) {
+      continue;
+    }
+    if (name.compare(base, Qt::CaseInsensitive) == 0 ||
+        name.startsWith(base + " [", Qt::CaseInsensitive)) {
+      return name;
+    }
+  }
+  return {};
 }
 
 std::set<QString, CaseInsensitive> ModlistInstaller::existingModNames() const
@@ -390,20 +444,36 @@ void ModlistInstaller::installEntry(int e)
     return;
   }
 
-  const QString name = installName(entry, plan().header.name, m_assignedNames);
+  // a mod a failed earlier attempt left incomplete gets the files again, merged
+  auto partialIt = m_partialOfEntry.find(e);
+  QString name   = partialIt != m_partialOfEntry.end() &&
+                         QDir(m_core.settings().paths().mods()).exists(partialIt->second)
+                       ? partialIt->second
+                       : findOwnMod(entry, true);
+  const bool mergeFirst = !name.isEmpty();
+  if (!mergeFirst) {
+    name = regularInstallName(entry, m_assignedNames);
+  }
   m_assignedNames.insert(name);
   if (!safeModName(name)) {
     addRow(e, Outcome::Failed, QStringLiteral("Unsafe mod name"));
     return;
   }
 
-  QString detail;
-  const auto installed = installSources(e, name, detail);
+  QString detail, partial;
+  const auto installed = installSources(e, name, mergeFirst, partial, detail);
   if (!installed) {
+    if (!partial.isEmpty()) {
+      // this list's mod: a retry merges into it instead of making "<name> [<list>]"
+      m_ownMods.insert(partial);
+      m_assignedNames.insert(partial);
+      m_partialOfEntry[e] = partial;
+    }
     addRow(e, Outcome::Failed, detail);
     return;
   }
 
+  m_partialOfEntry.erase(e);
   m_ownMods.insert(*installed);
   m_assignedNames.insert(*installed);
 
@@ -420,6 +490,8 @@ void ModlistInstaller::installEntry(int e)
 }
 
 std::optional<QString> ModlistInstaller::installSources(int e, const QString& name,
+                                                        bool mergeFirst,
+                                                        QString& partial,
                                                         QString& detail)
 {
   const ModEntry& entry          = plan().mods[e];
@@ -428,56 +500,83 @@ std::optional<QString> ModlistInstaller::installSources(int e, const QString& na
 
   ModInfo::Ptr current;
   QString modName = name;
+  // the mod folder exists and has files of this list
+  bool hasFiles = mergeFirst;
+
+  const auto markIncomplete = [&](bool incomplete) {
+    ModInfo::Ptr mod = current != nullptr ? current : modByName(modName);
+    if (mod != nullptr) {
+      mod->setPluginSetting(SettingsSection, IncompleteKey, incomplete);
+    }
+  };
 
   for (std::size_t s = 0; s < entry.sources.size(); ++s) {
     const Source& source = entry.sources[s];
     // the next files go into the mod the first one made
-    const bool merge = s > 0;
+    const bool merge = hasFiles;
     installer.setBatchMergeTarget(merge ? modName : QString());
     installer.clearInstallerOptions();
 
-    const auto incomplete = [&](const QString& why) {
-      detail = merge ? tr("%1 (the mod \"%2\" was left incomplete)").arg(why, modName)
-                     : why;
+    const QString file = source.kind == SourceKind::Bundled
+                             ? source.bundledDir
+                             : QFileInfo(work.sources[s].archive).fileName();
+    const auto incomplete = [&](const QString& why) -> std::optional<QString> {
+      if (hasFiles) {
+        partial = modName;
+        detail  = tr("%1: %2 (the mod \"%3\" is incomplete, a retry installs into "
+                     "it)")
+                     .arg(file, why, modName);
+        markIncomplete(true);
+      } else {
+        detail = why;
+      }
       return std::nullopt;
     };
 
-    if (source.kind == SourceKind::Bundled) {
-      QString why;
-      if (!installBundled(source, modName, merge, why)) {
+    try {
+      if (source.kind == SourceKind::Bundled) {
+        QString why;
+        if (!installBundled(source, modName, merge, why)) {
+          return incomplete(why);
+        }
+        hasFiles = true;
+        continue;
+      }
+
+      if (source.fomodChoices) {
+        installer.setInstallerOptions(
+            FomodInstaller,
+            {{"choices", QString::fromUtf8(QJsonDocument(*source.fomodChoices)
+                                               .toJson(QJsonDocument::Compact))}});
+      }
+
+      if (installer.isRunning()) {
+        return incomplete(tr("Another installation is in progress"));
+      }
+
+      // not through installDownload(): its errors open a dialog
+      ModInfo::Ptr mod =
+          m_core.installArchive(work.sources[s].archive, -1, merge, current, modName);
+      if (mod == nullptr) {
+        QString why = installer.lastInstallerDetail();
+        if (why.isEmpty()) {
+          why = tr("The installation did not finish");
+        }
         return incomplete(why);
       }
-      continue;
-    }
 
-    if (source.fomodChoices) {
-      installer.setInstallerOptions(
-          FomodInstaller,
-          {{"choices", QString::fromUtf8(QJsonDocument(*source.fomodChoices)
-                                             .toJson(QJsonDocument::Compact))}});
+      current  = mod;
+      modName  = mod->name();
+      hasFiles = true;
+      setModlistSetting(mod.data());
+    } catch (const std::exception& ex) {
+      return incomplete(QString::fromUtf8(ex.what()));
     }
-
-    if (installer.isRunning()) {
-      return incomplete(tr("Another installation is in progress"));
-    }
-
-    // not through installDownload(): its errors open a dialog; the exceptions of
-    // installArchive() reach the batch loop, which fails the row with them
-    ModInfo::Ptr mod =
-        m_core.installArchive(work.sources[s].archive, -1, merge, current, modName);
-    if (mod == nullptr) {
-      QString why = installer.lastInstallerDetail();
-      if (why.isEmpty()) {
-        why = tr("The installation did not finish");
-      }
-      return incomplete(why);
-    }
-
-    current = mod;
-    modName = mod->name();
-    setModlistSetting(mod.data());
   }
 
+  if (mergeFirst) {
+    markIncomplete(false);
+  }
   return modName;
 }
 

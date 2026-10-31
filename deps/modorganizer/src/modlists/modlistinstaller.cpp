@@ -135,13 +135,23 @@ void ModlistInstaller::afterDownloads()
     installEntries();
   });
 
+  // createMod() (separators, bundled mods) adds the mod to the collection but not
+  // to the indices by name nor to the mod status of the profile; only a refresh
+  // does, so the order waits for one after the batch
   whenIdle([this] {
-    guarded(tr("Mod order"), [this] {
-      applyModOrder();
-    });
     try {
       refreshThen([this] {
-        afterModOrder();
+        guarded(tr("Mod order"), [this] {
+          applyModOrder();
+        });
+        try {
+          refreshThen([this] {
+            afterModOrder();
+          });
+        } catch (const std::exception& e) {
+          log::error("modlist import: refresh failed: {}", e.what());
+          afterModOrder();
+        }
       });
     } catch (const std::exception& e) {
       log::error("modlist import: refresh failed: {}", e.what());

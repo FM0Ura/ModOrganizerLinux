@@ -9,6 +9,7 @@
 #include "profile.h"
 #include "settings.h"
 
+#include <uibase/iplugingame.h>
 #include <uibase/log.h>
 
 #include <QDir>
@@ -46,11 +47,27 @@ namespace
     return fromMarkers(QString::fromLatin1(data), latin1).toLatin1();
   }
 
-  // a plain INI file name, nothing that points elsewhere
-  bool safeIniName(const QString& name)
+  // the INIs of the game that a profile holds (Skyrim.ini, SkyrimPrefs.ini...), as
+  // plain file names; the manifest is untrusted, so nothing else is ever written
+  // into the profile (settings.ini, modlist.txt, plugins.txt...)
+  std::set<QString, CaseInsensitive> gameIniNames(const IPluginGame* game)
+  {
+    std::set<QString, CaseInsensitive> names;
+    if (game != nullptr) {
+      for (const auto& ini : game->iniFiles()) {
+        const QString name = QFileInfo(ini).fileName();
+        if (!name.isEmpty()) {
+          names.insert(name);
+        }
+      }
+    }
+    return names;
+  }
+
+  bool plainName(const QString& name)
   {
     return !name.isEmpty() && !name.contains('/') && !name.contains('\\') &&
-           !name.startsWith('.') && name.endsWith(".ini", Qt::CaseInsensitive);
+           name != "." && name != "..";
   }
 
   bool writeFile(const QString& path, const QByteArray& data)
@@ -298,10 +315,16 @@ void ModlistInstaller::applyInis()
 
   // (name, path in the profile, content) of the INIs that change
   std::vector<std::tuple<QString, QString, QByteArray>> changes;
+  const auto allowed = gameIniNames(m_core.managedGame());
   for (const auto& name : plan().profile.iniFiles) {
+    if (!plainName(name) || !allowed.count(name)) {
+      m_summary.inisNotApplied.push_back(
+          tr("%1 (not an INI file of the game)").arg(name));
+      continue;
+    }
     const QByteArray data = m_package.profileFile(name);
-    if (!safeIniName(name) || data.isEmpty()) {
-      m_summary.inisNotApplied.push_back(name);
+    if (data.isEmpty()) {
+      m_summary.inisNotApplied.push_back(tr("%1 (missing from the package)").arg(name));
       continue;
     }
 
@@ -362,28 +385,65 @@ void ModlistInstaller::applyExecutables()
     return;
   }
 
-  const auto markers     = ExportCollector(m_core, *profile).markers();
-  ExecutablesList* list  = m_core.executablesList();
-  const auto restore     = [&](const QString& s) {
+  const auto markers    = ExportCollector(m_core, *profile).markers();
+  ExecutablesList* list = m_core.executablesList();
+  const auto restore    = [&](const QString& s) {
     return fromMarkers(s, markers);
+  };
+
+  // the program of an imported executable is in the game or in the instance
+  QStringList roots;
+  for (const auto& dir : {markers.game, markers.instance}) {
+    const QString canonical = QDir(dir).canonicalPath();
+    if (!dir.isEmpty() && !canonical.isEmpty()) {
+      roots.append(canonical);
+    }
+  }
+  const auto inside = [&](const QString& path) {
+    const QString canonical = QFileInfo(path).canonicalFilePath();
+    return !canonical.isEmpty() &&
+           std::any_of(roots.begin(), roots.end(), [&](const QString& root) {
+             return canonical.startsWith(root + "/");
+           });
   };
 
   for (const auto& exe : plan().executables) {
     const QString binary = restore(exe.binary);
     if (exe.title.isEmpty() || binary.isEmpty() || !QFileInfo::exists(binary)) {
-      // an existing executable of the same title is left as it is
       m_summary.executablesWithoutTarget.push_back(exe.title);
       continue;
     }
-
-    QStringList environment;
-    for (const auto& variable : exe.environment) {
-      environment.append(restore(variable));
+    if (!inside(binary)) {
+      m_summary.executablesWithoutTarget.push_back(
+          tr("%1 (outside the game and instance folders)").arg(exe.title));
+      continue;
     }
 
-    Executable e(exe.title);
+    // the dynamic loader variables make any program load any library
+    QStringList environment, dropped;
+    for (const auto& variable : exe.environment) {
+      const QString name = variable.section('=', 0, 0).trimmed();
+      if (name.startsWith("LD_", Qt::CaseInsensitive)) {
+        dropped.append(name);
+      } else {
+        environment.append(restore(variable));
+      }
+    }
+
+    // never merged into an executable of the user: a taken title gets the list's name
+    QString title = exe.title;
+    if (list->titleExists(title)) {
+      const QString base = QString("%1 [%2]").arg(exe.title, plan().header.name);
+      title              = base;
+      for (int n = 2; list->titleExists(title); ++n) {
+        title = QString("%1 (%2)").arg(base).arg(n);
+      }
+    }
+
+    const QString arguments = restore(exe.arguments);
+    Executable e(title);
     e.binaryInfo(QFileInfo(binary))
-        .arguments(restore(exe.arguments))
+        .arguments(arguments)
         .workingDirectory(restore(exe.workingDirectory))
         .steamAppID(exe.steamAppId)
         .proton(exe.proton)
@@ -391,6 +451,13 @@ void ModlistInstaller::applyExecutables()
         .flags(exe.showOnToolbar ? Executable::Flags(Executable::ShowInToolbar)
                                  : Executable::Flags());
     list->setExecutable(e);
+
+    QString line = QString("%1: %2").arg(
+        title, arguments.isEmpty() ? binary : binary + " " + arguments);
+    if (!dropped.isEmpty()) {
+      line += tr(" (left out: %1)").arg(dropped.join(", "));
+    }
+    m_summary.executablesAdded.push_back(line);
   }
 
   list->store(m_core.settings());

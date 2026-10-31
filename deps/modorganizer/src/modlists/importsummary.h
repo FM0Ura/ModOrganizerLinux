@@ -38,6 +38,8 @@ struct Summary
   std::vector<std::pair<QString, QStringList>> missingMasters;
   std::vector<QString> inisNotApplied;
   std::vector<QString> executablesWithoutTarget;
+  // "<title>: <program> <arguments>" of each executable the import added
+  std::vector<QString> executablesAdded;
   bool offerLoot              = false;
   bool userPluginOrderChanged = false;
 };

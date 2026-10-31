@@ -57,6 +57,7 @@ QString summaryText(const Summary& summary)
   section(out, "INI files not applied", toList(summary.inisNotApplied));
   section(out, "Executables without a target",
           toList(summary.executablesWithoutTarget));
+  section(out, "Executables added", toList(summary.executablesAdded));
 
   QStringList notes;
   if (summary.userPluginOrderChanged) {

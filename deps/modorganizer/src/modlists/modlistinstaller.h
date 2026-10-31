@@ -138,7 +138,17 @@ private:
   void setModlistSetting(MOBase::IModInterface* mod) const;
   void classifyEntries(const std::vector<int>& entries);
   void resolveEarlierEntries();
+  // the name installName() gives, made regular: a name MO2 would read as a separator
+  // or a backup ("..._separator", "...backup2") gets " (mod)"
+  QString regularInstallName(const ModEntry& entry,
+                             const std::set<QString, CaseInsensitive>& taken) const;
+  // a mod of this list for the entry, installed earlier (complete or partial)
+  // incompleteOnly: only one a failed file left incomplete
+  QString findOwnMod(const ModEntry& entry, bool incompleteOnly) const;
+  // `partial` is set to the mod when some files were installed before the failure;
+  // `mergeFirst` installs the first file into the existing mod `name` too
   std::optional<QString> installSources(int entry, const QString& name,
+                                        bool mergeFirst, QString& partial,
                                         QString& detail);
   bool installBundled(const Source& source, const QString& name, bool merge,
                       QString& detail);
@@ -190,6 +200,8 @@ private:
   // the mods this import installed (not the user's)
   std::set<QString, CaseInsensitive> m_ownMods;
   std::vector<QString> m_replacedUserMods;
+  // the mods a failed later file left incomplete, by entry; a retry merges into them
+  std::map<int, QString> m_partialOfEntry;
   std::set<QString, CaseInsensitive> m_assignedNames;
   bool m_profileApplied = false;
 };

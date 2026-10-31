@@ -29,6 +29,7 @@ TEST(ImportSummary, TextHasEverySection)
   s.missingMasters           = {{"Child.esp", QStringList{"Parent.esm", "Other.esm"}}};
   s.inisNotApplied           = {"Skyrim.ini"};
   s.executablesWithoutTarget = {"SKSE"};
+  s.executablesAdded         = {"xEdit [My List]: /games/sse/xEdit.exe -quickautoclean"};
   s.offerLoot                = true;
   s.userPluginOrderChanged   = true;
 
@@ -36,7 +37,8 @@ TEST(ImportSummary, TextHasEverySection)
 
   for (const char* section :
        {"Installed", "Reused", "Failed", "Skipped", "Plugins not installed",
-        "Missing masters", "INI files not applied", "Executables without a target"}) {
+        "Missing masters", "INI files not applied", "Executables without a target",
+        "Executables added"}) {
     EXPECT_TRUE(text.contains(section)) << section;
   }
   for (const char* mod : {"Alpha Mod", "Beta Mod", "Gamma Mod", "Delta Mod"}) {
@@ -49,6 +51,7 @@ TEST(ImportSummary, TextHasEverySection)
   EXPECT_TRUE(text.contains("Other.esm"));
   EXPECT_TRUE(text.contains("Skyrim.ini"));
   EXPECT_TRUE(text.contains("SKSE"));
+  EXPECT_TRUE(text.contains("xEdit [My List]: /games/sse/xEdit.exe -quickautoclean"));
   EXPECT_TRUE(text.contains("LOOT"));
   EXPECT_TRUE(text.contains("plugin order"));
 }
@@ -63,6 +66,7 @@ TEST(ImportSummary, EmptySectionsAreLeftOut)
   EXPECT_FALSE(text.contains("Failed"));
   EXPECT_FALSE(text.contains("Missing masters"));
   EXPECT_FALSE(text.contains("LOOT"));
+  EXPECT_FALSE(text.contains("Executables added"));
 }
 
 TEST(ImportSummary, RetryableOnlyFailed)
