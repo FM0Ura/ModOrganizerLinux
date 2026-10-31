@@ -6,6 +6,7 @@
 #include <QByteArray>
 #include <QString>
 
+#include <functional>
 #include <map>
 #include <vector>
 
@@ -24,9 +25,17 @@ public:
   ExportCollector(OrganizerCore& core, const Profile& profile);
 
   // the regular mods and separators of the profile, from the lowest priority to the
-  // highest; the MD5 and size of each file come from its archive in the downloads
-  // folder when it is still there (empty MD5 otherwise)
+  // highest; the archive path and size of each file come from the downloads folder
+  // when the archive is still there. No MD5 is computed here, see fillMd5().
   std::vector<ExportMod> mods() const;
+
+  // Computes the MD5 of the archives that the export of `options` will use: the
+  // Nexus files of the exported mods (enabled, or all with includeInactive), and the
+  // last archive of a mod without Nexus files exported as Manual whose manualMd5 is
+  // empty. progress(done, total) is called before each archive and once at the end;
+  // when it returns false, the rest is left without MD5.
+  void fillMd5(std::vector<ExportMod>& mods, const ExportOptions& options,
+               const std::function<bool(int done, int total)>& progress) const;
 
   // instance, game, the Proton prefix of the game (the WINEPREFIX of the Proton
   // launcher) and the home folder

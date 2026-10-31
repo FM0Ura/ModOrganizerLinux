@@ -39,6 +39,9 @@ struct ExportFile
   int fileId = 0;
   // fileKey() of the archive
   QString key;
+  // the archive in the downloads folder, empty when it is not there
+  QString archivePath;
+  // filled by ExportCollector::fillMd5()
   QString md5;
   qint64 size = -1;
   std::optional<QJsonArray> fomodChoices;
@@ -52,6 +55,8 @@ struct ExportMod
   QString version;
   bool isSeparator = false;
   bool enabled     = true;
+  // the Nexus mod id of the mod, 0 if none
+  int nexusId = 0;
   // in the recorded install order; without one, in the order of installedFiles() and
   // hasInstallOrder is false
   std::vector<ExportFile> files;
@@ -76,14 +81,28 @@ struct ExportWarning
 {
   enum class Kind
   {
+    // a FOMOD archive without recorded choices: the importer chooses by hand
     NoFomodChoices,
+    // more than one Nexus file and no recorded install order
     NoInstallOrder,
+    // a nexus or manual source without MD5
     NoMd5,
+    // the user excluded the mod
     Excluded,
-    ManualWithoutUrl
+    ManualWithoutUrl,
+    // environment variables of an executable that look like credentials were
+    // dropped; `mod` is the title of the executable
+    SecretEnvDropped,
+    // a mod with Nexus files and files without ids: only the Nexus ones are exported
+    MixedSources,
+    // a Bundled mod with no file to bundle; left out
+    EmptyBundled,
+    // a mod of the Nexus chosen as Bundled; left out, Nexus files are never bundled
+    NexusModNotBundled
   };
 
   Kind kind;
+  // the mod name, or the executable title for SecretEnvDropped
   QString mod;
 };
 
@@ -109,10 +128,14 @@ QString overwriteModName(const QString& listName);
 //   separators always;
 // - a mod with Nexus files is one entry with a nexus source per file, in order;
 // - a mod without them follows its nonNexus choice; Bundled takes the files under
-//   absolutePath except meta.ini and symbolic links;
+//   absolutePath except meta.ini, symbolic links and anything whose canonical path is
+//   outside it, and is left out when there is no such file or the mod has a nexusId;
 // - overwriteFiles become the bundled mod overwriteModName(listName), the last one
-//   (highest priority);
-// - the profile INIs, the executables and their paths go through toMarkers();
+//   (highest priority); only relative paths without "..", to regular files whose
+//   canonical path is inside overwriteDir;
+// - the profile INIs, the executables and their paths go through toMarkers(); the
+//   environment variables whose name holds KEY, TOKEN, SECRET, PASS, AUTH, COOKIE
+//   or SESSION (ignoring case) are dropped;
 // - what isExcludedFromPackage() is never in the package, whatever the input.
 // bundledFiles are (path inside bundled/, absolute path on disk), the first being
 // "<bundledDirName(mod)>/<relative path>". base gives gameName and nexusDomain.

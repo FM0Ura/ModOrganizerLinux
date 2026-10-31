@@ -347,6 +347,133 @@ TEST(ExportBuilder, EmptyPathsBundleNothing)
   o.overwriteFiles = {"CMakeCache.txt"};
   const auto r     = build({bundled}, o, {}, {}, QString());
   EXPECT_TRUE(r.package.bundledFiles.empty());
+  EXPECT_TRUE(r.package.plan.mods.empty());
+  EXPECT_TRUE(hasWarning(r, ExportWarning::Kind::EmptyBundled, "B"));
+}
+
+TEST(ExportBuilder, EmptyBundledIsExcluded)
+{
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir.filePath("meta.ini"), "[General]\n");
+  writeFile(dir.filePath("x.log"), "log");
+
+  ExportMod bundled;
+  bundled.name         = "B";
+  bundled.nonNexus     = NonNexusChoice::Bundled;
+  bundled.absolutePath = dir.path();
+
+  const auto r = build({bundled});
+  EXPECT_TRUE(r.package.plan.mods.empty());
+  EXPECT_TRUE(hasWarning(r, ExportWarning::Kind::EmptyBundled, "B"));
+  EXPECT_EQ(r.bundledCount, 0);
+  EXPECT_EQ(r.excludedCount, 1);
+}
+
+TEST(ExportBuilder, NexusModNotBundled)
+{
+  QTemporaryDir dir;
+  ASSERT_TRUE(dir.isValid());
+  writeFile(dir.filePath("a.esp"), "esp");
+
+  ExportMod bundled;
+  bundled.name         = "From Nexus";
+  bundled.nexusId      = 1234;
+  bundled.nonNexus     = NonNexusChoice::Bundled;
+  bundled.absolutePath = dir.path();
+
+  const auto r = build({bundled});
+  EXPECT_TRUE(r.package.plan.mods.empty());
+  EXPECT_TRUE(r.package.bundledFiles.empty());
+  EXPECT_TRUE(hasWarning(r, ExportWarning::Kind::NexusModNotBundled, "From Nexus"));
+  EXPECT_EQ(r.bundledCount, 0);
+  EXPECT_EQ(r.excludedCount, 1);
+}
+
+TEST(ExportBuilder, ManualWithoutMd5)
+{
+  ExportMod manual;
+  manual.name      = "Manual";
+  manual.manualUrl = "https://example.com/mod";
+  const auto r     = build({manual});
+  EXPECT_TRUE(hasWarning(r, ExportWarning::Kind::NoMd5, "Manual"));
+}
+
+TEST(ExportBuilder, MixedSources)
+{
+  ExportMod m = nexusMod("Mixed", 1, 10);
+  ExportFile local;
+  local.key = "archive_abcdefghijkl";
+  m.files.push_back(local);
+
+  const auto r = build({m});
   ASSERT_EQ(r.package.plan.mods.size(), 1u);
-  EXPECT_EQ(r.package.plan.mods[0].name, "B");
+  ASSERT_EQ(r.package.plan.mods[0].sources.size(), 1u);
+  EXPECT_EQ(r.package.plan.mods[0].sources[0].kind, SourceKind::Nexus);
+  EXPECT_TRUE(hasWarning(r, ExportWarning::Kind::MixedSources, "Mixed"));
+  EXPECT_FALSE(hasWarning(build({nexusMod("A", 1, 10)}),
+                          ExportWarning::Kind::MixedSources, "A"));
+}
+
+TEST(ExportBuilder, SecretEnvDropped)
+{
+  ExecutableEntry exe;
+  exe.title       = "Tool";
+  exe.binary      = "/home/u/Games/Skyrim/tool.exe";
+  exe.environment = {"NEXUS_API_KEY=abc", "my_token=1",    "DB_PASSWORD=x",
+                     "OAuthThing=y",      "SteamCookie=z", "SESSIONID=s",
+                     "Secret=q",          "DXVK_HUD=fps"};
+
+  const auto r = build({}, options(), {}, {exe});
+  ASSERT_EQ(r.package.plan.executables.size(), 1u);
+  EXPECT_EQ(r.package.plan.executables[0].environment, (QStringList{"DXVK_HUD=fps"}));
+  EXPECT_TRUE(hasWarning(r, ExportWarning::Kind::SecretEnvDropped, "Tool"));
+
+  exe.environment = {"DXVK_HUD=fps"};
+  EXPECT_FALSE(hasWarning(build({}, options(), {}, {exe}),
+                          ExportWarning::Kind::SecretEnvDropped, "Tool"));
+}
+
+TEST(ExportBuilder, OverwriteStaysInside)
+{
+  QTemporaryDir outside;
+  QTemporaryDir overwrite;
+  ASSERT_TRUE(outside.isValid() && overwrite.isValid());
+  writeFile(outside.filePath("x.ini"), "secret");
+  writeFile(overwrite.filePath("SKSE/x.ini"), "x");
+  ASSERT_TRUE(QFile::link(outside.path(), overwrite.filePath("linked")));
+  ASSERT_TRUE(QFile::link(outside.filePath("x.ini"), overwrite.filePath("file.ini")));
+
+  auto o           = options();
+  o.overwriteFiles = {"linked/x.ini",
+                      "file.ini",
+                      "../" + QFileInfo(outside.path()).fileName() + "/x.ini",
+                      "SKSE/../../" + QFileInfo(outside.path()).fileName() + "/x.ini",
+                      outside.filePath("x.ini"),
+                      "SKSE/x.ini"};
+  const auto r     = build({}, o, {}, {}, overwrite.path());
+
+  ASSERT_EQ(r.package.bundledFiles.size(), 1u);
+  EXPECT_EQ(r.package.bundledFiles[0].first,
+            bundledDirName("[L] Overwrite") + "/SKSE/x.ini");
+}
+
+TEST(ExportBuilder, BundledSkipsLinks)
+{
+  QTemporaryDir outside;
+  QTemporaryDir dir;
+  ASSERT_TRUE(outside.isValid() && dir.isValid());
+  writeFile(outside.filePath("secret.txt"), "secret");
+  writeFile(dir.filePath("a.esp"), "esp");
+  ASSERT_TRUE(QFile::link(outside.filePath("secret.txt"), dir.filePath("link.txt")));
+  ASSERT_TRUE(QFile::link(outside.path(), dir.filePath("linkeddir")));
+
+  ExportMod bundled;
+  bundled.name         = "B";
+  bundled.nonNexus     = NonNexusChoice::Bundled;
+  bundled.absolutePath = dir.path();
+
+  const auto r = build({bundled});
+  ASSERT_EQ(r.package.bundledFiles.size(), 1u);
+  EXPECT_EQ(r.package.bundledFiles[0].first, bundledDirName("B") + "/a.esp");
 }

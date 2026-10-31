@@ -236,8 +236,8 @@ std::vector<ExportMod> ExportCollector::mods() const
       if (it == downloads.end()) {
         continue;
       }
-      f.md5  = md5Of(it->second);
-      f.size = QFileInfo(it->second).size();
+      f.archivePath = it->second;
+      f.size        = QFileInfo(it->second).size();
       if (!f.fomodChoices) {
         if (!archive) {
           archive = CreateArchive();
@@ -248,9 +248,7 @@ std::vector<ExportMod> ExportCollector::mods() const
 
     // used when the mod has no Nexus files and is exported as manual
     e.manualFileName = QFileInfo(mod->installationFile()).fileName();
-    if (!e.files.empty()) {
-      e.manualMd5 = e.files.back().md5;
-    }
+    e.nexusId        = std::max(mod->nexusId(), 0);
     if (mod->hasCustomURL() && !mod->url().isEmpty()) {
       e.manualUrl = mod->url();
     } else if (mod->nexusId() > 0 && game != nullptr &&
@@ -264,6 +262,50 @@ std::vector<ExportMod> ExportCollector::mods() const
   }
 
   return out;
+}
+
+void ExportCollector::fillMd5(
+    std::vector<ExportMod>& mods, const ExportOptions& options,
+    const std::function<bool(int done, int total)>& progress) const
+{
+  // the files to hash, and for a manual mod where its MD5 goes
+  std::vector<std::pair<ExportFile*, ExportMod*>> work;
+  for (auto& mod : mods) {
+    if (mod.isSeparator || (!mod.enabled && !options.includeInactive)) {
+      continue;
+    }
+    const bool hasNexus = std::any_of(mod.files.begin(), mod.files.end(), [](auto& f) {
+      return f.modId > 0 && f.fileId > 0;
+    });
+    if (hasNexus) {
+      for (auto& f : mod.files) {
+        if (f.modId > 0 && f.fileId > 0 && f.md5.isEmpty() &&
+            !f.archivePath.isEmpty()) {
+          work.emplace_back(&f, nullptr);
+        }
+      }
+    } else if (mod.nonNexus == NonNexusChoice::Manual && mod.manualMd5.isEmpty() &&
+               !mod.files.empty() && !mod.files.back().archivePath.isEmpty()) {
+      work.emplace_back(&mod.files.back(), &mod);
+    }
+  }
+
+  const int total = static_cast<int>(work.size());
+  for (int done = 0; done < total; ++done) {
+    if (progress && !progress(done, total)) {
+      return;
+    }
+    auto& [file, manual] = work[done];
+    if (file->md5.isEmpty()) {
+      file->md5 = md5Of(file->archivePath);
+    }
+    if (manual != nullptr) {
+      manual->manualMd5 = file->md5;
+    }
+  }
+  if (progress) {
+    progress(total, total);
+  }
 }
 
 PathMarkers ExportCollector::markers() const

@@ -12,13 +12,33 @@ namespace modlists
 namespace
 {
 
-  // the files to bundle under dir, relative to it and sorted; symbolic links are
-  // skipped, they could point outside the mod
+  // the canonical path of a folder, empty if it is not one; an empty path would be
+  // the current directory
+  QString canonicalRoot(const QString& dir)
+  {
+    if (dir.isEmpty() || !QFileInfo(dir).isDir()) {
+      return {};
+    }
+    return QFileInfo(dir).canonicalFilePath();
+  }
+
+  // a regular file, not a symbolic link, that really is under root (canonical): a
+  // symbolic link, or a file under a linked folder, could point outside the mod
+  bool isFileInside(const QString& root, const QFileInfo& info)
+  {
+    if (root.isEmpty() || !info.isFile() || info.isSymLink()) {
+      return false;
+    }
+    const QString canonical = info.canonicalFilePath();
+    return !canonical.isEmpty() && canonical.startsWith(root + '/');
+  }
+
+  // the files to bundle under dir, relative to it and sorted
   QStringList bundledFilesOf(const QString& dir)
   {
     QStringList out;
-    // an empty path would be the current directory
-    if (dir.isEmpty() || !QFileInfo(dir).isDir()) {
+    const QString canonical = canonicalRoot(dir);
+    if (canonical.isEmpty()) {
       return out;
     }
     const QDir root(dir);
@@ -27,7 +47,7 @@ namespace
     while (it.hasNext()) {
       it.next();
       const QFileInfo info = it.fileInfo();
-      if (info.isSymLink()) {
+      if (!isFileInside(canonical, info)) {
         continue;
       }
       const QString relative = root.relativeFilePath(info.filePath());
@@ -64,14 +84,35 @@ namespace
     return toMarkers(QString::fromLatin1(data), latin1).toLatin1();
   }
 
-  ExecutableEntry sanitizedExecutable(ExecutableEntry e, const PathMarkers& markers)
+  // an environment variable whose name looks like it holds a credential
+  bool isSecretVariable(const QString& variable)
+  {
+    static const char* const words[] = {"KEY",  "TOKEN",  "SECRET", "PASS",
+                                        "AUTH", "COOKIE", "SESSION"};
+    const QString name               = variable.section('=', 0, 0);
+    return std::any_of(std::begin(words), std::end(words), [&](const char* w) {
+      return name.contains(QLatin1String(w), Qt::CaseInsensitive);
+    });
+  }
+
+  // the paths with markers, without the secret variables; `dropped` tells if any was
+  ExecutableEntry sanitizedExecutable(ExecutableEntry e, const PathMarkers& markers,
+                                      bool& dropped)
   {
     e.binary           = toMarkers(e.binary, markers);
     e.arguments        = toMarkers(e.arguments, markers);
     e.workingDirectory = toMarkers(e.workingDirectory, markers);
-    for (auto& variable : e.environment) {
-      variable = toMarkers(variable, markers);
+
+    QStringList environment;
+    dropped = false;
+    for (const auto& variable : e.environment) {
+      if (isSecretVariable(variable)) {
+        dropped = true;
+      } else {
+        environment.append(toMarkers(variable, markers));
+      }
     }
+    e.environment = environment;
     return e;
   }
 
@@ -115,18 +156,32 @@ namespace
       }
 
       if (!nexus.empty()) {
+        // the files without ids cannot be downloaded by the importer
+        if (nexus.size() < mod.files.size()) {
+          warn(ExportWarning::Kind::MixedSources, mod.name);
+        }
         addNexus(entry, mod, nexus);
       } else {
         switch (mod.nonNexus) {
         case NonNexusChoice::Manual:
           addManual(entry, mod);
           break;
-        case NonNexusChoice::Bundled:
-          addBundled(entry, bundledFilesOf(mod.absolutePath), mod.absolutePath);
+        case NonNexusChoice::Bundled: {
+          // the files of a Nexus mod are never redistributed
+          if (mod.nexusId > 0) {
+            exclude(ExportWarning::Kind::NexusModNotBundled, mod.name);
+            return;
+          }
+          const auto files = bundledFilesOf(mod.absolutePath);
+          if (files.isEmpty()) {
+            exclude(ExportWarning::Kind::EmptyBundled, mod.name);
+            return;
+          }
+          addBundled(entry, files, mod.absolutePath);
           break;
+        }
         case NonNexusChoice::Exclude:
-          warn(ExportWarning::Kind::Excluded, mod.name);
-          ++m_result.excludedCount;
+          exclude(ExportWarning::Kind::Excluded, mod.name);
           return;
         }
       }
@@ -137,13 +192,14 @@ namespace
     void addOverwrite(const QString& overwriteDir)
     {
       QStringList files;
-      if (overwriteDir.isEmpty()) {
+      const QString root = canonicalRoot(overwriteDir);
+      if (root.isEmpty()) {
         return;
       }
       for (const auto& relative : m_options.overwriteFiles) {
         if (isSafeRelative(relative) && !isExcludedFromPackage(relative)) {
           const QFileInfo info(QDir(overwriteDir).filePath(relative));
-          if (info.isFile() && !info.isSymLink()) {
+          if (isFileInside(root, info)) {
             files.append(QDir::cleanPath(QString(relative).replace('\\', '/')));
           }
         }
@@ -165,6 +221,12 @@ namespace
     void warn(ExportWarning::Kind kind, const QString& mod)
     {
       m_result.warnings.push_back({kind, mod});
+    }
+
+    void exclude(ExportWarning::Kind kind, const QString& mod)
+    {
+      warn(kind, mod);
+      ++m_result.excludedCount;
     }
 
     void fomodWarning(const ExportFile& f, const QString& mod)
@@ -222,6 +284,9 @@ namespace
 
       if (mod.manualUrl.isEmpty()) {
         warn(ExportWarning::Kind::ManualWithoutUrl, mod.name);
+      }
+      if (mod.manualMd5.isEmpty()) {
+        warn(ExportWarning::Kind::NoMd5, mod.name);
       }
       ++m_result.manualCount;
     }
@@ -305,7 +370,11 @@ ExportResult buildExport(const std::vector<ExportMod>& modsLowToHigh,
   }
 
   for (const auto& e : executables) {
-    plan.executables.push_back(sanitizedExecutable(e, markers));
+    bool dropped = false;
+    plan.executables.push_back(sanitizedExecutable(e, markers, dropped));
+    if (dropped) {
+      result.warnings.push_back({ExportWarning::Kind::SecretEnvDropped, e.title});
+    }
   }
 
   result.package.readme = options.readme;
