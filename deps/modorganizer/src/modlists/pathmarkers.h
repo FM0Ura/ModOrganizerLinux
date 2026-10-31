@@ -15,11 +15,13 @@ struct PathMarkers
 
 // Replaces the machine paths by %INSTANCE%, %GAME%, %PROTON_PREFIX% and %HOME%,
 // longest path first, only where the path ends on a path boundary (/, \, quote,
-// space, ';', CR, LF or end of text). Also matches the Wine form (Z:\home\...).
+// space, ';', CR, LF or end of text) and that starts at the start of the text or
+// after a character that cannot be part of a path segment. The Wine form
+// (Z:\home\...) is written as Z:%MARKER% so it survives the round trip.
 QString toMarkers(const QString& text, const PathMarkers& markers);
 
-// Inverse of toMarkers for the paths of `markers`. A marker followed by '\' is
-// expanded to the Wine form (Z:\...) of the path.
+// Inverse of toMarkers for the paths of `markers`. Z:%MARKER% expands to the Wine
+// form (Z: + path with '\'); a bare %MARKER% always to the Linux path.
 QString fromMarkers(const QString& text, const PathMarkers& markers);
 
 struct Leak

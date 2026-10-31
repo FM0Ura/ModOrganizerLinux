@@ -31,8 +31,10 @@ TEST(PathMarkers, LongestFirstAndBoundaries)
 TEST(PathMarkers, WineForm)
 {
   EXPECT_EQ(toMarkers("Z:\\home\\u\\Games\\Skyrim\\SkyrimSE.exe", sample()),
-            "%GAME%\\SkyrimSE.exe");
-  EXPECT_EQ(toMarkers("z:\\home\\u\\x", sample()), "%HOME%\\x");
+            "Z:%GAME%\\SkyrimSE.exe");
+  EXPECT_EQ(toMarkers("z:\\home\\u\\x", sample()), "Z:%HOME%\\x");
+  EXPECT_EQ(toMarkers("a=Z:\\home\\u\\Games\\Skyrim", sample()), "a=Z:%GAME%");
+  EXPECT_EQ(toMarkers("\"Z:\\home\\u\\Games\\Skyrim\"", sample()), "\"Z:%GAME%\"");
   EXPECT_EQ(toMarkers("Z:\\HOME\\u\\x", sample()), "Z:\\HOME\\u\\x");
 }
 
@@ -72,4 +74,36 @@ TEST(PathMarkers, FindLeaks)
 
   EXPECT_TRUE(findLeaks("f.ini", "name=Fabiola\n", "fabio", "").empty());
   EXPECT_TRUE(findLeaks("f.ini", "name=ab\n", "ab", "").empty());
+}
+
+TEST(PathMarkers, WineRoundTripAtEveryBoundary)
+{
+  PathMarkers m2;
+  m2.home     = "/home/v";
+  m2.game     = "/mnt/g/Skyrim";
+  m2.instance = "/home/v/inst";
+  const char* in[]  = {"Path=Z:\\home\\u\\Games\\Skyrim",
+                       "Path=\"Z:\\home\\u\\Games\\Skyrim\" x",
+                       "Path=Z:\\home\\u\\Games\\Skyrim;other"};
+  const char* out[] = {"Path=Z:\\mnt\\g\\Skyrim",
+                       "Path=\"Z:\\mnt\\g\\Skyrim\" x",
+                       "Path=Z:\\mnt\\g\\Skyrim;other"};
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_EQ(fromMarkers(toMarkers(in[i], sample()), m2), out[i]) << i;
+  }
+  EXPECT_EQ(fromMarkers("z:%GAME%", m2), "Z:\\mnt\\g\\Skyrim");
+}
+
+TEST(PathMarkers, LinuxPathBeforeBackslashStaysLinux)
+{
+  PathMarkers m2;
+  m2.game = "/mnt/g/Skyrim";
+  EXPECT_EQ(fromMarkers("%GAME%\\Data", m2), "/mnt/g/Skyrim\\Data");
+}
+
+TEST(PathMarkers, LeftBoundary)
+{
+  EXPECT_EQ(toMarkers("/mnt/home/u/x", sample()), "/mnt/home/u/x");
+  EXPECT_EQ(toMarkers("abcZ:\\home\\u\\x", sample()), "abcZ:\\home\\u\\x");
+  EXPECT_EQ(toMarkers("x=/home/u/x", sample()), "x=%HOME%/x");
 }

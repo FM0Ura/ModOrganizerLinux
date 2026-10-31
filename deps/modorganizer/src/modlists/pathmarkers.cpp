@@ -54,6 +54,19 @@ namespace
            c == QLatin1Char('\r') || c == QLatin1Char('\n');
   }
 
+  // A match may only start at the start of the text or after a character that
+  // cannot be part of a path segment.
+  bool isLeftBoundary(const QString& text, qsizetype pos)
+  {
+    if (pos <= 0) {
+      return true;
+    }
+    const QChar c = text[pos - 1];
+    return !(c.isLetterOrNumber() || c == QLatin1Char('.') || c == QLatin1Char('_') ||
+             c == QLatin1Char('-') || c == QLatin1Char('%') || c == QLatin1Char('/') ||
+             c == QLatin1Char('\\'));
+  }
+
   bool isWordChar(QChar c)
   {
     return c.isLetterOrNumber() || c == QLatin1Char('_');
@@ -113,8 +126,8 @@ QString toMarkers(const QString& text, const PathMarkers& markers)
           c.wine ? (text.mid(i, 2).compare(QLatin1String("Z:"), Qt::CaseInsensitive) == 0 &&
                     text.mid(i + 2, c.needle.size() - 2) == c.needle.mid(2))
                  : text.mid(i, c.needle.size()) == c.needle;
-      if (ok && isBoundary(text, i + c.needle.size())) {
-        out += c.marker;
+      if (ok && isLeftBoundary(text, i) && isBoundary(text, i + c.needle.size())) {
+        out += c.wine ? QStringLiteral("Z:") + c.marker : c.marker;
         i += c.needle.size();
         matched = true;
         break;
@@ -139,10 +152,18 @@ QString fromMarkers(const QString& text, const PathMarkers& markers)
     if (text[i] == QLatin1Char('%')) {
       for (const auto& e : list) {
         if (text.mid(i, e.marker.size()) == e.marker) {
-          const qsizetype end = i + e.marker.size();
-          const bool wine     = end < text.size() && text[end] == QLatin1Char('\\');
-          out += wine ? e.wine : e.path;
-          i = end;
+          out += e.path;
+          i += e.marker.size();
+          matched = true;
+          break;
+        }
+      }
+    } else if (text.mid(i, 2).compare(QLatin1String("Z:"), Qt::CaseInsensitive) == 0 &&
+               text.size() > i + 2 && text[i + 2] == QLatin1Char('%')) {
+      for (const auto& e : list) {
+        if (text.mid(i + 2, e.marker.size()) == e.marker) {
+          out += e.wine;
+          i += 2 + e.marker.size();
           matched = true;
           break;
         }
