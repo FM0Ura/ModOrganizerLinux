@@ -346,9 +346,15 @@ InstallerFomod::replayChoices(const QString& recorded, GuessedValue<QString>& mo
     m_HasChoices          = treeResult == IPluginInstaller::RESULT_SUCCESS;
     return treeResult;
   } catch (const std::exception& e) {
-    manager()->setInstallerDetail(e.what());
+    manager()->setInstallerDetail(replayFailureDetail(QString::fromUtf8(e.what())));
     return IPluginInstaller::RESULT_FAILED;
   }
+}
+
+QString InstallerFomod::replayFailureDetail(const QString& message)
+{
+  static const QString prefix = QStringLiteral("FOMOD ");
+  return message.startsWith(prefix) ? message : prefix + message;
 }
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)

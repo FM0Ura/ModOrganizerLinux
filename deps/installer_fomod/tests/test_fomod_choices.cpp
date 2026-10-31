@@ -32,18 +32,26 @@ using namespace MOBase;
 namespace
 {
 
-const char* const sampleFiles[] = {"fomod/ModuleConfig.xml", "textures/option_a.dds",
-                                   "textures/option_b.dds", "textures/extra.dds"};
+const QStringList sampleFiles{"fomod/ModuleConfig.xml", "textures/option_a.dds",
+                              "textures/option_b.dds", "textures/extra.dds"};
 
-// copies the conditional fixture into a directory under QDir::tempPath(), where the
+// FOMOD_SAMPLE3_DIR: the first step is never visible (flag "never") and installs
+// textures/hidden.dds from a SelectAll group; the second step has a SelectExactlyOne
+// group with "X", "Y" and "Z" (not usable while Missing.esp is missing)
+const QStringList hiddenFirstFiles{"fomod/ModuleConfig.xml", "textures/hidden.dds",
+                                   "textures/x.dds", "textures/y.dds",
+                                   "textures/z.dds"};
+
+// copies the files of a fixture into a directory under QDir::tempPath(), where the
 // dialog reads the extracted archive from, and returns the path of the directory
 // relative to QDir::tempPath()
-QString extractConditionalSample(const QTemporaryDir& tmp)
+QString extractSample(const QTemporaryDir& tmp, const QString& sampleDir,
+                      const QStringList& files)
 {
-  const QDir sample(FOMOD_SAMPLE2_DIR);
+  const QDir sample(sampleDir);
   const QDir out(tmp.path());
 
-  for (const char* file : sampleFiles) {
+  for (const QString& file : files) {
     const QString target = out.absoluteFilePath(file);
     QDir().mkpath(QFileInfo(target).absolutePath());
     if (!QFile::copy(sample.absoluteFilePath(file), target)) {
@@ -86,11 +94,12 @@ protected:
   }
 };
 
-// the archive of the sample, with its files under the directory of the dialog
-std::shared_ptr<IFileTree> archiveTree(const QString& fomodPath)
+// the archive of a sample, with its files under the directory of the dialog
+std::shared_ptr<IFileTree> archiveTree(const QString& fomodPath,
+                                       const QStringList& files = sampleFiles)
 {
   auto tree = MemoryTree::create();
-  for (const char* file : sampleFiles) {
+  for (const QString& file : files) {
     tree->addFile(fomodPath + "/" + file);
   }
   return tree;
@@ -156,7 +165,7 @@ protected:
   void SetUp() override
   {
     ASSERT_TRUE(m_Tmp.isValid());
-    m_FomodPath = extractConditionalSample(m_Tmp);
+    m_FomodPath = extractSample(m_Tmp, FOMOD_SAMPLE2_DIR, sampleFiles);
     ASSERT_FALSE(m_FomodPath.isEmpty());
 
     m_Dialog = std::make_unique<FomodInstallerDialog>(
@@ -283,5 +292,137 @@ TEST_F(FomodChoices, MissingFileFailsWithoutDialog)
     EXPECT_NE(std::string(e.what()).find("FOMOD files missing from the archive"),
               std::string::npos)
         << e.what();
+  }
+}
+
+namespace
+{
+
+// a dialog on the hidden-first-step sample, read without the user
+std::unique_ptr<FomodInstallerDialog> hiddenFirstDialog(const QString& fomodPath)
+{
+  auto dialog = std::make_unique<FomodInstallerDialog>(
+      nullptr, GuessedValue<QString>("FOMOD Hidden First Sample"), fomodPath,
+      [](const QString&) {
+        return IPluginList::STATE_MISSING;
+      });
+  dialog->setInteractive(false);
+  dialog->initData(nullptr);
+  return dialog;
+}
+
+QJsonObject visibleStep(const QJsonArray& choices)
+{
+  return step("Visible step", {group("Visible group", choices)});
+}
+
+class FomodHiddenFirst : public testing::Test
+{
+protected:
+  void SetUp() override
+  {
+    ASSERT_TRUE(m_Tmp.isValid());
+    m_FomodPath = extractSample(m_Tmp, FOMOD_SAMPLE3_DIR, hiddenFirstFiles);
+    ASSERT_FALSE(m_FomodPath.isEmpty());
+  }
+
+  QTemporaryDir m_Tmp;
+  QString m_FomodPath;
+};
+
+}  // namespace
+
+TEST_F(FomodHiddenFirst, RecordSkipsHiddenFirstStep)
+{
+  auto dialog = hiddenFirstDialog(m_FomodPath);
+  const QJsonArray expected{visibleStep({choice("X", 0)})};
+  EXPECT_EQ(compact(dialog->selectedChoices()), compact(expected));
+}
+
+TEST_F(FomodHiddenFirst, RecordReplayRoundTrip)
+{
+  // what one install records, another replays
+  auto first = hiddenFirstDialog(m_FomodPath);
+  ASSERT_EQ(replayError(*first, {visibleStep({choice("Y", 1)})}), "");
+  const QJsonArray recorded = first->selectedChoices();
+  EXPECT_EQ(compact(recorded), compact(QJsonArray{visibleStep({choice("Y", 1)})}));
+
+  auto second = hiddenFirstDialog(m_FomodPath);
+  ASSERT_EQ(replayError(*second, recorded), "");
+  EXPECT_EQ(compact(second->selectedChoices()), compact(recorded));
+}
+
+TEST_F(FomodHiddenFirst, UpdateTreeSkipsHiddenFirstStep)
+{
+  // the SelectAll group of the hidden step is checked, but its files stay out
+  auto dialog = hiddenFirstDialog(m_FomodPath);
+  ASSERT_EQ(replayError(*dialog, {visibleStep({choice("Y", 1)})}), "");
+
+  auto tree = archiveTree(m_FomodPath, hiddenFirstFiles);
+  ASSERT_EQ(dialog->updateTree(tree), IPluginInstaller::RESULT_SUCCESS);
+  EXPECT_EQ(filePaths(tree), QStringList({"textures/y.dds"}));
+}
+
+TEST_F(FomodHiddenFirst, DisabledOptionFails)
+{
+  // "Z" exists but is not usable: a stale record fails instead of being ignored
+  auto dialog             = hiddenFirstDialog(m_FomodPath);
+  const std::string error = replayError(*dialog, {visibleStep({choice("Z", 2)})});
+  EXPECT_NE(error.find("FOMOD option 'Z' cannot be selected in group 'Visible group'"),
+            std::string::npos)
+      << error;
+}
+
+TEST_F(FomodHiddenFirst, EmptyRecordOfRequiredGroupFails)
+{
+  // a SelectExactlyOne group recorded without a choice
+  auto dialog             = hiddenFirstDialog(m_FomodPath);
+  const std::string error = replayError(*dialog, {visibleStep({})});
+  EXPECT_NE(
+      error.find("FOMOD group 'Visible group' needs a choice in step 'Visible step'"),
+      std::string::npos)
+      << error;
+}
+
+TEST(FomodReplayDetail, PrefixesFailures)
+{
+  EXPECT_EQ(InstallerFomod::replayFailureDetail("FOMOD option 'C' not found"),
+            "FOMOD option 'C' not found");
+  EXPECT_EQ(InstallerFomod::replayFailureDetail("unsupported group type Foo"),
+            "FOMOD unsupported group type Foo");
+}
+
+TEST(FomodReplayDetail, UnmetModuleDependency)
+{
+  // an unmet moduleDependencies throws a message without the "FOMOD " prefix; the
+  // detail of the replay gets it, so the importer offers "Install manually"
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  QDir().mkpath(tmp.filePath("fomod"));
+  QFile xml(tmp.filePath("fomod/ModuleConfig.xml"));
+  ASSERT_TRUE(xml.open(QIODevice::WriteOnly));
+  xml.write(R"(<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <moduleName>FOMOD Dependency Sample</moduleName>
+  <moduleDependencies operator="And">
+    <fileDependency file="Required.esp" state="Active"/>
+  </moduleDependencies>
+</config>
+)");
+  xml.close();
+
+  FomodInstallerDialog dialog(nullptr, GuessedValue<QString>("FOMOD Dependency Sample"),
+                              QDir(QDir::tempPath()).relativeFilePath(tmp.path()),
+                              [](const QString&) {
+                                return IPluginList::STATE_MISSING;
+                              });
+  dialog.setInteractive(false);
+  try {
+    dialog.initData(nullptr);
+    FAIL() << "initData() did not throw";
+  } catch (const std::exception& e) {
+    const QString detail = InstallerFomod::replayFailureDetail(e.what());
+    EXPECT_TRUE(detail.startsWith("FOMOD ")) << detail.toStdString();
+    EXPECT_TRUE(detail.contains("Required.esp")) << detail.toStdString();
   }
 }

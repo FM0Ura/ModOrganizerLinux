@@ -43,6 +43,12 @@ public:
   virtual void onInstallationEnd(EInstallResult result,
                                  MOBase::IModInterface* newMod) override;
 
+  /**
+   * @brief The detail of a failed replay: the message, with the "FOMOD " prefix the
+   *     importer looks for to offer "Install manually" when it does not have it yet.
+   */
+  static QString replayFailureDetail(const QString& message);
+
 public:  // IPluginDiagnose interface
   virtual std::vector<unsigned int> activeProblems() const;
   virtual QString shortDescription(unsigned int key) const;

@@ -357,7 +357,8 @@ build_installer_manual() {
 build_installer_fomod() {
     cmake_build installer_fomod "$ROOT/deps/installer_fomod" \
         -DFOMOD_SAMPLE_DIR="$ROOT/tests/fixtures/fomod-sample" \
-        -DFOMOD_SAMPLE2_DIR="$ROOT/tests/fixtures/fomod-sample-conditional"
+        -DFOMOD_SAMPLE2_DIR="$ROOT/tests/fixtures/fomod-sample-conditional" \
+        -DFOMOD_SAMPLE3_DIR="$ROOT/tests/fixtures/fomod-sample-hidden-first"
     check_plugins installer "$INSTALL/bin/plugins/libinstaller_fomod.so"
 }
 

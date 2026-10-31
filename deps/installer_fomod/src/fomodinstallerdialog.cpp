@@ -1321,7 +1321,8 @@ void FomodInstallerDialog::parseModuleConfig(XmlReader& reader)
     throw XmlParseError(
         QString("%1 in line %2").arg(reader.errorString()).arg(reader.lineNumber()));
   }
-  // Find the first visible page
+  // Find the first visible page; the hidden pages before it are marked as not
+  // visible, as nextPage() does, so m_PageVisible stays aligned with the pages
   int index = 0;
   while (index < ui->stepsStack->count()) {
     if (testVisible(index)) {
@@ -1330,6 +1331,7 @@ void FomodInstallerDialog::parseModuleConfig(XmlReader& reader)
       activateCurrentPage();
       break;
     }
+    m_PageVisible.push_back(false);
     ++index;
   }
   // No pages are visible? Go to a small install
@@ -1691,6 +1693,7 @@ namespace
 struct GroupControls
 {
   QString name;
+  FomodInstallerDialog::GroupType type = FomodInstallerDialog::TYPE_SELECTANY;
   QList<QAbstractButton*> choices;
   QAbstractButton* none = nullptr;
 };
@@ -1700,6 +1703,7 @@ std::vector<GroupControls> pageGroups(QWidget* page)
   std::vector<GroupControls> groups;
   for (QVBoxLayout* layout : page->findChildren<QVBoxLayout*>("grouplayout")) {
     GroupControls group;
+    group.type = layout->property("groupType").value<FomodInstallerDialog::GroupType>();
     if (auto* box = qobject_cast<QGroupBox*>(layout->parentWidget())) {
       group.name = box->title();
     }
@@ -1770,7 +1774,20 @@ void applyStep(QGroupBox* page, const QJsonObject& step)
         replayError(
             QString("FOMOD option '%1' not found in group '%2'").arg(name, groupName));
       }
+      // a recorded option the conditions now disable and leave unchecked (not usable,
+      // or another option is forced) cannot be honoured
+      if (!match->isEnabled() && !match->isChecked()) {
+        replayError(QString("FOMOD option '%1' cannot be selected in group '%2'")
+                        .arg(name, groupName));
+      }
       selected.insert(match);
+    }
+
+    if (selected.empty() &&
+        (group.type == FomodInstallerDialog::TYPE_SELECTATLEASTONE ||
+         group.type == FomodInstallerDialog::TYPE_SELECTEXACTLYONE)) {
+      replayError(QString("FOMOD group '%1' needs a choice in step '%2'")
+                      .arg(groupName, page->title()));
     }
 
     // the disabled options keep the state the conditions gave them (required or not
