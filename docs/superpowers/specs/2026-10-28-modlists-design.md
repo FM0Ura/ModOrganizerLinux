@@ -1,7 +1,7 @@
 # Modlists — núcleo comum, Nexus Collections e formato próprio — Design
 
 - **Data:** 2026-10-28
-- **Status:** em revisão
+- **Status:** aprovado pelo usuário (2026-10-31); plano da parte 1: [`2026-10-31-modlists-parte1-nucleo-mo2list.md`](../plans/2026-10-31-modlists-parte1-nucleo-mo2list.md)
 - **Substitui:** a spec da Fase 6b ([`2026-10-25-phase6b-nexus-collections-design.md`](2026-10-25-phase6b-nexus-collections-design.md)), que não tinha plano nem código. As decisões do usuário registradas nela continuam valendo, salvo onde este documento diz o contrário (§1.4).
 - **Spec geral:** [`2026-10-14-mo2-linux-port-design.md`](2026-10-14-mo2-linux-port-design.md)
 - **Depende de:** Fase 4a (Nexus, `nxm://`, keyring), Fase 4b (LOOT), Fase 6a (Stellar Blade).
