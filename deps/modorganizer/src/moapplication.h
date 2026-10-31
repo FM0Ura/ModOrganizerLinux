@@ -70,6 +70,10 @@ public:
   //
   bool notify(QObject* receiver, QEvent* event) override;
 
+  // handles a message from another instance (moshortcut, nxm link, .mo2list path,
+  // command line); also used for a .mo2list given on this instance's command line
+  void externalMessage(const QString& message);
+
 public slots:
   bool setStyleFile(const QString& style);
 
@@ -87,7 +91,6 @@ private:
   std::unique_ptr<PluginContainer> m_plugins;
   std::unique_ptr<OrganizerCore> m_core;
 
-  void externalMessage(const QString& message);
   std::shared_ptr<Instance> getCurrentInstance(bool forceSelect);
   std::optional<int> setupInstanceLoop(Instance& currentInstance, PluginContainer& pc);
   void purgeOldFiles();

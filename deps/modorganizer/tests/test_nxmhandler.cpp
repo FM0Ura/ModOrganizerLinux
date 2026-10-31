@@ -257,6 +257,8 @@ struct FakeTools
                            "esac\n");
     script("update-desktop-database",
            "echo \"update-desktop-database $*\" >> '" + log.string() + "'\n");
+    script("update-mime-database",
+           "echo \"update-mime-database $*\" >> '" + log.string() + "'\n");
   }
 
   void script(const std::string& name, const std::string& body)
@@ -423,4 +425,90 @@ TEST(NxmHandlerRegistration, HostModeGoesThroughDistroboxHostExec)
   EXPECT_TRUE(t.calls().contains("host xdg-mime query default x-scheme-handler/nxm"));
   EXPECT_TRUE(t.desktopFile().contains("Exec=distrobox enter test-box -- "))
       << t.desktopFile().toStdString();
+}
+
+TEST(NxmHandler, Mo2listDesktopFile)
+{
+  // an AppImage, a distrobox and a plain executable: the Exec line always ends with %f
+  Environment appImage;
+  appImage.appImage = "/a/Mod Organizer.AppImage";
+
+  Environment box = direct("/opt/mo2/ModOrganizer");
+  box.inContainer = true;
+  box.containerId = "mo2-run";
+
+  const Environment plain = direct("/opt/mo2/ModOrganizer");
+
+  for (const auto& e : {appImage, box, plain}) {
+    const auto content = nxmhandler::mo2listDesktopFileContent(e);
+    EXPECT_TRUE(content.startsWith("[Desktop Entry]\n")) << content.toStdString();
+    EXPECT_TRUE(content.contains("MimeType=application/x-mo2list;\n"))
+        << content.toStdString();
+
+    QString exec;
+    for (const auto& line : content.split('\n')) {
+      if (line.startsWith("Exec=")) {
+        exec = line;
+      }
+    }
+    EXPECT_TRUE(exec.endsWith(" %f")) << exec.toStdString();
+  }
+
+  EXPECT_TRUE(nxmhandler::mo2listDesktopFileContent(appImage)
+                  .contains("Exec=\"/a/Mod Organizer.AppImage\" %f\n"));
+  EXPECT_TRUE(nxmhandler::mo2listDesktopFileContent(box).contains(
+      "Exec=distrobox enter mo2-run -- /opt/mo2/ModOrganizer %f\n"));
+  EXPECT_TRUE(
+      nxmhandler::mo2listDesktopFileContent(plain).contains("Exec=/opt/mo2/ModOrganizer %f\n"));
+
+  Environment bad = direct("/x");
+  bad.inContainer = true;
+  EXPECT_THROW(nxmhandler::mo2listDesktopFileContent(bad), std::runtime_error);
+}
+
+TEST(NxmHandler, Mo2listMimeXml)
+{
+  const auto xml = nxmhandler::mo2listMimeXml();
+  EXPECT_TRUE(xml.contains("<glob pattern=\"*.mo2list\"/>")) << xml.toStdString();
+  EXPECT_TRUE(xml.contains("type=\"application/x-mo2list\""));
+}
+
+TEST(NxmHandlerRegistration, Mo2listIsRegisteredWithTheHandler)
+{
+  FakeTools t;
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "direct");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  const auto [ok, message] = registerAndWait(true);
+  ASSERT_TRUE(ok) << message.toStdString();
+
+  EXPECT_TRUE(fs::exists(t.data / "applications" /
+                         "org.modorganizer.ModOrganizer2.mo2list.desktop"));
+  QFile xml(QString::fromStdString(
+      (t.data / "mime" / "packages" / "org.modorganizer.mo2list.xml").string()));
+  ASSERT_TRUE(xml.open(QIODevice::ReadOnly));
+  EXPECT_TRUE(QString::fromUtf8(xml.readAll()).contains("*.mo2list"));
+  EXPECT_TRUE(t.calls().contains("update-mime-database "));
+  EXPECT_TRUE(t.calls().contains(
+      "xdg-mime default org.modorganizer.ModOrganizer2.mo2list.desktop "
+      "application/x-mo2list"));
+}
+
+// a host without update-mime-database only gets a warning: the nxm handler is done and
+// the menu entry is still written
+TEST(NxmHandlerRegistration, Mo2listWithoutUpdateMimeDatabaseStillSucceeds)
+{
+  FakeTools t;
+  fs::remove(t.bin / "update-mime-database");
+  ScopedEnv bridge("MO2_VFS_BRIDGE", "direct");
+  ScopedEnv appImage("APPIMAGE", nullptr);
+  ScopedEnv path("PATH", t.pathWithSh().c_str());
+  ScopedEnv xdg("XDG_DATA_HOME", t.data.c_str());
+
+  const auto [ok, message] = registerAndWait(true);
+  ASSERT_TRUE(ok) << message.toStdString();
+  EXPECT_TRUE(fs::exists(t.data / "applications" /
+                         "org.modorganizer.ModOrganizer2.mo2list.desktop"));
 }

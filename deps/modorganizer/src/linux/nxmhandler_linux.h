@@ -20,6 +20,14 @@ namespace nxmhandler
 inline constexpr char DesktopFileName[] = "org.modorganizer.ModOrganizer2.nxm.desktop";
 inline constexpr char MimeType[]        = "x-scheme-handler/nxm";
 
+// .mo2list files (modlists): a second desktop file with the MIME type
+// application/x-mo2list (Exec ends with %f) and the shared-mime-info package that
+// maps *.mo2list to it, registered together with the nxm handler by registerHandler()
+inline constexpr char Mo2listDesktopFileName[] =
+    "org.modorganizer.ModOrganizer2.mo2list.desktop";
+inline constexpr char Mo2listMimeType[]     = "application/x-mo2list";
+inline constexpr char Mo2listMimeFileName[] = "org.modorganizer.mo2list.xml";
+
 // what decides how the desktop file starts Mod Organizer
 struct Environment
 {
@@ -48,6 +56,12 @@ QStringList launcher(const Environment& env);
 // the whole desktop file; throws like launcher()
 QString desktopFileContent(const Environment& env);
 
+// the desktop file of .mo2list files; throws like launcher()
+QString mo2listDesktopFileContent(const Environment& env);
+
+// the shared-mime-info package of .mo2list files
+QString mo2listMimeXml();
+
 enum class Action
 {
   None,
@@ -70,12 +84,26 @@ vfsbridge::Command queryCommand();
 vfsbridge::Command setDefaultCommand();
 vfsbridge::Command updateDatabaseCommand(const QString& dir);
 
+// $XDG_DATA_HOME/mime, the package in its packages/ and the desktop file of .mo2list
+QString mimeDir();
+QString mo2listMimePackagePath();
+QString mo2listDesktopFilePath();
+
+// `xdg-mime query default application/x-mo2list`, `xdg-mime default <file>
+// application/x-mo2list` and `update-mime-database <dir>`, through
+// vfsbridge::helperCommand()
+vfsbridge::Command mo2listQueryCommand();
+vfsbridge::Command mo2listSetDefaultCommand();
+vfsbridge::Command updateMimeDatabaseCommand(const QString& dir);
+
 // ok is false only on an error, with its cause in message; nothing changed (the
 // handler of another program, without force) is a success
 using Done = std::function<void(bool ok, const QString& message)>;
 
 // registers Mod Organizer for nxm:// links (decide(), then the desktop file, `xdg-mime
-// default` and `update-desktop-database`, whose failure is only logged). Asynchronous:
+// default` and `update-desktop-database`, whose failure is only logged), then the same
+// for .mo2list files, where nothing is an error, only a logged warning (a missing
+// update-mime-database keeps the menu entry working). Asynchronous:
 // `done` is always called later from the event loop of the application, never from
 // inside this call.
 void registerHandler(bool force, Done done);
