@@ -3,6 +3,7 @@
 #include <QJsonArray>
 
 #include <algorithm>
+#include <cmath>
 
 namespace modlists
 {
@@ -20,15 +21,23 @@ static QString destinationName(Destination d)
   }
 }
 
+static PlanError invalid(const QString& what)
+{
+  return PlanError(PlanError::Kind::Invalid, "Invalid pending import: " + what);
+}
+
 static Destination destinationFromName(const QString& s)
 {
+  if (s == "newInstance") {
+    return Destination::NewInstance;
+  }
   if (s == "newProfile") {
     return Destination::NewProfile;
   }
   if (s == "existingProfile") {
     return Destination::ExistingProfile;
   }
-  return Destination::NewInstance;
+  throw invalid("unknown destination");
 }
 
 static QJsonArray intArray(const std::vector<int>& v)
@@ -40,11 +49,25 @@ static QJsonArray intArray(const std::vector<int>& v)
   return a;
 }
 
-static std::vector<int> intVector(const QJsonValue& v)
+static int indexFromDouble(double d, const QString& what)
 {
+  if (d < 0 || d > 1e9 || d != std::floor(d)) {
+    throw invalid(what + " has an invalid index");
+  }
+  return static_cast<int>(d);
+}
+
+static std::vector<int> intVector(const QJsonValue& v, const QString& what)
+{
+  if (!v.isArray()) {
+    throw invalid(what + " is not an array");
+  }
   std::vector<int> r;
   for (const QJsonValue& e : v.toArray()) {
-    r.push_back(e.toInt());
+    if (!e.isDouble()) {
+      throw invalid(what + " has a non-integer entry");
+    }
+    r.push_back(indexFromDouble(e.toDouble(), what));
   }
   return r;
 }
@@ -71,18 +94,31 @@ QJsonObject toJson(const PendingImport& p)
 PendingImport pendingFromJson(const QJsonObject& o)
 {
   PendingImport p;
-  p.packagePath         = o["packagePath"].toString();
-  p.destination         = destinationFromName(o["destination"].toString());
-  p.profileName         = o["profileName"].toString();
-  p.selectedEntries     = intVector(o["selectedEntries"]);
-  p.sourceDownloadsDir  = o["sourceDownloadsDir"].toString();
-  p.installedEntries    = intVector(o["installedEntries"]);
+  p.packagePath = o["packagePath"].toString();
+  if (p.packagePath.isEmpty()) {
+    throw invalid("packagePath is empty");
+  }
+  p.destination        = destinationFromName(o["destination"].toString());
+  p.profileName        = o["profileName"].toString();
+  p.selectedEntries    = intVector(o["selectedEntries"], "selectedEntries");
+  p.sourceDownloadsDir = o["sourceDownloadsDir"].toString();
+  p.installedEntries   = intVector(o["installedEntries"], "installedEntries");
 
   const QJsonObject choices = o["versionChoices"].toObject();
   for (auto it = choices.begin(); it != choices.end(); ++it) {
-    p.versionChoices[it.key().toInt()] = it.value().toString() == "keepMine"
-                                             ? VersionChoice::KeepMine
-                                             : VersionChoice::UseList;
+    bool ok         = false;
+    const int index = it.key().toInt(&ok);
+    if (!ok || index < 0) {
+      throw invalid("versionChoices has an invalid key");
+    }
+    const QString value = it.value().toString();
+    if (value == "keepMine") {
+      p.versionChoices[index] = VersionChoice::KeepMine;
+    } else if (value == "useList") {
+      p.versionChoices[index] = VersionChoice::UseList;
+    } else {
+      throw invalid("versionChoices has an unknown value");
+    }
   }
   return p;
 }

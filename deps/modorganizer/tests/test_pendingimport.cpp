@@ -42,3 +42,55 @@ TEST(PendingImport, ResumeSkipsInstalled)
   p.installedEntries = {1};
   EXPECT_EQ(remainingEntries(p, plan), (std::vector<int>{0, 2}));
 }
+
+namespace
+{
+QJsonObject validJson()
+{
+  PendingImport p;
+  p.packagePath      = "/x.mo2list";
+  p.selectedEntries  = {0, 1};
+  p.installedEntries = {1};
+  p.versionChoices   = {{1, VersionChoice::KeepMine}};
+  return toJson(p);
+}
+
+void expectInvalid(const QJsonObject& o)
+{
+  try {
+    pendingFromJson(o);
+    ADD_FAILURE() << "did not throw";
+  } catch (const PlanError& e) {
+    EXPECT_EQ(e.kind(), PlanError::Kind::Invalid);
+  }
+}
+}  // namespace
+
+TEST(PendingImport, MalformedFailsLoudly)
+{
+  EXPECT_NO_THROW(pendingFromJson(validJson()));
+
+  auto with = [](const QString& key, const QJsonValue& v) {
+    QJsonObject o = validJson();
+    o[key]        = v;
+    return o;
+  };
+  auto without = [](const QString& key) {
+    QJsonObject o = validJson();
+    o.remove(key);
+    return o;
+  };
+
+  expectInvalid(without("destination"));
+  expectInvalid(with("destination", "elsewhere"));
+  expectInvalid(with("packagePath", ""));
+  expectInvalid(without("packagePath"));
+  expectInvalid(with("selectedEntries", "nope"));
+  expectInvalid(without("installedEntries"));
+  expectInvalid(with("selectedEntries", QJsonArray{0, "a"}));
+  expectInvalid(with("selectedEntries", QJsonArray{0, 1.5}));
+  expectInvalid(with("installedEntries", QJsonArray{-1}));
+  expectInvalid(with("versionChoices", QJsonObject{{"x", "useList"}}));
+  expectInvalid(with("versionChoices", QJsonObject{{"-2", "useList"}}));
+  expectInvalid(with("versionChoices", QJsonObject{{"1", "maybe"}}));
+}

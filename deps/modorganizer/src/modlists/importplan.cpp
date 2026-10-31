@@ -34,7 +34,7 @@ RowStatus classify(const ModEntry& entry, const std::vector<InstalledMod>& insta
       continue;
     }
     sameMod        = true;
-    const bool all = std::all_of(wanted.begin(), wanted.end(), [&](int id) {
+    const bool all = !wanted.empty() && std::all_of(wanted.begin(), wanted.end(), [&](int id) {
       return std::find(mod.fileIds.begin(), mod.fileIds.end(), id) != mod.fileIds.end();
     });
     if (all) {
@@ -48,14 +48,37 @@ RowStatus classify(const ModEntry& entry, const std::vector<InstalledMod>& insta
   return RowStatus::New;
 }
 
+// the names come from an untrusted manifest and become folder names
+static QString sanitizeName(const QString& name)
+{
+  QString s = name;
+  for (QChar& c : s) {
+    if (c.unicode() < 0x20 || c.unicode() == 0x7f || QString("/\\:*?\"<>|").contains(c)) {
+      c = QChar('_');
+    }
+  }
+
+  auto isTrim = [](QChar c) { return c == ' ' || c == '.'; };
+  qsizetype b = 0, e = s.size();
+  while (b < e && isTrim(s[b])) {
+    ++b;
+  }
+  while (e > b && isTrim(s[e - 1])) {
+    --e;
+  }
+  s = s.mid(b, e - b);
+  return s.isEmpty() ? QString("Unnamed mod") : s;
+}
+
 QString installName(const ModEntry& entry, const QString& listName,
                     const std::set<QString, CaseInsensitive>& existingNames)
 {
-  if (!existingNames.count(entry.name)) {
-    return entry.name;
+  const QString name = sanitizeName(entry.name);
+  if (!existingNames.count(name)) {
+    return name;
   }
 
-  const QString base = QString("%1 [%2]").arg(entry.name, listName);
+  const QString base = QString("%1 [%2]").arg(name, sanitizeName(listName));
   if (!existingNames.count(base)) {
     return base;
   }
@@ -76,8 +99,19 @@ ModOrderResult mergeModOrder(const std::vector<QString>& userLowToHigh,
   std::set<QString, CaseInsensitive> inPlan(planInstalledLowToHigh.begin(),
                                             planInstalledLowToHigh.end());
 
+  // a repeated plan name counts once, at its first place
+  std::vector<QString> planOrder;
+  {
+    std::set<QString, CaseInsensitive> seen;
+    for (const QString& m : planInstalledLowToHigh) {
+      if (seen.insert(m).second) {
+        planOrder.push_back(m);
+      }
+    }
+  }
+
   if (destination != Destination::ExistingProfile) {
-    r.order = planInstalledLowToHigh;
+    r.order = planOrder;
     // the other mods stay installed, but off in this profile
     for (const QString& m : userLowToHigh) {
       if (!inPlan.count(m)) {
@@ -90,13 +124,13 @@ ModOrderResult mergeModOrder(const std::vector<QString>& userLowToHigh,
         r.order.push_back(m);
       }
     }
-    r.order.insert(r.order.end(), planInstalledLowToHigh.begin(),
-                   planInstalledLowToHigh.end());
+    r.order.insert(r.order.end(), planOrder.begin(),
+                   planOrder.end());
   } else {
     std::set<QString, CaseInsensitive> inUser(userLowToHigh.begin(),
                                               userLowToHigh.end());
     r.order = userLowToHigh;
-    for (const QString& m : planInstalledLowToHigh) {
+    for (const QString& m : planOrder) {
       if (!inUser.count(m)) {
         r.order.push_back(m);
       }

@@ -184,3 +184,45 @@ TEST(ImportPlan, FilePageUrl)
   EXPECT_EQ(nexusFilePageUrl("skyrimspecialedition", 266, 1000).toString(),
             "https://www.nexusmods.com/skyrimspecialedition/mods/266?tab=files&file_id=1000");
 }
+
+TEST(ImportPlan, InstallNameSanitizes)
+{
+  std::set<QString, CaseInsensitive> none;
+  auto name = [&](const QString& n, const QString& list = "L",
+                  const std::set<QString, CaseInsensitive>& ex = {}) {
+    ModEntry e;
+    e.name = n;
+    return installName(e, list, ex);
+  };
+
+  const QString evil = name("../evil");
+  EXPECT_FALSE(evil.contains('/'));
+  EXPECT_FALSE(evil.startsWith('.'));
+  EXPECT_EQ(name("a/b"), "a_b");
+  EXPECT_EQ(name(".."), "Unnamed mod");
+  EXPECT_EQ(name("."), "Unnamed mod");
+  EXPECT_EQ(name(""), "Unnamed mod");
+  EXPECT_EQ(name(QString("a") + QChar(0) + "b\n"), "a_b_");
+  EXPECT_EQ(name("a\\b:c*d?e\"f<g>h|i"), "a_b_c_d_e_f_g_h_i");
+  EXPECT_EQ(name(" x. "), "x");
+  EXPECT_EQ(name("SkyUI", "x/y", {"SkyUI"}), "SkyUI [x_y]");
+}
+
+TEST(ImportPlan, ClassifyWithoutFileIds)
+{
+  const std::vector<InstalledMod> installed{{"SkyUI", 12604, {35407}, "5.2"}};
+  EXPECT_EQ(classify(nexusEntry("SkyUI", 12604, {0}), installed,
+                     Destination::ExistingProfile),
+            RowStatus::DifferentVersion);
+}
+
+TEST(ImportPlan, MergeModOrderRepeatedPlanName)
+{
+  const Names plan{"X", "Y", "x"};
+  EXPECT_EQ(mergeModOrder({"A"}, plan, {}, Destination::NewProfile, false).order,
+            (Names{"X", "Y"}));
+  EXPECT_EQ(mergeModOrder({"A"}, plan, {}, Destination::ExistingProfile, false).order,
+            (Names{"A", "X", "Y"}));
+  EXPECT_EQ(mergeModOrder({"A"}, plan, {}, Destination::ExistingProfile, true).order,
+            (Names{"A", "X", "Y"}));
+}
