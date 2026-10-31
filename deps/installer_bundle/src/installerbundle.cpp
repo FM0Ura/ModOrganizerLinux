@@ -87,7 +87,8 @@ void InstallerBundle::onInstallationStart(QString const& archive, bool reinstall
   m_SelectedFile     = "";
   m_PreviousFile     = "";
 
-  if (reinstallation && m_Organizer->pluginSetting(name(), "auto_reinstall").toBool()) {
+  if (reinstallation && currentMod != nullptr &&
+      m_Organizer->pluginSetting(name(), "auto_reinstall").toBool()) {
     m_PreviousFile = currentMod->pluginSetting(name(), "archive", QString()).toString();
   }
 }
