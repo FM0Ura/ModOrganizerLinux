@@ -429,7 +429,8 @@ void ModlistInstaller::applyExecutables()
     for (const auto& variable : exe.environment) {
       const QString name  = variable.section('=', 0, 0).trimmed();
       const QString value = variable.section('=', 1);
-      if (isAllowedImportedEnv(name, value)) {
+      const bool oneLine  = !variable.contains('\n') && !variable.contains('\r');
+      if (oneLine && isAllowedImportedEnv(name, value)) {
         environment.append(restore(variable));
       } else if (!name.isEmpty()) {
         dropped.append(name);

@@ -254,4 +254,17 @@ TEST(ImportPlan, AllowedImportedEnv)
   EXPECT_FALSE(isAllowedImportedEnv("WINEDLLOVERRIDES", "/tmp/x.dll=n"));
   EXPECT_FALSE(isAllowedImportedEnv("WINEDLLOVERRIDES", "C:\\x.dll=n"));
   EXPECT_FALSE(isAllowedImportedEnv("WINEDLLOVERRIDES", ""));
+
+  // the value of any allowed name: no control character, path or marker
+  EXPECT_FALSE(isAllowedImportedEnv("DXVK_HUD", "fps\nLD_PRELOAD=/x"));
+  EXPECT_FALSE(isAllowedImportedEnv("DXVK_HUD", "fps\r"));
+  EXPECT_FALSE(isAllowedImportedEnv("DXVK_HUD", QString("fps") + QChar(0)));
+  EXPECT_FALSE(isAllowedImportedEnv("DXVK_HUD", "fps\t1"));
+  EXPECT_TRUE(isAllowedImportedEnv("DXVK_HUD", "fps,devinfo"));
+  EXPECT_TRUE(isAllowedImportedEnv("PROTON_LOG", "1"));
+  EXPECT_FALSE(isAllowedImportedEnv("DXVK_HUD", "%GAME%"));
+  EXPECT_TRUE(isAllowedImportedEnv("VKD3D_CONFIG", "dxr"));
+  EXPECT_FALSE(isAllowedImportedEnv("VKD3D_CONFIG", "/x"));
+  EXPECT_FALSE(isAllowedImportedEnv("RADV_PERFTEST", "C:x"));
+  EXPECT_FALSE(isAllowedImportedEnv("WINEDEBUG", "a\\b"));
 }

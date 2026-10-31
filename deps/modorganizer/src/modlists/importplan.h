@@ -108,7 +108,9 @@ findReusableDownload(const Source& source,
 // - MANGOHUD, WINEDEBUG, WINEESYNC, WINEFSYNC, RADV_PERFTEST, mesa_glthread,
 //   __GL_SHADER_DISK_CACHE, __GL_SHADER_DISK_CACHE_SKIP_CLEANUP, ENABLE_VKBASALT;
 // - WINEDLLOVERRIDES when the value is only "dll,dll=n,b;..." (no paths).
-// Anything else could point the program or Proton elsewhere.
+// Whatever the name, a value with a control character (line breaks included) or
+// any of / \ % : is refused. Anything else could point the program or Proton
+// elsewhere.
 bool isAllowedImportedEnv(const QString& name, const QString& value);
 
 // NOTE: this URL has not been confirmed in a browser yet; it must be checked

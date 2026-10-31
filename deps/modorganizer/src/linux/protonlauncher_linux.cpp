@@ -183,9 +183,7 @@ VfsSpawnRequest makeLaunch(const LaunchParameters& p)
   QStringList own;
   for (const auto& e : extra) {
     const QString name = e.left(e.indexOf('='));
-    if (reserved.contains(name, Qt::CaseInsensitive) ||
-        name.startsWith("STEAM_COMPAT_", Qt::CaseInsensitive) ||
-        name.startsWith("UMU_", Qt::CaseInsensitive)) {
+    if (reserved.contains(name, Qt::CaseInsensitive)) {
       log::warn("ignoring the environment variable {} of the executable: Mod "
                 "Organizer sets it to start Proton",
                 name);

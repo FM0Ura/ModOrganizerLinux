@@ -234,6 +234,13 @@ bool isAllowedImportedEnv(const QString& name, const QString& value)
   if (name.isEmpty()) {
     return false;
   }
+  // no value of an allowed name holds a path, a marker or another line
+  for (const QChar c : value) {
+    if (c.category() == QChar::Other_Control || c == '/' || c == '\\' || c == '%' ||
+        c == ':') {
+      return false;
+    }
+  }
   if (name.compare("WINEDLLOVERRIDES", Qt::CaseInsensitive) == 0) {
     return overrides.match(value).hasMatch();
   }
