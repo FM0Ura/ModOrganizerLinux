@@ -150,6 +150,13 @@ InstallerBundle::install(GuessedValue<QString>& modName,
     return IPluginInstaller::RESULT_NOTATTEMPTED;
   }
 
+  // a batch install (a modlist import) cannot ask which archive to install
+  if (entries.size() > 1 && manager() != nullptr &&
+      manager()->installerOptions(name()).value("batch").toBool()) {
+    manager()->setInstallerDetail("Needs a manual installation");
+    return IPluginInstaller::RESULT_FAILED;
+  }
+
   std::shared_ptr<const FileTreeEntry> entry = nullptr;
   if (entries.size() == 1) {
     entry = entries[0];
