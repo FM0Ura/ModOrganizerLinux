@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTemporaryDir>
@@ -403,4 +404,128 @@ TEST(Mo2ListZip, ExtractKeepsBothAAndAPart)
   EXPECT_EQ(read("a"), QByteArray("one"));
   EXPECT_EQ(read("a.part"), QByteArray("two"));
   EXPECT_EQ(QDir(dest).entryList(QDir::Files | QDir::Hidden).size(), 2);
+}
+
+namespace
+{
+
+// tests/fixtures/modlists/small.mo2list, see tests/fixtures/modlists/README.md
+const QString FixturePath = QStringLiteral(MO2_TESTS_FIXTURES "/modlists/small.mo2list");
+
+Source nexusSource(int modId, int fileId)
+{
+  Source s;
+  s.kind   = SourceKind::Nexus;
+  s.modId  = modId;
+  s.fileId = fileId;
+  // md5 and size unknown: the importer does not verify them
+  return s;
+}
+
+ModEntry nexusMod(const QString& name, const QString& version, int modId, int fileId)
+{
+  ModEntry m;
+  m.name    = name;
+  m.version = version;
+  m.sources = {nexusSource(modId, fileId)};
+  return m;
+}
+
+}  // namespace
+
+// Writes the fixture; run it by hand after changing it:
+// organizer_tests --gtest_also_run_disabled_tests
+//   --gtest_filter=Mo2ListZip.DISABLED_WriteFixture
+TEST(Mo2ListZip, DISABLED_WriteFixture)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+
+  Plan p;
+  p.header.name        = "Small fixture";
+  p.header.author      = "Mod Organizer Linux tests";
+  p.header.version     = "1.0";
+  p.header.gameName    = "SkyrimSE";
+  p.header.nexusDomain = "skyrimspecialedition";
+
+  ModEntry separator;
+  separator.name        = "Interface";
+  separator.isSeparator = true;
+  p.mods.push_back(separator);
+
+  p.mods.push_back(nexusMod("SkyUI", "5.2SE", 12604, 35407));
+  p.mods.push_back(nexusMod("Better MessageBox Controls", "1.2", 1428, 1429));
+  p.mods.push_back(nexusMod("Better Dialogue Controls", "1.2", 1429, 1430));
+
+  const QString notes = "Fixture Notes";
+  ModEntry bundled;
+  bundled.name = notes;
+  Source b;
+  b.kind       = SourceKind::Bundled;
+  b.bundledDir = bundledDirName(notes);
+  bundled.sources = {b};
+  p.mods.push_back(bundled);
+
+  for (const auto* name : {"Skyrim.esm", "Update.esm", "Dawnguard.esm",
+                           "HearthFires.esm", "Dragonborn.esm", "SkyUI_SE.esp"}) {
+    p.plugins.push_back({name, true});
+  }
+  p.profile.localInis  = true;
+  p.profile.localSaves = true;
+  p.profile.iniFiles   = {"Skyrim.ini"};
+
+  PackageInput in;
+  in.plan                       = p;
+  in.profileFiles["Skyrim.ini"] = "[General]\r\nsLanguage=ENGLISH\r\n";
+  in.readme = "# Small fixture\n\nA tiny list for the tests of Mod Organizer.\n";
+
+  const QString readme = tmp.filePath("readme.txt");
+  writeFile(readme, "Notes bundled with the small fixture list.\n");
+  in.bundledFiles.push_back({b.bundledDir + "/readme.txt", readme});
+
+  ASSERT_TRUE(QDir().mkpath(QFileInfo(FixturePath).absolutePath()));
+  writeMo2List(FixturePath, in);
+  EXPECT_TRUE(QFile::exists(FixturePath));
+}
+
+TEST(Mo2ListZip, FixtureOpens)
+{
+  ASSERT_TRUE(QFile::exists(FixturePath)) << FixturePath.toStdString();
+  const auto pkg = Mo2ListPackage::open(FixturePath);
+  const Plan& p  = pkg.plan();
+
+  EXPECT_EQ(p.header.schemaVersion, SchemaVersion);
+  EXPECT_EQ(p.header.nexusDomain, "skyrimspecialedition");
+  ASSERT_EQ(p.mods.size(), 5u);
+
+  int separators = 0, nexus = 0, bundled = 0;
+  QString bundledDir;
+  for (const auto& m : p.mods) {
+    if (m.isSeparator) {
+      ++separators;
+      continue;
+    }
+    ASSERT_EQ(m.sources.size(), 1u) << m.name.toStdString();
+    const auto& s = m.sources.front();
+    if (s.kind == SourceKind::Nexus) {
+      ++nexus;
+      EXPECT_GT(s.modId, 0);
+      EXPECT_GT(s.fileId, 0);
+      EXPECT_TRUE(s.md5.isEmpty());
+      EXPECT_EQ(s.size, -1);
+    } else if (s.kind == SourceKind::Bundled) {
+      ++bundled;
+      bundledDir = s.bundledDir;
+    }
+  }
+  EXPECT_EQ(separators, 1);
+  EXPECT_EQ(nexus, 3);
+  EXPECT_EQ(bundled, 1);
+
+  EXPECT_EQ(pkg.bundledEntries(bundledDir), QStringList{"readme.txt"});
+  EXPECT_EQ(p.profile.iniFiles, QStringList{"Skyrim.ini"});
+  EXPECT_FALSE(pkg.profileFile("Skyrim.ini").isEmpty());
+  EXPECT_FALSE(pkg.readme().isEmpty());
+  EXPECT_EQ(p.plugins.size(), 6u);
+  EXPECT_TRUE(findExecutableContent(pkg).empty());
 }

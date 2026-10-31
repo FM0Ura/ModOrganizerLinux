@@ -161,6 +161,7 @@ set(_organizer_desktop_sources
 # code without interface. Append the .cpp files of modlists/ that do not use widgets.
 set(_organizer_modlists_sources
 	modlists/exportbuilder.cpp
+	modlists/exportreview.cpp
 	modlists/guidedmatch.cpp
 	modlists/importsummary.cpp
 	modlists/importplan.cpp

@@ -57,6 +57,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nexuspagepanel.h"
 #include "nxmaccessmanager.h"
 #include "organizercore.h"
+#include "modlists/exportdialog.h"
 #include "pluginpaths.h"
 #include "overwriteinfodialog.h"
 #include "pluginlist.h"
@@ -415,6 +416,13 @@ MainWindow::MainWindow(Settings& settings, OrganizerCore& organizerCore,
   connect(&m_OrganizerCore, &OrganizerCore::refreshTriggered, this, [this]() {
     updateSortButton();
   });
+
+  // a modlist is exported from the loaded profile
+  ui->actionExportModlist->setEnabled(m_OrganizerCore.currentProfile() != nullptr);
+  connect(&m_OrganizerCore, &OrganizerCore::profileChanged, this,
+          [this](Profile*, Profile* newProfile) {
+            ui->actionExportModlist->setEnabled(newProfile != nullptr);
+          });
 
   connect(&NexusInterface::instance(), SIGNAL(requestNXMDownload(QString)),
           &m_OrganizerCore, SLOT(downloadRequestedNXM(QString)));
@@ -2440,6 +2448,17 @@ void MainWindow::tutorialTriggered()
 void MainWindow::on_actionInstallMod_triggered()
 {
   ui->modList->actions().installMod();
+}
+
+void MainWindow::on_actionExportModlist_triggered()
+{
+  const auto profile = m_OrganizerCore.currentProfile();
+  if (!profile) {
+    return;
+  }
+
+  modlists::ExportDialog dialog(m_OrganizerCore, *profile, this);
+  dialog.exec();
 }
 
 void MainWindow::on_action_Refresh_triggered()
