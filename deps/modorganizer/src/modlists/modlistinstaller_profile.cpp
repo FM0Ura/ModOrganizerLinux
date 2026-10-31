@@ -418,27 +418,33 @@ void ModlistInstaller::applyExecutables()
     }
     if (!inside(binary)) {
       m_summary.executablesWithoutTarget.push_back(
-          tr("%1 (outside the game and instance folders)").arg(exe.title));
+          tr("%1 (outside the game, instance, mods and overwrite folders)")
+              .arg(exe.title));
       continue;
     }
 
-    // the variables that make a program load code from elsewhere are left out
+    // only the variables known to tune the game (DXVK, Proton, Mesa...) are kept,
+    // anything else could make the program or Proton load code from elsewhere
     QStringList environment, dropped;
     for (const auto& variable : exe.environment) {
       const QString name = variable.section('=', 0, 0).trimmed();
-      if (isUnsafeImportedEnv(name)) {
-        dropped.append(name);
-      } else {
+      if (isAllowedImportedEnv(name)) {
         environment.append(restore(variable));
+      } else if (!name.isEmpty()) {
+        dropped.append(name);
       }
     }
 
     // never merged into an executable of the user: a taken title gets the list's name
+    // (find() compares without case, like setExecutable() does when it merges)
+    const auto taken = [&](const QString& t) {
+      return list->find(t, true) != list->end();
+    };
     QString title = exe.title;
-    if (list->titleExists(title)) {
+    if (taken(title)) {
       const QString base = QString("%1 [%2]").arg(exe.title, plan().header.name);
       title              = base;
-      for (int n = 2; list->titleExists(title); ++n) {
+      for (int n = 2; taken(title); ++n) {
         title = QString("%1 (%2)").arg(base).arg(n);
       }
     }
@@ -453,6 +459,11 @@ void ModlistInstaller::applyExecutables()
         .environment(environment)
         .flags(exe.showOnToolbar ? Executable::Flags(Executable::ShowInToolbar)
                                  : Executable::Flags());
+    if (taken(title)) {
+      // never merged, whatever setExecutable() would do
+      log::error("modlist import: the executable title {} is taken", title);
+      continue;
+    }
     list->setExecutable(e);
 
     QString line = QString("%1: %2").arg(

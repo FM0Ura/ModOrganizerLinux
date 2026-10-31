@@ -175,6 +175,30 @@ TEST_F(ProtonLauncher, ExecutableSettingsWin)
   EXPECT_EQ(r.output, "/tmp/x.log");
 }
 
+TEST_F(ProtonLauncher, LauncherVariablesWinOverTheExecutable)
+{
+  auto p        = exe("SkyrimSE.exe");
+  p.environment = {"PROTONPATH=/evil", "WINEPREFIX=/evil",  "GAMEID=evil",
+                   "STORE=evil",       "SteamAppId=1",      "SteamGameId=1",
+                   "STEAM_COMPAT_DATA_PATH=/evil", "UMU_ZENITY=1",
+                   "DXVK_HUD=fps"};
+  const auto r  = proton::makeLaunch(p);
+
+  for (const auto& e : r.environment) {
+    EXPECT_FALSE(e.contains("evil")) << e.toStdString();
+  }
+  EXPECT_FALSE(r.environment.contains("SteamAppId=1"));
+  EXPECT_FALSE(r.environment.contains("SteamGameId=1"));
+  EXPECT_FALSE(r.environment.contains("UMU_ZENITY=1"));
+  EXPECT_TRUE(r.environment.contains("WINEPREFIX=" + m_steam +
+                                     "/steamapps/compatdata/489830"));
+  EXPECT_TRUE(r.environment.contains("PROTONPATH=" + m_steam +
+                                     "/steamapps/common/Proton - Experimental"));
+  EXPECT_TRUE(r.environment.contains("SteamAppId=489830"));
+  // the user's other variables still apply
+  EXPECT_EQ(r.environment.last(), "DXVK_HUD=fps");
+}
+
 TEST_F(ProtonLauncher, ExecutableAppIdChoosesThePrefix)
 {
   write(m_steam + "/steamapps/appmanifest_22330.acf",

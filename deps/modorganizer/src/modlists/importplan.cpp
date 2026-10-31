@@ -213,14 +213,15 @@ findReusableDownload(const Source& source,
   return std::nullopt;
 }
 
-bool isUnsafeImportedEnv(const QString& name)
+bool isAllowedImportedEnv(const QString& name)
 {
-  static const QRegularExpression unsafe(
+  static const QRegularExpression allowed(
       QRegularExpression::anchoredPattern(
-          "LD_.*|BASH_ENV|ENV|GCONV_PATH|PATH|PYTHON.*|PERL.*|.*_PLUGIN_PATH|GIO_.*|"
-          "GTK.*MODULES|QT_PLUGIN_PATH|XDG_.*"),
+          "DXVK_\\w*|VKD3D_\\w*|PROTON_\\w*|MANGOHUD|MANGOHUD_CONFIG|WINEDLLOVERRIDES|"
+          "WINEDEBUG|WINEESYNC|WINEFSYNC|RADV_PERFTEST|mesa_glthread|"
+          "__GL_SHADER_DISK_CACHE|__GL_SHADER_DISK_CACHE_SKIP_CLEANUP|ENABLE_VKBASALT"),
       QRegularExpression::CaseInsensitiveOption);
-  return !name.isEmpty() && unsafe.match(name).hasMatch();
+  return !name.isEmpty() && allowed.match(name).hasMatch();
 }
 
 QUrl nexusFilePageUrl(const QString& nexusDomain, int modId, int fileId)

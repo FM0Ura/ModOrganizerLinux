@@ -554,9 +554,16 @@ std::optional<QString> ModlistInstaller::installSources(int e, const QString& na
         return incomplete(tr("Another installation is in progress"));
       }
 
+      // a reinstallation needs the mod: installers read it (the bundle installer
+      // dereferences it); a mod made by createMod() or found again is looked up
+      if (merge && current == nullptr) {
+        current = modByName(modName);
+      }
+      const bool reinstallation = merge && current != nullptr;
+
       // not through installDownload(): its errors open a dialog
-      ModInfo::Ptr mod =
-          m_core.installArchive(work.sources[s].archive, -1, merge, current, modName);
+      ModInfo::Ptr mod = m_core.installArchive(work.sources[s].archive, -1,
+                                               reinstallation, current, modName);
       if (mod == nullptr) {
         QString why = installer.lastInstallerDetail();
         if (why.isEmpty()) {
