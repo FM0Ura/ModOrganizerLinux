@@ -1,6 +1,8 @@
 #include "installerfomod.h"
 
 #include <QImageReader>
+#include <QJsonDocument>
+#include <QJsonParseError>
 #include <QStringList>
 #include <QtPlugin>
 
@@ -14,6 +16,18 @@
 #include "fomodinstallerdialog.h"
 
 using namespace MOBase;
+
+namespace
+{
+
+// the setting of a mod that holds its recorded choices; the core reads it with
+// modlists::fomodChoicesKey() (installorder.h), which must stay the same
+QString choicesKey(const QString& fileKey)
+{
+  return "choices_" + fileKey;
+}
+
+}  // namespace
 
 InstallerFomod::InstallerFomod() : m_MOInfo(nullptr) {}
 
@@ -85,6 +99,11 @@ bool InstallerFomod::isManualInstaller() const
 void InstallerFomod::onInstallationStart(QString const&, bool, IModInterface*)
 {
   m_InstallerUsed = false;
+
+  // the choices of one installation never go to another mod
+  m_HasChoices  = false;
+  m_LastChoices = QJsonArray();
+  m_FileKey.clear();
 }
 
 void InstallerFomod::onInstallationEnd(EInstallResult result, IModInterface* newMod)
@@ -93,6 +112,16 @@ void InstallerFomod::onInstallationEnd(EInstallResult result, IModInterface* new
       newMod->url().isEmpty()) {
     newMod->setUrl(m_Url);
   }
+
+  if (result == EInstallResult::RESULT_SUCCESS && m_HasChoices && newMod != nullptr &&
+      !m_FileKey.isEmpty()) {
+    newMod->setPluginSetting(
+        name(), choicesKey(m_FileKey),
+        QString::fromUtf8(QJsonDocument(m_LastChoices).toJson(QJsonDocument::Compact)));
+  }
+
+  m_HasChoices  = false;
+  m_LastChoices = QJsonArray();
 }
 
 std::shared_ptr<const IFileTree>
@@ -209,7 +238,27 @@ IPluginInstaller::EInstallResult
 InstallerFomod::install(GuessedValue<QString>& modName,
                         std::shared_ptr<IFileTree>& tree, QString& version, int& modID)
 {
+  const QVariantMap options = manager()->installerOptions(name());
+  const QString recorded    = options.value("choices").toString();
+  const bool batch          = options.value("batch").toBool();
+  m_FileKey                 = options.value("fileKey").toString();
+
+  // in a batch, the dialog cannot be shown: without recorded choices, the user
+  // installs the mod later
+  if (batch && recorded.isEmpty()) {
+    manager()->setInstallerDetail("FOMOD without recorded choices");
+    return IPluginInstaller::RESULT_FAILED;
+  }
+
   auto installerFiles = buildFomodTree(tree);
+  if (!recorded.isEmpty()) {
+    if (manager()->extractFiles(installerFiles).size() != installerFiles.size()) {
+      manager()->setInstallerDetail("FOMOD installer files could not be extracted");
+      return IPluginInstaller::RESULT_FAILED;
+    }
+    return replayChoices(recorded, modName, tree, version, modID);
+  }
+
   if (manager()->extractFiles(installerFiles).size() == installerFiles.size()) {
     try {
       std::shared_ptr<const IFileTree> fomodTree = findFomodDirectory(tree);
@@ -236,7 +285,10 @@ InstallerFomod::install(GuessedValue<QString>& modName,
       auto result = dialog.exec();
       if (result == QDialog::Accepted) {
         modName.update(dialog.getName(), GUESS_USER);
-        return dialog.updateTree(tree);
+        m_LastChoices         = dialog.selectedChoices();
+        const auto treeResult = dialog.updateTree(tree);
+        m_HasChoices          = treeResult == IPluginInstaller::RESULT_SUCCESS;
+        return treeResult;
       } else {
         if (dialog.manualRequested()) {
           modName.update(dialog.getName(), GUESS_USER);
@@ -253,6 +305,50 @@ InstallerFomod::install(GuessedValue<QString>& modName,
     }
   }
   return IPluginInstaller::RESULT_CANCELED;
+}
+
+IPluginInstaller::EInstallResult
+InstallerFomod::replayChoices(const QString& recorded, GuessedValue<QString>& modName,
+                              std::shared_ptr<IFileTree>& tree, QString& version,
+                              int& modID)
+{
+  QJsonParseError parseError;
+  const QJsonDocument document =
+      QJsonDocument::fromJson(recorded.toUtf8(), &parseError);
+  if (parseError.error != QJsonParseError::NoError || !document.isArray()) {
+    manager()->setInstallerDetail("FOMOD choices are not valid");
+    return IPluginInstaller::RESULT_FAILED;
+  }
+
+  try {
+    std::shared_ptr<const IFileTree> fomodTree = findFomodDirectory(tree);
+
+    // the dialog is never shown: it only reads the XML and holds the state of the
+    // pages
+    FomodInstallerDialog dialog(
+        this, modName, fomodTree->parent()->path(),
+        std::bind(&InstallerFomod::fileState, this, std::placeholders::_1));
+    dialog.setInteractive(false);
+    dialog.initData(m_MOInfo);
+    if (!dialog.getVersion().isEmpty()) {
+      version = dialog.getVersion();
+    }
+    if (dialog.getModID() != -1) {
+      modID = dialog.getModID();
+    }
+
+    m_InstallerUsed = true;
+    m_Url           = dialog.getURL();
+
+    dialog.applyChoices(document.array());
+    m_LastChoices         = dialog.selectedChoices();
+    const auto treeResult = dialog.updateTree(tree);
+    m_HasChoices          = treeResult == IPluginInstaller::RESULT_SUCCESS;
+    return treeResult;
+  } catch (const std::exception& e) {
+    manager()->setInstallerDetail(e.what());
+    return IPluginInstaller::RESULT_FAILED;
+  }
 }
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)

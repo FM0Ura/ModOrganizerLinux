@@ -11,6 +11,13 @@ if (NOT FOMOD_SAMPLE_DIR)
 	message(FATAL_ERROR "FOMOD_SAMPLE_DIR must point to the FOMOD sample of the tests")
 endif()
 
+# the conditional FOMOD sample (a second page shown only with option A), see
+# test_fomod_choices.cpp
+set(FOMOD_SAMPLE2_DIR "" CACHE PATH "directory of the conditional FOMOD sample used by the tests")
+if (NOT FOMOD_SAMPLE2_DIR)
+	message(FATAL_ERROR "FOMOD_SAMPLE2_DIR must point to the conditional FOMOD sample of the tests")
+endif()
+
 # the tests build the sources of the plugin (its classes are not exported) next to the
 # files of this directory (mo2_configure_tests)
 file(GLOB installer_fomod_sources CONFIGURE_DEPENDS
@@ -23,5 +30,5 @@ add_executable(installer_fomod_tests ${installer_fomod_sources})
 mo2_configure_tests(installer_fomod_tests NO_MAIN WARNINGS OFF AUTOMOC ON)
 target_include_directories(installer_fomod_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(installer_fomod_tests
-	PRIVATE FOMOD_SAMPLE_DIR="${FOMOD_SAMPLE_DIR}")
+	PRIVATE FOMOD_SAMPLE_DIR="${FOMOD_SAMPLE_DIR}" FOMOD_SAMPLE2_DIR="${FOMOD_SAMPLE2_DIR}")
 target_link_libraries(installer_fomod_tests PRIVATE mo2::uibase)
