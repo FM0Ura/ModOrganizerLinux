@@ -77,6 +77,15 @@ QStringList validEnvironment(const QStringList& environment)
   return valid;
 }
 
+QString gamePrefix(const QString& appId)
+{
+  if (appId.isEmpty()) {
+    return {};
+  }
+  const auto app = steam::findApp(appId);
+  return app ? app->compatData : QString();
+}
+
 VfsSpawnRequest makeLaunch(const LaunchParameters& p)
 {
   VfsSpawnRequest r;
