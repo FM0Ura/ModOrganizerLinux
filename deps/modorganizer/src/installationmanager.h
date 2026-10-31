@@ -273,6 +273,14 @@ public:
   bool batch() const { return m_Batch; }
 
   /**
+   * @brief Batch mode: the installs that follow go into the existing mod of that
+   * name, merged with its files, instead of failing because the mod exists. Only
+   * this name; the modlist import sets it for the second and later files of a mod
+   * it has just created. Empty to clear.
+   */
+  void setBatchMergeTarget(const QString& modName) { m_BatchMergeTarget = modName; }
+
+  /**
    * @brief Options for the given installer in the next installations, returned by
    * installerOptions(). They stay until clearInstallerOptions().
    */
@@ -388,6 +396,7 @@ private:
   std::map<QString, QVariantMap> m_InstallerOptions;
   QString m_CurrentFileKey;
   QString m_LastInstallerDetail;
+  QString m_BatchMergeTarget;
 
   // number of install() calls in progress: the bundle installer installs the archive
   // it holds through installArchive(), and that archive keeps the file key of the

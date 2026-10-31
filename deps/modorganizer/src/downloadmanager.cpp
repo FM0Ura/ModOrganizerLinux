@@ -598,7 +598,11 @@ bool DownloadManager::addDownload(QNetworkReply* reply, const QStringList& URLs,
 
   bool renameToUnique = false;
   if (QFile::exists(m_OutputDirectory + "/" + MOBase::sanitizeFileName(baseName))) {
-    if (QMessageBox::question(
+    // a modlist import only downloads files it could not reuse: keep both, no question
+    if (m_BatchMessages) {
+      log::debug("batch download: {} already exists, the new file gets another name",
+                 baseName);
+    } else if (QMessageBox::question(
             m_ParentWidget, tr("Download again?"),
             tr("A file with the same name \"%1\" has already been downloaded. "
                "Do you want to download it again? The new file will receive a "
@@ -795,8 +799,12 @@ DownloadManager::DownloadID DownloadManager::addNXMDownload(const QString& url)
       log::debug("download requested is already queued (mod: {}, file: {})",
                  nxmInfo.modId(), nxmInfo.fileId());
 
-      QMessageBox::information(m_ParentWidget, tr("Already Queued"), infoStr,
-                               QMessageBox::Ok);
+      if (!m_BatchMessages) {
+        QMessageBox::information(m_ParentWidget, tr("Already Queued"), infoStr,
+                                 QMessageBox::Ok);
+      }
+      m_NXMDownloadQueued(foundGame->gameShortName(), nxmInfo.modId(),
+                          nxmInfo.fileId(), static_cast<int>(pending.reservedID));
       return pending.reservedID;
     }
   }
@@ -844,8 +852,12 @@ DownloadManager::DownloadID DownloadManager::addNXMDownload(const QString& url)
         }
 
         log::debug("{}", debugStr);
-        QMessageBox::information(m_ParentWidget, tr("Already Started"), infoStr,
-                                 QMessageBox::Ok);
+        if (!m_BatchMessages) {
+          QMessageBox::information(m_ParentWidget, tr("Already Started"), infoStr,
+                                   QMessageBox::Ok);
+        }
+        m_NXMDownloadQueued(foundGame->gameShortName(), nxmInfo.modId(),
+                            nxmInfo.fileId(), static_cast<int>(download->m_DownloadID));
         return download->m_DownloadID;
       }
     }
@@ -872,6 +884,8 @@ DownloadManager::DownloadID DownloadManager::addNXMDownload(const QString& url)
   m_RequestIDs.insert(m_NexusInterface->requestFileInfo(
       foundGame->gameShortName(), nxmInfo.modId(), nxmInfo.fileId(), this,
       QVariant::fromValue(test), ""));
+  m_NXMDownloadQueued(foundGame->gameShortName(), nxmInfo.modId(), nxmInfo.fileId(),
+                      static_cast<int>(reservedID));
   return reservedID;
 }
 
@@ -2103,6 +2117,17 @@ boost::signals2::connection
 DownloadManager::onDownloadRemoved(const std::function<void(int)>& callback)
 {
   return m_DownloadRemoved.connect(callback);
+}
+
+boost::signals2::connection DownloadManager::onNXMDownloadQueued(
+    const std::function<void(const QString&, int, int, int)>& callback)
+{
+  return m_NXMDownloadQueued.connect(callback);
+}
+
+void DownloadManager::setBatchMessages(bool batch)
+{
+  m_BatchMessages = batch;
 }
 
 int DownloadManager::indexByName(const QString& fileName) const

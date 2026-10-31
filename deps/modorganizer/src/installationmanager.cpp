@@ -443,6 +443,11 @@ InstallationResult InstallationManager::testOverwrite(GuessedValue<QString>& mod
   // batch mode: the caller passes a free name, never ask what to do with an existing
   // mod
   if (m_Batch && QDir(targetDirectory).exists()) {
+    if (!m_BatchMergeTarget.isEmpty() &&
+        m_BatchMergeTarget.compare(modName, Qt::CaseInsensitive) == 0) {
+      result.m_merged = true;
+      return result;
+    }
     m_LastInstallerDetail = tr("A mod with this name already exists");
     return {IPluginInstaller::RESULT_FAILED};
   }

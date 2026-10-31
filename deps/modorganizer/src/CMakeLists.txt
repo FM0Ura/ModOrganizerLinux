@@ -162,6 +162,7 @@ set(_organizer_desktop_sources
 set(_organizer_modlists_sources
 	modlists/exportbuilder.cpp
 	modlists/guidedmatch.cpp
+	modlists/importsummary.cpp
 	modlists/importplan.cpp
 	modlists/pendingimport.cpp
 	modlists/installorder.cpp
