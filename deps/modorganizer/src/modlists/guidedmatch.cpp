@@ -69,6 +69,15 @@ void GuidedQueue::unskip(std::size_t index)
   }
 }
 
+bool GuidedQueue::setQueued(std::size_t index)
+{
+  if (index >= m_items.size() || m_items[index].state != GuidedItem::Pending) {
+    return false;
+  }
+  m_items[index].state = GuidedItem::Queued;
+  return true;
+}
+
 std::size_t GuidedQueue::done() const
 {
   return static_cast<std::size_t>(

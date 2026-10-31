@@ -1,5 +1,7 @@
 #include "modlistinstaller.h"
 
+#include "importreview.h"
+
 #include "executableslist.h"
 #include "exportcollector.h"
 #include "loot.h"
@@ -425,16 +427,12 @@ void ModlistInstaller::applyExecutables()
 
     // only the variables known to tune the game (DXVK, Proton, Mesa...) are kept,
     // anything else could make the program or Proton load code from elsewhere
-    QStringList environment, dropped;
-    for (const auto& variable : exe.environment) {
-      const QString name  = variable.section('=', 0, 0).trimmed();
-      const QString value = variable.section('=', 1);
-      const bool oneLine  = !variable.contains('\n') && !variable.contains('\r');
-      if (oneLine && isAllowedImportedEnv(name, value)) {
-        environment.append(restore(variable));
-      } else if (!name.isEmpty()) {
-        dropped.append(name);
-      }
+    // (the review dialog shows the same split, see splitImportedEnvironment())
+    const auto split          = splitImportedEnvironment(exe.environment);
+    const QStringList dropped = split.dropped;
+    QStringList environment;
+    for (const auto& variable : split.kept) {
+      environment.append(restore(variable));
     }
 
     // never merged into an executable of the user: a taken title gets the list's name

@@ -23,6 +23,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "loglist.h"
 #include "mainwindow.h"
 #include "messagedialog.h"
+#include "modlists/importreview.h"
 #include "multiprocess.h"
 #include "nexusinterface.h"
 #include "nxmaccessmanager.h"
@@ -35,6 +36,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "tutorialmanager.h"
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QPainter>
 #include <QProxyStyle>
 #include <QSslSocket>
@@ -419,6 +421,20 @@ void MOApplication::externalMessage(const QString& message)
     } else {
       MessageDialog::showMessage(tr("Download started"), qApp->activeWindow(), false);
       m_core->downloadRequestedNXM(message);
+    }
+  } else if (modlists::isMo2ListPath(message) && QFileInfo(message).isFile()) {
+    // a .mo2list opened from the file manager
+    MainWindow* window = nullptr;
+    for (auto* w : QApplication::topLevelWidgets()) {
+      if (auto* mw = qobject_cast<MainWindow*>(w)) {
+        window = mw;
+        break;
+      }
+    }
+    if (m_core == nullptr || window == nullptr) {
+      reportError(tr("You need to select an instance before importing a modlist."));
+    } else {
+      window->importModlist(message);
     }
   } else {
     cl::CommandLine cl;

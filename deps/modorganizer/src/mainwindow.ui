@@ -1537,6 +1537,7 @@
     </property>
     <addaction name="actionChange_Game"/>
     <addaction name="actionInstallMod"/>
+    <addaction name="actionImportModlist"/>
     <addaction name="actionExportModlist"/>
     <addaction name="actionNexus"/>
     <addaction name="separator"/>
@@ -1682,6 +1683,17 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+M</string>
+   </property>
+  </action>
+  <action name="actionImportModlist">
+   <property name="text">
+    <string>Import modlist…</string>
+   </property>
+   <property name="toolTip">
+    <string>Install the mods and the setup of a .mo2list file</string>
+   </property>
+   <property name="statusTip">
+    <string>Install the mods and the setup of a .mo2list file</string>
    </property>
   </action>
   <action name="actionExportModlist">

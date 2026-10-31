@@ -47,6 +47,11 @@ class NexusImageCache;
 class NexusPagePanel;
 class BrowserDialog;
 
+namespace modlists
+{
+class ImportFlow;
+}
+
 class PluginListSortProxy;
 namespace BSA
 {
@@ -164,6 +169,9 @@ public:
   void showNotification(const QString& title, const QString& message,
                         QSystemTrayIcon::MessageIcon icon =
                             QSystemTrayIcon::MessageIcon::Information) override;
+
+  // imports a .mo2list (menu, file manager, external message)
+  void importModlist(const QString& path);
 
 public slots:
   void refresherProgress(const DirectoryRefreshProgress* p);
@@ -320,6 +328,12 @@ private:
 
   std::unique_ptr<BrowserDialog> m_IntegratedBrowser;
 
+  // created on first use, a child of the window
+  modlists::ImportFlow* m_ImportFlow = nullptr;
+  modlists::ImportFlow& importFlow();
+  // the profile the import selected, in the combo box, without activating it again
+  void showSelectedProfile(const QString& name);
+
   MOBase::DelayedFileWriter m_ArchiveListWriter;
 
   QAction* m_LinkToolbar;
@@ -458,6 +472,7 @@ private slots:  // ui slots
   void on_actionAdd_Profile_triggered();
   void on_actionInstallMod_triggered();
   void on_actionExportModlist_triggered();
+  void on_actionImportModlist_triggered();
   void on_action_Refresh_triggered();
   void on_actionModify_Executables_triggered();
   void on_actionNexus_triggered();

@@ -51,6 +51,10 @@ public:
   // a skipped item comes back only through this
   void unskip(std::size_t index);
 
+  // a Pending item whose file the user gave by hand (a manual source) is Queued;
+  // false for any other item
+  bool setQueued(std::size_t index);
+
   // the Queued items
   std::size_t done() const;
   std::size_t total() const;

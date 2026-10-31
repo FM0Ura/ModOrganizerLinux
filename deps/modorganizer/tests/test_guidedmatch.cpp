@@ -63,3 +63,20 @@ TEST(GuidedMatch, NotInList)
   EXPECT_EQ(q.done(), 0u);
   EXPECT_EQ(*q.current(), 0u);
 }
+
+TEST(GuidedMatch, SetQueuedManualFile)
+{
+  // a manual source has no Nexus ids
+  GuidedQueue q({{0, 0, 0, 0}, {1, 0, 20, 200}});
+  EXPECT_TRUE(q.setQueued(0));
+  EXPECT_EQ(q.items()[0].state, GuidedItem::Queued);
+  EXPECT_EQ(*q.current(), 1u);
+  EXPECT_EQ(q.done(), 1u);
+
+  // only a Pending item
+  EXPECT_FALSE(q.setQueued(0));
+  q.skip();
+  EXPECT_FALSE(q.setQueued(1));
+  EXPECT_EQ(q.items()[1].state, GuidedItem::Skipped);
+  EXPECT_FALSE(q.setQueued(5));
+}

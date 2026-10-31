@@ -165,6 +165,7 @@ set(_organizer_modlists_sources
 	modlists/guidedmatch.cpp
 	modlists/importsummary.cpp
 	modlists/importplan.cpp
+	modlists/importreview.cpp
 	modlists/pendingimport.cpp
 	modlists/installorder.cpp
 	modlists/mo2listzip.cpp
