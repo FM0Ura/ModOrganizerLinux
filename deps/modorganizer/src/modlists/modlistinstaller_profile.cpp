@@ -435,8 +435,8 @@ void ModlistInstaller::applyExecutables()
     // the same launcher as one of the instance (the game, SKSE... that the game plugin
     // adds): skipped rather than added again as "<title> [<list>]"; never merged
     const QString arguments = restore(exe.arguments);
-    if (alreadyPresent(
-            launchKey(binary, arguments, restore(exe.workingDirectory)), existing)) {
+    if (alreadyPresent(launchKey(binary, arguments, restore(exe.workingDirectory)),
+                       existing)) {
       m_summary.executablesAlreadyPresent.push_back(exe.title);
       continue;
     }

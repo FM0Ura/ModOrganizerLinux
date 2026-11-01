@@ -187,7 +187,8 @@ void ModlistInstaller::run(std::vector<int> entries)
 
 void ModlistInstaller::maybeAfterDownloads()
 {
-  if (m_lookingForDownloads || m_downloadsOver || waitingForDownloads() || (m_guided && !m_guidedDone)) {
+  if (m_lookingForDownloads || m_downloadsOver || waitingForDownloads() ||
+      (m_guided && !m_guidedDone)) {
     return;
   }
   m_downloadsOver = true;
