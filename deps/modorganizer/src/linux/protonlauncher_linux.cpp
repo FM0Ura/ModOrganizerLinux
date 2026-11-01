@@ -77,6 +77,15 @@ QStringList validEnvironment(const QStringList& environment)
   return valid;
 }
 
+QString gamePrefix(const QString& appId)
+{
+  if (appId.isEmpty()) {
+    return {};
+  }
+  const auto app = steam::findApp(appId);
+  return app ? app->compatData : QString();
+}
+
 VfsSpawnRequest makeLaunch(const LaunchParameters& p)
 {
   VfsSpawnRequest r;
@@ -151,20 +160,38 @@ VfsSpawnRequest makeLaunch(const LaunchParameters& p)
   r.argv           = batch ? QStringList{"umu-run", "cmd", "/c", program} + args
                            : QStringList{"umu-run", program} + args;
 
-  r.environment = QStringList{"WINEPREFIX=" + app->compatData, "GAMEID=umu-" + appId,
-                              "STORE=steam", "SteamAppId=" + appId,
-                              "SteamGameId=" + appId, "PROTONPATH=" + chosen->path,
-                              "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + app->root,
-                              // the game drive (S:) of Proton, which the registry paths
-                              // Steam writes for the game use (SSEEdit); canonical
-                              // because umu keeps the library list only when it finds
-                              // a mount point above the game path, and /home may be a
-                              // symlink to /var/home (in a distrobox, they are
-                              // resolved as the host sees them)
-                              "STEAM_COMPAT_INSTALL_PATH=" +
-                                  vfsbridge::hostCanonicalPath(app->gamePath),
-                              "STEAM_COMPAT_LIBRARY_PATHS=" + libraryPaths(*app)} +
-                  extra;
+  QStringList launcher{"WINEPREFIX=" + app->compatData, "GAMEID=umu-" + appId,
+                       "STORE=steam", "SteamAppId=" + appId,
+                       "SteamGameId=" + appId, "PROTONPATH=" + chosen->path,
+                       "STEAM_COMPAT_CLIENT_INSTALL_PATH=" + app->root,
+                       // the game drive (S:) of Proton, which the registry paths
+                       // Steam writes for the game use (SSEEdit); canonical
+                       // because umu keeps the library list only when it finds
+                       // a mount point above the game path, and /home may be a
+                       // symlink to /var/home (in a distrobox, they are
+                       // resolved as the host sees them)
+                       "STEAM_COMPAT_INSTALL_PATH=" +
+                           vfsbridge::hostCanonicalPath(app->gamePath),
+                       "STEAM_COMPAT_LIBRARY_PATHS=" + libraryPaths(*app)};
+
+  // the variables of the launcher always win: an executable (maybe imported from a
+  // modlist) cannot point Proton, the prefix or umu somewhere else
+  QStringList reserved;
+  for (const auto& e : launcher) {
+    reserved.append(e.left(e.indexOf('=')));
+  }
+  QStringList own;
+  for (const auto& e : extra) {
+    const QString name = e.left(e.indexOf('='));
+    if (reserved.contains(name, Qt::CaseInsensitive)) {
+      log::warn("ignoring the environment variable {} of the executable: Mod "
+                "Organizer sets it to start Proton",
+                name);
+    } else {
+      own.append(e);
+    }
+  }
+  r.environment = launcher + own;
   r.winePrefix  = app->compatData;
 
   log::debug("{} runs with {} in {}", program, chosen->displayName, app->compatData);

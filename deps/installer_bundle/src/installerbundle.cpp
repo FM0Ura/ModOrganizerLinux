@@ -87,7 +87,8 @@ void InstallerBundle::onInstallationStart(QString const& archive, bool reinstall
   m_SelectedFile     = "";
   m_PreviousFile     = "";
 
-  if (reinstallation && m_Organizer->pluginSetting(name(), "auto_reinstall").toBool()) {
+  if (reinstallation && currentMod != nullptr &&
+      m_Organizer->pluginSetting(name(), "auto_reinstall").toBool()) {
     m_PreviousFile = currentMod->pluginSetting(name(), "archive", QString()).toString();
   }
 }
@@ -148,6 +149,13 @@ InstallerBundle::install(GuessedValue<QString>& modName,
   auto entries = findObjects(tree);
   if (entries.empty()) {
     return IPluginInstaller::RESULT_NOTATTEMPTED;
+  }
+
+  // a batch install (a modlist import) cannot ask which archive to install
+  if (entries.size() > 1 && manager() != nullptr &&
+      manager()->installerOptions(name()).value("batch").toBool()) {
+    manager()->setInstallerDetail("Needs a manual installation");
+    return IPluginInstaller::RESULT_FAILED;
   }
 
   std::shared_ptr<const FileTreeEntry> entry = nullptr;

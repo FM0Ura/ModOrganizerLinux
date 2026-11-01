@@ -7,7 +7,9 @@
 #include "organizercore.h"
 #include "pluginpaths.h"
 #include "shared/appconfig.h"
+#include "modlists/importreview.h"
 #include "shared/util.h"
+#include <QFileInfo>
 #include <log.h>
 #include <report.h>
 
@@ -173,6 +175,10 @@ std::optional<int> CommandLine::process(const std::wstring& line)
         // not a shortcut, try a link
         if (isNxmLink(qs)) {
           m_nxmLink = qs;
+        } else if (modlists::isMo2ListPath(qs) && QFileInfo(qs).isFile()) {
+          // a .mo2list opened from the file manager; absolute because the primary
+          // instance may have another working directory
+          m_mo2list = QFileInfo(qs).absoluteFilePath();
         } else {
           // assume an executable name/binary
           m_executable = qs;
@@ -203,6 +209,8 @@ bool CommandLine::forwardToPrimary(MOMultiProcess& multiProcess)
     multiProcess.sendMessage(m_shortcut.toString());
   } else if (m_nxmLink) {
     multiProcess.sendMessage(*m_nxmLink);
+  } else if (m_mo2list) {
+    multiProcess.sendMessage(*m_mo2list);
   } else if (m_command && m_command->canForwardToPrimary()) {
     multiProcess.sendMessage(QString::fromWCharArray(GetCommandLineW()));
   } else {
@@ -313,6 +321,7 @@ void CommandLine::clear()
   m_vm.clear();
   m_shortcut = {};
   m_nxmLink  = {};
+  m_mo2list  = {};
 }
 
 void CommandLine::createOptions()
@@ -431,6 +440,11 @@ std::optional<QString> CommandLine::instance() const
 const MOShortcut& CommandLine::shortcut() const
 {
   return m_shortcut;
+}
+
+std::optional<QString> CommandLine::mo2listPath() const
+{
+  return m_mo2list;
 }
 
 std::optional<QString> CommandLine::nxmLink() const

@@ -556,6 +556,24 @@ public:  // IDownloadManager interface:
   onDownloadRemoved(const std::function<void(int)>& callback);
 
   /**
+   * @brief called when addNXMDownload() returns a download id: a new download, or
+   *        one already queued or started for the same file
+   * @param callback (game short name, mod id, file id, download id)
+   */
+  boost::signals2::connection onNXMDownloadQueued(
+      const std::function<void(const QString& game, int modId, int fileId,
+                               int downloadId)>& callback);
+
+  /**
+   * @brief while true (a modlist import runs), addNXMDownload() does not show the
+   *        "Already Queued" and "Already Started" boxes, it only returns the id, and
+   *        a file name that is already in the downloads folder gets another name
+   *        instead of asking "Download again?"
+   */
+  void setBatchMessages(bool batch);
+  bool batchMessages() const { return m_BatchMessages; }
+
+  /**
    * @brief retrieve a download index from the filename
    * @param fileName file to look up
    * @return index of that download or -1 if it wasn't found
@@ -816,6 +834,10 @@ private:
   SignalDownloadCallback m_DownloadPaused;
   SignalDownloadCallback m_DownloadFailed;
   SignalDownloadCallback m_DownloadRemoved;
+  boost::signals2::signal<void(const QString&, int, int, int)> m_NXMDownloadQueued;
+
+  // see setBatchMessages()
+  bool m_BatchMessages = false;
 
   bool m_ShowHidden;
 

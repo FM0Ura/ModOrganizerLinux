@@ -1,6 +1,8 @@
 #ifndef INSTALLERFOMOD_H
 #define INSTALLERFOMOD_H
 
+#include <QJsonArray>
+
 #include <uibase/iplugindiagnose.h>
 #include <uibase/iplugininstallersimple.h>
 #include <uibase/ipluginlist.h>
@@ -40,6 +42,12 @@ public:
                                    MOBase::IModInterface* currentMod) override;
   virtual void onInstallationEnd(EInstallResult result,
                                  MOBase::IModInterface* newMod) override;
+
+  /**
+   * @brief The detail of a failed replay: the message, with the "FOMOD " prefix the
+   *     importer looks for to offer "Install manually" when it does not have it yet.
+   */
+  static QString replayFailureDetail(const QString& message);
 
 public:  // IPluginDiagnose interface
   virtual std::vector<unsigned int> activeProblems() const;
@@ -84,6 +92,15 @@ private:
 
   MOBase::IPluginList::PluginStates fileState(const QString& fileName) const;
 
+  /**
+   * @brief Installs the archive with recorded choices (the "choices" option of the
+   *     installation), without showing the dialog. Errors go to setInstallerDetail().
+   */
+  EInstallResult replayChoices(const QString& recorded,
+                               MOBase::GuessedValue<QString>& modName,
+                               std::shared_ptr<MOBase::IFileTree>& tree,
+                               QString& version, int& modID);
+
 private:
   static const unsigned int PROBLEM_IMAGETYPE_UNSUPPORTED = 1;
 
@@ -95,6 +112,12 @@ private:
 
   bool m_InstallerUsed;
   QString m_Url;
+
+  // the choices of the current installation (from the dialog or replayed) and its
+  // file key, written to the settings of the new mod when the installation succeeds
+  bool m_HasChoices = false;
+  QJsonArray m_LastChoices;
+  QString m_FileKey;
 };
 
 #endif  // INSTALLERFOMOD_H

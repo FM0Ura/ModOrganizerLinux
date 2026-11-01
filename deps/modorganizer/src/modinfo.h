@@ -314,6 +314,12 @@ public:  // IModInterface implementations / Re-declaration
   virtual std::set<std::pair<int, int>> installedFiles() const = 0;
 
   /**
+   * @return the keys of the files installed into this mod (modlists::fileKey()), in
+   *   the order of their last installation, the most recent last.
+   */
+  virtual QStringList installedFilesOrder() const = 0;
+
+  /**
    * @return true if this mod was marked as converted by the user.
    *
    * @note When a mod is for a different game, a flag is shown to users to warn them,

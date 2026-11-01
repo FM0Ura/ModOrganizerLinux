@@ -264,6 +264,43 @@ public:
 
   QString generateBackupName(const QString& directoryName) const;
 
+  /**
+   * @brief Batch mode: install() shows no dialog. Only the installers that can work
+   * without the user are tried, an existing mod name fails instead of asking what to
+   * do, and a failure is described by lastInstallerDetail().
+   */
+  void setBatch(bool batch) { m_Batch = batch; }
+  bool batch() const { return m_Batch; }
+
+  /**
+   * @brief Batch mode: the installs that follow go into the existing mod of that
+   * name, merged with its files, instead of failing because the mod exists. Only
+   * this name; the modlist import sets it for the second and later files of a mod
+   * it has just created. Empty to clear.
+   */
+  void setBatchMergeTarget(const QString& modName) { m_BatchMergeTarget = modName; }
+
+  /**
+   * @brief Options for the given installer in the next installations, returned by
+   * installerOptions(). They stay until clearInstallerOptions().
+   */
+  void setInstallerOptions(const QString& installer, QVariantMap options);
+  void clearInstallerOptions();
+
+  /**
+   * @return the options set for that installer, plus "fileKey" (the key of the file
+   * being installed) and "batch".
+   */
+  QVariantMap installerOptions(const QString& installerName) const override;
+
+  void setInstallerDetail(const QString& detail) override;
+
+  /**
+   * @return why the last install() failed, set by the installers or by the batch
+   * mode; empty when nothing was said.
+   */
+  QString lastInstallerDetail() const { return m_LastInstallerDetail; }
+
 private:
   struct ModInstallationInfo
   {
@@ -294,6 +331,9 @@ private:
   void cleanCreatedFiles(std::shared_ptr<const MOBase::IFileTree> fileTree);
 
   bool ensureValidModName(MOBase::GuessedValue<QString>& name) const;
+
+  // batch mode: true for the installers that work without the user (see setBatch())
+  bool acceptsBatch(const MOBase::IPluginInstaller* installer) const;
 
   void postInstallCleanup();
 
@@ -349,6 +389,19 @@ private:
   const PluginContainer* m_PluginContainer;
 
   bool m_IsRunning;
+
+  // batch mode, options per installer, the key of the file being installed and the
+  // detail of the last failure (see setBatch())
+  bool m_Batch = false;
+  std::map<QString, QVariantMap> m_InstallerOptions;
+  QString m_CurrentFileKey;
+  QString m_LastInstallerDetail;
+  QString m_BatchMergeTarget;
+
+  // number of install() calls in progress: the bundle installer installs the archive
+  // it holds through installArchive(), and that archive keeps the file key of the
+  // download
+  int m_InstallDepth = 0;
 
   QWidget* m_ParentWidget;
 

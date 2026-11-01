@@ -926,10 +926,17 @@ OrganizerCore::doInstall(const QString& archivePath, GuessedValue<QString> modNa
     return {-1, nullptr};
   }
 
+  // batch mode (modlist import): no box here, the caller reports the failure
+  const bool batch = m_InstallationManager.batch();
+
   if (m_InstallationManager.isRunning()) {
-    QMessageBox::information(qApp->activeWindow(), tr("Installation cancelled"),
-                             tr("Another installation is currently in progress."),
-                             QMessageBox::Ok);
+    if (batch) {
+      log::error("another installation is in progress, not installing {}", archivePath);
+    } else {
+      QMessageBox::information(qApp->activeWindow(), tr("Installation cancelled"),
+                               tr("Another installation is currently in progress."),
+                               QMessageBox::Ok);
+    }
     return {-1, nullptr};
   }
 
@@ -941,7 +948,9 @@ OrganizerCore::doInstall(const QString& archivePath, GuessedValue<QString> modNa
   auto result = m_InstallationManager.install(archivePath, modName, hasIniTweaks);
 
   if (result) {
-    MessageDialog::showMessage(tr("Installation successful"), qApp->activeWindow());
+    if (!batch) {
+      MessageDialog::showMessage(tr("Installation successful"), qApp->activeWindow());
+    }
 
     // we wait for the directory structure to be ready before notifying the mod list,
     // this prevents issue with third-party plugins, e.g., if the installed mod is
@@ -973,7 +982,7 @@ OrganizerCore::doInstall(const QString& archivePath, GuessedValue<QString> modNa
         m_ModList.changeModPriority(modIndex, priority);
       }
 
-      if (hasIniTweaks && m_UserInterface != nullptr &&
+      if (hasIniTweaks && !batch && m_UserInterface != nullptr &&
           (QMessageBox::question(qApp->activeWindow(), tr("Configure Mod"),
                                  tr("This mod contains ini tweaks. Do you "
                                     "want to configure them now?"),
@@ -984,13 +993,16 @@ OrganizerCore::doInstall(const QString& archivePath, GuessedValue<QString> modNa
       }
 
       m_InstallationManager.notifyInstallationEnd(result, modInfo);
+    } else if (batch) {
+      log::error("mod not found after its installation: {}", QString(modName));
     } else {
       reportError(tr("mod not found: %1").arg(qUtf8Printable(modName)));
     }
     emit modInstalled(modName);
     return {modIndex, modInfo};
   } else {
-    if (result.result() == MOBase::IPluginInstaller::RESULT_CATEGORYREQUESTED) {
+    if (result.result() == MOBase::IPluginInstaller::RESULT_CATEGORYREQUESTED &&
+        !batch) {
       CategoriesDialog dialog(qApp->activeWindow());
 
       if (dialog.exec() == QDialog::Accepted) {
@@ -999,7 +1011,9 @@ OrganizerCore::doInstall(const QString& archivePath, GuessedValue<QString> modNa
       }
     } else {
       m_InstallationManager.notifyInstallationEnd(result, nullptr);
-      if (m_InstallationManager.wasCancelled()) {
+      if (batch) {
+        // the caller reads lastInstallerDetail()
+      } else if (m_InstallationManager.wasCancelled()) {
         QMessageBox::information(
             qApp->activeWindow(), tr("Extraction cancelled"),
             tr("The installation was cancelled while extracting files. "

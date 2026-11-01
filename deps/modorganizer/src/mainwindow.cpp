@@ -57,6 +57,8 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "nexuspagepanel.h"
 #include "nxmaccessmanager.h"
 #include "organizercore.h"
+#include "modlists/exportdialog.h"
+#include "modlists/importflow.h"
 #include "pluginpaths.h"
 #include "overwriteinfodialog.h"
 #include "pluginlist.h"
@@ -415,6 +417,13 @@ MainWindow::MainWindow(Settings& settings, OrganizerCore& organizerCore,
   connect(&m_OrganizerCore, &OrganizerCore::refreshTriggered, this, [this]() {
     updateSortButton();
   });
+
+  // a modlist is exported from the loaded profile
+  ui->actionExportModlist->setEnabled(m_OrganizerCore.currentProfile() != nullptr);
+  connect(&m_OrganizerCore, &OrganizerCore::profileChanged, this,
+          [this](Profile*, Profile* newProfile) {
+            ui->actionExportModlist->setEnabled(newProfile != nullptr);
+          });
 
   connect(&NexusInterface::instance(), SIGNAL(requestNXMDownload(QString)),
           &m_OrganizerCore, SLOT(downloadRequestedNXM(QString)));
@@ -1415,6 +1424,11 @@ void MainWindow::showEvent(QShowEvent* event)
 
     // notify plugins that the MO2 is ready
     m_PluginContainer.startPlugins(this);
+
+    // an import that did not finish (MO2 closed, or restarted into a new instance)
+    QTimer::singleShot(0, this, [this] {
+      importFlow().resumePending();
+    });
 
     // forces a log list refresh to display startup logs
     //
@@ -2440,6 +2454,73 @@ void MainWindow::tutorialTriggered()
 void MainWindow::on_actionInstallMod_triggered()
 {
   ui->modList->actions().installMod();
+}
+
+void MainWindow::on_actionExportModlist_triggered()
+{
+  const auto profile = m_OrganizerCore.currentProfile();
+  if (!profile) {
+    return;
+  }
+
+  modlists::ExportDialog dialog(m_OrganizerCore, *profile, this);
+  dialog.exec();
+}
+
+void MainWindow::on_actionImportModlist_triggered()
+{
+  const QString path = QFileDialog::getOpenFileName(
+      this, tr("Import modlist"), QString(), tr("Modlists (*.mo2list)"));
+  if (!path.isEmpty()) {
+    importModlist(path);
+  }
+}
+
+void MainWindow::importModlist(const QString& path)
+{
+  importFlow().startFromFile(path);
+}
+
+modlists::ImportFlow& MainWindow::importFlow()
+{
+  if (m_ImportFlow == nullptr) {
+    m_ImportFlow = new modlists::ImportFlow(m_OrganizerCore, this);
+    connect(m_ImportFlow, &modlists::ImportFlow::profileSelected, this,
+            [this](const QString& name) {
+              showSelectedProfile(name);
+            });
+    connect(m_ImportFlow, &modlists::ImportFlow::executablesChanged, this, [this] {
+      refreshExecutablesList();
+      updatePinnedExecutables();
+    });
+    connect(m_ImportFlow, &modlists::ImportFlow::sortWithLootRequested, this, [this] {
+      if (ui->sortButton->isEnabled()) {
+        ui->sortButton->click();
+      } else {
+        QMessageBox::information(this, tr("Sort with LOOT"),
+                                 ui->sortButton->toolTip());
+      }
+    });
+  }
+  return *m_ImportFlow;
+}
+
+void MainWindow::showSelectedProfile(const QString& name)
+{
+  // the core already uses the profile: the combo box only follows
+  refreshProfiles(false);
+  {
+    const QSignalBlocker blocker(ui->profileBox);
+    ui->profileBox->setCurrentText(name);
+  }
+  m_OldProfileIndex = ui->profileBox->currentIndex();
+
+  m_SavesTab->refreshSaveList();
+  ui->modList->updateModCount();
+  ui->espList->updatePluginCount();
+  ui->statusBar->updateNormalMessage(m_OrganizerCore);
+  refreshExecutablesList();
+  updatePinnedExecutables();
 }
 
 void MainWindow::on_action_Refresh_triggered()

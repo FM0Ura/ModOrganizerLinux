@@ -240,6 +240,7 @@ protected:
 //     shortcuts)
 //
 //   - nxm:// links
+//   - .mo2list files
 //
 //   - the name of a configured executable or path to binary, followed by
 //     arbitrary parameters, forwarded to the program
@@ -341,6 +342,11 @@ public:
   //
   std::optional<QString> nxmLink() const;
 
+  // returns the absolute path of the .mo2list file given on the command line, if any;
+  // it is imported once the main window is up, or forwarded to the primary instance
+  //
+  std::optional<QString> mo2listPath() const;
+
   // returns the executable/binary, if any
   //
   std::optional<QString> executable() const;
@@ -357,6 +363,7 @@ private:
   po::variables_map m_vm;
   MOShortcut m_shortcut;
   std::optional<QString> m_nxmLink;
+  std::optional<QString> m_mo2list;
   std::optional<QString> m_executable;
   QStringList m_untouched;
   Command* m_command;

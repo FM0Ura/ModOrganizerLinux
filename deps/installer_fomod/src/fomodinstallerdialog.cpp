@@ -21,7 +21,9 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "ui_fomodinstallerdialog.h"
 
 #include <array>
+#include <set>
 #include <sstream>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -31,6 +33,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QJsonObject>
 #include <QRadioButton>
 #include <QScrollArea>
 #include <QStringEncoder>
@@ -223,6 +226,11 @@ void FomodInstallerDialog::readXml(QFile& file,
       }
     }
     if (!success) {
+      if (!m_Interactive) {
+        throw std::runtime_error(QString("FOMOD file %1 could not be parsed")
+                                     .arg(file.fileName())
+                                     .toStdString());
+      }
       reportError(
           tr("Failed to parse %1. See console for details.").arg(file.fileName()));
     }
@@ -591,11 +599,14 @@ FomodInstallerDialog::updateTree(std::shared_ptr<IFileTree>& tree)
 
   std::vector<const FileDescriptor*> failures;
 
+  // without the organizer (the tests), the default of the setting
   const QStringList ignoreMissingFolder =
-      m_MoInfo
-          ->persistent(m_Installer->name(), "ignored_missing_files",
-                       QStringList{"no folder"})
-          .toStringList();
+      (m_MoInfo != nullptr && m_Installer != nullptr)
+          ? m_MoInfo
+                ->persistent(m_Installer->name(), "ignored_missing_files",
+                             QStringList{"no folder"})
+                .toStringList()
+          : QStringList{"no folder"};
 
   for (const FileDescriptor* file : descriptorList) {
     if (!copyFileIterator(tree, newTree, file, leaves, overwrites)) {
@@ -607,6 +618,15 @@ FomodInstallerDialog::updateTree(std::shared_ptr<IFileTree>& tree)
   }
 
   if (!failures.empty()) {
+    if (!m_Interactive) {
+      QStringList missing;
+      for (const FileDescriptor* file : failures) {
+        missing.append(file->m_Source);
+      }
+      throw std::runtime_error(QString("FOMOD files missing from the archive: %1")
+                                   .arg(missing.join(", "))
+                                   .toStdString());
+    }
     if (!displayMissingFilesDialog(failures)) {
       return IPluginInstaller::RESULT_CANCELED;
     }
@@ -1301,7 +1321,8 @@ void FomodInstallerDialog::parseModuleConfig(XmlReader& reader)
     throw XmlParseError(
         QString("%1 in line %2").arg(reader.errorString()).arg(reader.lineNumber()));
   }
-  // Find the first visible page
+  // Find the first visible page; the hidden pages before it are marked as not
+  // visible, as nextPage() does, so m_PageVisible stays aligned with the pages
   int index = 0;
   while (index < ui->stepsStack->count()) {
     if (testVisible(index)) {
@@ -1310,6 +1331,7 @@ void FomodInstallerDialog::parseModuleConfig(XmlReader& reader)
       activateCurrentPage();
       break;
     }
+    m_PageVisible.push_back(false);
     ++index;
   }
   // No pages are visible? Go to a small install
@@ -1662,6 +1684,215 @@ void FomodInstallerDialog::on_prevBtn_clicked()
     ui->prevBtn->setEnabled(false);
   }
   activateCurrentPage();
+}
+
+namespace
+{
+
+// the controls of one group of a page, in the order of the page
+struct GroupControls
+{
+  QString name;
+  FomodInstallerDialog::GroupType type = FomodInstallerDialog::TYPE_SELECTANY;
+  QList<QAbstractButton*> choices;
+  QAbstractButton* none = nullptr;
+};
+
+std::vector<GroupControls> pageGroups(QWidget* page)
+{
+  std::vector<GroupControls> groups;
+  for (QVBoxLayout* layout : page->findChildren<QVBoxLayout*>("grouplayout")) {
+    GroupControls group;
+    group.type = layout->property("groupType").value<FomodInstallerDialog::GroupType>();
+    if (auto* box = qobject_cast<QGroupBox*>(layout->parentWidget())) {
+      group.name = box->title();
+    }
+    for (int i = 0; i != layout->count(); ++i) {
+      if (QLayoutItem* const item = layout->itemAt(i)) {
+        auto* const button = qobject_cast<QAbstractButton*>(item->widget());
+        if (button == nullptr) {
+          continue;
+        }
+        if (button->objectName() == "choice") {
+          group.choices.append(button);
+        } else if (button->objectName() == "none") {
+          group.none = button;
+        }
+      }
+    }
+    groups.push_back(std::move(group));
+  }
+  return groups;
+}
+
+[[noreturn]] void replayError(const QString& message)
+{
+  throw std::runtime_error(message.toStdString());
+}
+
+// checks the recorded options of one page
+void applyStep(QGroupBox* page, const QJsonObject& step)
+{
+  std::vector<GroupControls> groups = pageGroups(page);
+  std::vector<bool> applied(groups.size(), false);
+
+  for (const QJsonValue& groupValue : step.value("groups").toArray()) {
+    const QJsonObject recorded = groupValue.toObject();
+    const QString groupName    = recorded.value("name").toString();
+
+    // the first group of that name that was not replayed yet
+    std::size_t g = 0;
+    while (g < groups.size() && (applied[g] || groups[g].name != groupName)) {
+      ++g;
+    }
+    if (g == groups.size()) {
+      replayError(QString("FOMOD group '%1' not found in step '%2'")
+                      .arg(groupName, page->title()));
+    }
+    applied[g]                 = true;
+    const GroupControls& group = groups[g];
+
+    std::set<QAbstractButton*> selected;
+    for (const QJsonValue& choiceValue : recorded.value("choices").toArray()) {
+      const QJsonObject choice = choiceValue.toObject();
+      const QString name       = choice.value("name").toString();
+      const int idx            = choice.value("idx").toInt(-1);
+
+      QAbstractButton* match = nullptr;
+      if (idx >= 0 && idx < group.choices.size() &&
+          group.choices[idx]->text() == name) {
+        match = group.choices[idx];
+      } else {
+        for (QAbstractButton* control : group.choices) {
+          if (control->text() == name) {
+            match = control;
+            break;
+          }
+        }
+      }
+      if (match == nullptr) {
+        replayError(
+            QString("FOMOD option '%1' not found in group '%2'").arg(name, groupName));
+      }
+      // a recorded option the conditions now disable and leave unchecked (not usable,
+      // or another option is forced) cannot be honoured
+      if (!match->isEnabled() && !match->isChecked()) {
+        replayError(QString("FOMOD option '%1' cannot be selected in group '%2'")
+                        .arg(name, groupName));
+      }
+      selected.insert(match);
+    }
+
+    if (selected.empty() &&
+        (group.type == FomodInstallerDialog::TYPE_SELECTATLEASTONE ||
+         group.type == FomodInstallerDialog::TYPE_SELECTEXACTLYONE)) {
+      replayError(QString("FOMOD group '%1' needs a choice in step '%2'")
+                      .arg(groupName, page->title()));
+    }
+
+    // the disabled options keep the state the conditions gave them (required or not
+    // usable)
+    bool radioSelected = false;
+    for (QAbstractButton* control : group.choices) {
+      if (!control->isEnabled()) {
+        continue;
+      }
+      const bool checked = selected.count(control) > 0;
+      if (qobject_cast<QRadioButton*>(control) != nullptr) {
+        // exclusive: checking one unchecks the others
+        if (checked) {
+          control->setChecked(true);
+          radioSelected = true;
+        }
+      } else {
+        control->setChecked(checked);
+      }
+    }
+    if (!radioSelected && selected.empty() && group.none != nullptr) {
+      group.none->setChecked(true);
+    }
+  }
+}
+
+}  // namespace
+
+QJsonArray FomodInstallerDialog::selectedChoices() const
+{
+  QJsonArray steps;
+  const int current = ui->stepsStack->currentIndex();
+  for (int i = 0; i <= current && i < ui->stepsStack->count(); ++i) {
+    if (!testVisible(i)) {
+      continue;
+    }
+    auto* page = qobject_cast<QGroupBox*>(ui->stepsStack->widget(i));
+    if (page == nullptr) {
+      continue;
+    }
+
+    QJsonArray groups;
+    for (const GroupControls& group : pageGroups(page)) {
+      QJsonArray choices;
+      for (int idx = 0; idx < group.choices.size(); ++idx) {
+        if (group.choices[idx]->isChecked()) {
+          choices.append(
+              QJsonObject{{"name", group.choices[idx]->text()}, {"idx", idx}});
+        }
+      }
+      groups.append(QJsonObject{{"name", group.name}, {"choices", choices}});
+    }
+    steps.append(QJsonObject{{"name", page->title()}, {"groups", groups}});
+  }
+  return steps;
+}
+
+void FomodInstallerDialog::applyChoices(const QJsonArray& choices)
+{
+  std::vector<bool> replayed(choices.size(), false);
+
+  // initData() shows the first visible page, if there is one
+  const int count = ui->stepsStack->count();
+  int current     = ui->stepsStack->currentIndex();
+  bool onPage     = current >= 0 && current < count && testVisible(current);
+
+  while (onPage) {
+    auto* page = qobject_cast<QGroupBox*>(ui->stepsStack->widget(current));
+    if (page != nullptr) {
+      // the first record of that step that was not replayed yet; without one, the
+      // defaults of the XML stay
+      for (qsizetype r = 0; r < choices.size(); ++r) {
+        const QJsonObject step = choices[r].toObject();
+        if (!replayed[r] && step.value("name").toString() == page->title()) {
+          replayed[r] = true;
+          applyStep(page, step);
+          break;
+        }
+      }
+    }
+
+    // as on_nextBtn_clicked()
+    if (current == count - 1 || !nextPage()) {
+      onPage = false;
+    } else {
+      displayCurrentPage();
+      activateCurrentPage();
+      current = ui->stepsStack->currentIndex();
+    }
+  }
+
+  for (qsizetype r = 0; r < choices.size(); ++r) {
+    if (replayed[r]) {
+      continue;
+    }
+    const QString name = choices[r].toObject().value("name").toString();
+    for (int i = 0; i < count; ++i) {
+      auto* page = qobject_cast<QGroupBox*>(ui->stepsStack->widget(i));
+      if (page != nullptr && page->title() == name) {
+        replayError(
+            QString("FOMOD step '%1' is not shown with these choices").arg(name));
+      }
+    }
+    replayError(QString("FOMOD step '%1' not found").arg(name));
+  }
 }
 
 void FomodInstallerDialog::on_screenshotExpand_clicked()

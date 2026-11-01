@@ -1,6 +1,6 @@
 # Troubleshooting and known issues
 
-[Português](../pt-BR/troubleshooting.md) · **English** · Previous: [Games](games.md)
+[Português](../pt-BR/troubleshooting.md) · **English** · Previous: [Modlists](modlists.md)
 
 ## It does not start
 

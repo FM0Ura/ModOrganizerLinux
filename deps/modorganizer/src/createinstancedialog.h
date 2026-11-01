@@ -3,6 +3,8 @@
 
 #include <QDialog>
 
+#include <functional>
+
 namespace MOBase
 {
 class IPluginGame;
@@ -233,5 +235,12 @@ private:
     return T();
   }
 };
+
+// creates the directories and the ini of the instance described by `ci`, as the last
+// page of the dialog does; `log` gets each step and the errors. On a failure, the
+// directories created here are deleted again and false is returned. Neither selects
+// nor opens the instance.
+bool createInstanceFiles(const CreateInstanceDialog::CreationInfo& ci,
+                         const std::function<void(QString)>& log);
 
 #endif  // MODORGANIZER_CREATEINSTANCEDIALOG_INCLUDED

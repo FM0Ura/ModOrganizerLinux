@@ -157,6 +157,21 @@ set(_organizer_desktop_sources
 	linux/secretstore_linux.cpp
 	linux/selfupdate_linux.cpp)
 
+# the modlists (export a profile as a .mo2list and import it): the model and the
+# code without interface. Append the .cpp files of modlists/ that do not use widgets.
+set(_organizer_modlists_sources
+	modlists/exportbuilder.cpp
+	modlists/exportreview.cpp
+	modlists/guidedmatch.cpp
+	modlists/importsummary.cpp
+	modlists/importplan.cpp
+	modlists/importreview.cpp
+	modlists/pendingimport.cpp
+	modlists/installorder.cpp
+	modlists/mo2listzip.cpp
+	modlists/pathmarkers.cpp
+	modlists/plan.cpp)
+
 get_target_property(_organizer_sources organizer SOURCES)
 set(_organizer_platform_sources)
 foreach(_source IN LISTS _organizer_sources)
@@ -173,6 +188,7 @@ foreach(_source IN LISTS _organizer_sources)
 				OR _relative IN_LIST _organizer_env_sources
 				OR _relative IN_LIST _organizer_launch_sources
 				OR _relative IN_LIST _organizer_desktop_sources
+				OR _relative IN_LIST _organizer_modlists_sources
 				OR _relative STREQUAL "linux/posixspawn_linux.cpp"
 				OR _relative STREQUAL "linux/secretservice_linux.cpp"
 				OR _relative STREQUAL "archivefiletree.cpp"
@@ -301,8 +317,16 @@ if (NOT WIN32)
 		target_compile_definitions(organizer_desktop PUBLIC MO2_WITH_LIBSECRET)
 	endif()
 
+	# Qt6::CorePrivate: QZipReader (the .mo2list reader)
+	find_package(Qt6 REQUIRED COMPONENTS CorePrivate)
+	add_library(organizer_modlists STATIC ${_organizer_modlists_sources})
+	mo2_configure_target(organizer_modlists
+		NO_SOURCES WARNINGS 4 TRANSLATIONS OFF AUTOMOC OFF)
+	target_precompile_headers(organizer_modlists REUSE_FROM organizer_datatree)
+	target_link_libraries(organizer_modlists PUBLIC organizer_datatree Qt6::CorePrivate)
+
 	target_link_libraries(organizer PRIVATE
-		organizer_desktop organizer_launch organizer_archivetree organizer_env
+		organizer_modlists organizer_desktop organizer_launch organizer_archivetree organizer_env
 		organizer_datatree)
 endif()
 

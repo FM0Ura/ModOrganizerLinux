@@ -175,6 +175,12 @@ int run(int argc, char* argv[])
         return *r;
       }
 
+      // a .mo2list given on the command line is imported once the main window is up
+      // (cl.clear() on a restart drops it, and run() uses it only once)
+      if (const auto list = cl.mo2listPath()) {
+        app.setStartupMo2list(*list);
+      }
+
       // run the main window
       const auto r = app.run(multiProcess);
 
