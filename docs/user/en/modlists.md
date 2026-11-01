@@ -47,6 +47,10 @@ variables of an executable whose name contains `KEY`, `TOKEN`, `SECRET`, `PASS`,
 - FOMOD choices are only recorded for mods installed with this version or later. For older
   ones the export warns, and the importer picks the options by hand.
 - Computing the checksums of big archives takes time.
+- A modlist cannot hold 4 GiB or more yet: no included file may reach 4 GiB, and the
+  included files (bundled mods and checked `overwrite` files) must add up to less than
+  about 4 GiB. Otherwise the export refuses with a message before computing the checksums;
+  give big mods a manual source or include fewer files.
 
 ## Import
 
@@ -70,7 +74,8 @@ Organizer in the file manager's "Open with".
    of each Nexus file; click **Mod Manager Download** there and the file comes back to
    Mod Organizer. **Skip**, **Open again** and **Stop waiting / Cancel** are in the window. Mods with
    a manual source have **Open page** and **Choose downloaded file…**. A file you already
-   have (same checksum) is reused.
+   have (same checksum) is reused. Checking the checksums of big archives runs in the
+   background, with a progress window.
 4. **Install:** all mods install in a batch, **with no dialogs**. What would need a
    decision goes to the summary. When you import into an existing profile and some reused
    mods are out of place, one question appears first: "Move N reused mods to the list's
@@ -83,13 +88,24 @@ A **new instance** restarts Mod Organizer and continues by itself. If you close 
 Organizer in the middle of an import, the next start offers **Continue**, **Later** or
 **Discard**; Continue does not repeat the mods that are already in.
 
+Only one import runs at a time. Opening another `.mo2list` while an import is being set
+up, is running or shows its summary gives "An import is already running. Finish it (close
+its windows or its summary) first." The main window stays usable during the downloads; if
+you switch profile meanwhile, Mod Organizer switches back to the destination profile
+before it installs and applies the order, plugins, INIs and executables. If that profile
+was deleted, the import stops, the mods not installed are listed as failed and the import
+stays recorded (**Continue** at the next start).
+
 ### What the import never does to your setup
 
 - Nothing of yours is deleted or reinstalled over. A mod in a different version installs
   **next to yours** as `<name> [<list>]`, and your old one is disabled **only in the
   destination profile**.
 - Imported executables never replace one of yours: if the title is taken (case does not
-  matter), the new one is added as `<title> [<list>]`. A binary must be inside the game,
+  matter), the new one is added as `<title> [<list>]`. An executable that runs exactly
+  like one you already have (same program, arguments and working directory, for example
+  the game or SKSE that Mod Organizer adds by itself) is not added again; the summary lists
+  it under "Executables already present". A binary must be inside the game,
   instance, `mods` or `overwrite` folder. Of the environment variables, only an allowlist of
   Proton, DXVK and VKD3D tuning ones survive (for example `PROTON_LOG`, `DXVK_*`,
   `VKD3D_*`, `WINEDLLOVERRIDES`, `MANGOHUD`); the others are listed in the summary.

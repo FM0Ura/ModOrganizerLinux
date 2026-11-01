@@ -48,6 +48,11 @@ ambiente de um executável cujo nome contém `KEY`, `TOKEN`, `SECRET`, `PASS`, `
 - As escolhas de FOMOD só são gravadas para mods instalados com esta versão ou mais nova.
   Para os mais antigos o export avisa, e quem importa escolhe as opções à mão.
 - Calcular a soma de verificação de arquivos grandes demora.
+- Uma modlist ainda não pode ter 4 GiB ou mais: nenhum arquivo incluído pode chegar a
+  4 GiB, e os arquivos incluídos (mods empacotados e arquivos marcados do `overwrite`)
+  precisam somar menos de uns 4 GiB. Caso contrário, o export recusa com uma mensagem antes
+  de calcular as somas de verificação; dê uma fonte manual aos mods grandes ou inclua menos
+  arquivos.
 
 ## Importar
 
@@ -71,7 +76,8 @@ Mod Organizer em "Abrir com" no gerenciador de arquivos.
    arquivo da Nexus; clique em **Mod Manager Download** nela e o arquivo volta para o Mod
    Organizer. A janela tem **Skip**, **Open again** e **Stop waiting / Cancel**. Os mods de fonte
    manual têm **Open page** e **Choose downloaded file…**. Um arquivo que você já tem (mesma
-   soma de verificação) é reaproveitado.
+   soma de verificação) é reaproveitado. A conferência das somas de verificação de arquivos
+   grandes roda em segundo plano, com uma janela de progresso.
 4. **Instalação:** todos os mods instalam em lote, **sem diálogos**. O que exigiria uma
    decisão vai para o resumo. Ao importar num perfil existente, se alguns mods reaproveitados
    estiverem fora do lugar, uma pergunta aparece antes: "Move N reused mods to the list's
@@ -84,12 +90,23 @@ Uma **instância nova** reinicia o Mod Organizer e continua sozinha. Se você fe
 Organizer no meio de uma importação, a próxima abertura oferece **Continue**, **Later** ou
 **Discard**; Continue não repete os mods que já entraram.
 
+Só uma importação roda por vez. Abrir outro `.mo2list` enquanto uma importação está sendo
+preparada, está rodando ou mostra o resumo dá "An import is already running. Finish it
+(close its windows or its summary) first." A janela principal continua usável durante os
+downloads; se você trocar de perfil nesse meio-tempo, o Mod Organizer volta para o perfil
+de destino antes de instalar e de aplicar a ordem, os plugins, os INIs e os executáveis.
+Se esse perfil foi apagado, a importação para, os mods não instalados aparecem como falhas
+e a importação continua registrada (**Continue** na próxima abertura).
+
 ### O que a importação nunca faz com a sua montagem
 
 - Nada seu é apagado nem reinstalado por cima. Um mod em outra versão instala **ao lado do
   seu** como `<nome> [<lista>]`, e o seu antigo é desativado **só no perfil de destino**.
 - Executáveis importados nunca substituem os seus: se o título já existe (maiúsculas e
-  minúsculas não contam), o novo entra como `<título> [<lista>]`. O binário precisa estar na
+  minúsculas não contam), o novo entra como `<título> [<lista>]`. Um executável que roda
+  exatamente como um que você já tem (mesmo programa, argumentos e pasta de trabalho, por
+  exemplo o jogo ou o SKSE que o próprio Mod Organizer adiciona) não é adicionado de novo; o
+  resumo o lista em "Executables already present". O binário precisa estar na
   pasta do jogo, da instância, de `mods` ou de `overwrite`. Das variáveis de ambiente, só uma
   lista permitida de ajustes do Proton, DXVK e VKD3D sobrevive (por exemplo `PROTON_LOG`,
   `DXVK_*`, `VKD3D_*`, `WINEDLLOVERRIDES`, `MANGOHUD`); as outras são listadas no resumo.
