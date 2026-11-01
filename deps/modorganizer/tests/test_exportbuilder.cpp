@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -476,4 +477,80 @@ TEST(ExportBuilder, BundledSkipsLinks)
   const auto r = build({bundled});
   ASSERT_EQ(r.package.bundledFiles.size(), 1u);
   EXPECT_EQ(r.package.bundledFiles[0].first, bundledDirName("B") + "/a.esp");
+}
+
+// the contract between the export and the import: what buildExport() puts in the
+// package comes back from Mo2ListPackage, the bundled files included
+TEST(ExportBuilder, RoundTripThroughThePackage)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+
+  // a bundled mod whose name has path characters and accents
+  const QString modDir = tmp.filePath("mods/Dar");
+  writeFile(modDir + "/Dar.esp", "esp bytes");
+  writeFile(modDir + "/textures/Câmara.dds", QByteArray("dds\0bytes", 9));
+  writeFile(modDir + "/meta.ini", "[General]\n");
+  ExportMod bundled;
+  bundled.name         = "Dar's Overhaul / Fix: Câmara";
+  bundled.version      = "2.1";
+  bundled.nonNexus     = NonNexusChoice::Bundled;
+  bundled.absolutePath = modDir;
+
+  ExportMod sep;
+  sep.name        = "Visuals";
+  sep.isSeparator = true;
+
+  const QString overwrite = tmp.filePath("overwrite");
+  writeFile(overwrite + "/SKSE/Plugins/x.ini", "[x]\n");
+  writeFile(overwrite + "/left.txt", "not checked");
+
+  auto o           = options();
+  o.overwriteFiles = {"SKSE/Plugins/x.ini"};
+  o.readme         = "Read me";
+
+  const std::map<QString, QByteArray> inis = {
+      {"Skyrim.ini", "[General]\nsPath=/home/u/Games/Skyrim/Data\n"}};
+  const auto r =
+      build({sep, nexusMod("Alpha", 1, 2), bundled}, o, inis, {}, overwrite);
+
+  const QString path = tmp.filePath("out.mo2list");
+  writeMo2List(path, r.package);
+  const auto package = Mo2ListPackage::open(path);
+
+  // the same plan, the same profile files and README
+  EXPECT_EQ(toJson(package.plan()), toJson(r.package.plan));
+  EXPECT_EQ(package.readme(), "Read me");
+  ASSERT_EQ(r.package.profileFiles.count("Skyrim.ini"), 1u);
+  EXPECT_EQ(package.profileFile("Skyrim.ini"), r.package.profileFiles.at("Skyrim.ini"));
+  EXPECT_TRUE(package.profileFile("Skyrim.ini").contains("%GAME%/Data"));
+
+  // every bundled source extracts to the files of the mod
+  std::map<QString, QByteArray> extracted;
+  int bundledSources = 0;
+  for (const auto& entry : package.plan().mods) {
+    for (const auto& source : entry.sources) {
+      if (source.kind != SourceKind::Bundled) {
+        continue;
+      }
+      ++bundledSources;
+      EXPECT_EQ(source.bundledDir, bundledDirName(entry.name));
+      const QString dest = tmp.filePath("extracted/" + QString::number(bundledSources));
+      package.extractBundled(source.bundledDir, dest);
+      QDirIterator it(dest, QDir::Files, QDirIterator::Subdirectories);
+      while (it.hasNext()) {
+        const QString file = it.next();
+        QFile f(file);
+        ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+        extracted[entry.name + ":" + QDir(dest).relativeFilePath(file)] = f.readAll();
+      }
+    }
+  }
+  EXPECT_EQ(bundledSources, 2);
+
+  const std::map<QString, QByteArray> expected = {
+      {"Dar's Overhaul / Fix: Câmara:Dar.esp", "esp bytes"},
+      {"Dar's Overhaul / Fix: Câmara:textures/Câmara.dds", QByteArray("dds\0bytes", 9)},
+      {"[L] Overwrite:SKSE/Plugins/x.ini", "[x]\n"}};
+  EXPECT_EQ(extracted, expected);
 }

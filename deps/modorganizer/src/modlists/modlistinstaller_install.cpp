@@ -17,6 +17,7 @@
 #include <QJsonDocument>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <climits>
 
 // Steps 4 and 5 of the import: the batch installation, in the order of the phases and
@@ -477,6 +478,18 @@ void ModlistInstaller::installEntry(int e)
   m_ownMods.insert(*installed);
   m_assignedNames.insert(*installed);
 
+  // the version of the list in meta.ini (§5.2); a Nexus download brings its own
+  const bool fromNexus =
+      std::any_of(entry.sources.begin(), entry.sources.end(), [](const Source& s) {
+        return s.kind == SourceKind::Nexus;
+      });
+  if (!fromNexus && !entry.version.isEmpty()) {
+    if (ModInfo::Ptr mod = modByName(*installed)) {
+      mod->setVersion(VersionInfo(entry.version));
+      mod->saveMeta();
+    }
+  }
+
   QString note;
   if (work.status == RowStatus::DifferentVersion && !work.userMod.isEmpty()) {
     // the user's mod stays, off in this profile
@@ -576,6 +589,13 @@ std::optional<QString> ModlistInstaller::installSources(int e, const QString& na
       modName  = mod->name();
       hasFiles = true;
       setModlistSetting(mod.data());
+      // installArchive() records the Nexus file only when the download list knows the
+      // archive already, which a copy from another instance may not be yet; without
+      // it a re-import or a re-export sees another version
+      if (source.kind == SourceKind::Nexus && source.modId > 0 && source.fileId > 0) {
+        mod->addInstalledFile(source.modId, source.fileId);
+        mod->saveMeta();
+      }
     } catch (const std::exception& ex) {
       return incomplete(QString::fromUtf8(ex.what()));
     }
