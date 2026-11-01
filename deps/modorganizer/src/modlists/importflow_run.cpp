@@ -74,6 +74,11 @@ void ImportFlow::run(Mo2ListPackage package, PendingImport pending)
   connect(installer, &ModlistInstaller::finished, this, [this](Summary summary) {
     onFinished(summary);
   });
+  // selected again after the user switched profile during the downloads
+  connect(installer, &ModlistInstaller::profileSelected, this,
+          [this](QString profileName) {
+            emit profileSelected(profileName);
+          });
 
   showProgress();
   installer->start();

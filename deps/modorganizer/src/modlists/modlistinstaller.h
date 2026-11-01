@@ -32,7 +32,8 @@ class IModInterface;
 // downloads the archives, installs them without dialogs (InstallationManager batch
 // mode), then applies the mod order, the plugins, the INIs and the executables, and
 // reports everything in a Summary. The destination profile must be the current
-// profile (start() selects PendingImport::profileName when it is not).
+// profile: start() selects PendingImport::profileName, and the steps after the
+// downloads select it again if the user switched profile meanwhile.
 //
 // The record of the import (<instance>/modlist-import.json) is rewritten after each
 // installed entry, so an interrupted import can be resumed without installing twice.
@@ -76,6 +77,8 @@ signals:
   void progress(int done, int total, QString what);
   void needsGuidedDownloads(std::vector<GuidedItem> items);
   void finished(Summary summary);
+  // the installer made the destination profile current again: the main window shows it
+  void profileSelected(QString profileName);
 
 private:
   enum class SourceState
@@ -112,6 +115,20 @@ private:
   void afterDownloads();
   void afterModOrder();
   void finish();
+  enum class ProfileState
+  {
+    Current,
+    Selected,
+    Gone
+  };
+  // makes the destination profile the current one (the main window stays usable
+  // during the downloads, so the user may have switched profile)
+  ProfileState selectProfile();
+  // runs f in the destination profile, after a refresh when it had to be selected
+  // again; stops the import (the record stays) when the profile is gone
+  void withProfile(std::function<void()> f);
+  // the destination profile is gone: the import stops, the record stays
+  void profileGone();
   // runs f; an exception becomes a Failed row named `what`
   void guarded(const QString& what, const std::function<void()>& f);
   void fail(const QString& message);

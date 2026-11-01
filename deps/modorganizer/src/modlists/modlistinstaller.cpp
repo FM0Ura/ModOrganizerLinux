@@ -44,25 +44,97 @@ ModlistInstaller::~ModlistInstaller() = default;
 
 void ModlistInstaller::start()
 {
-  auto profile = m_core.currentProfile();
-  if (!m_pending.profileName.isEmpty() &&
-      (profile == nullptr || profile->name() != m_pending.profileName)) {
-    try {
-      m_core.setCurrentProfile(m_pending.profileName);
-    } catch (const std::exception& e) {
-      log::error("cannot select the profile {}: {}", m_pending.profileName, e.what());
-    }
-    profile = m_core.currentProfile();
-  }
-
-  if (profile == nullptr ||
-      (!m_pending.profileName.isEmpty() && profile->name() != m_pending.profileName)) {
+  if (selectProfile() == ProfileState::Gone) {
     fail(tr("The profile \"%1\" cannot be selected").arg(m_pending.profileName));
     return;
   }
 
   resolveEarlierEntries();
   run(remainingEntries(m_pending, plan()));
+}
+
+ModlistInstaller::ProfileState ModlistInstaller::selectProfile()
+{
+  auto profile = m_core.currentProfile();
+  if (m_pending.profileName.isEmpty()) {
+    return profile != nullptr ? ProfileState::Current : ProfileState::Gone;
+  }
+  const auto isDestination = [&] {
+    return profile != nullptr &&
+           profile->name().compare(m_pending.profileName, Qt::CaseInsensitive) == 0;
+  };
+  if (isDestination()) {
+    return ProfileState::Current;
+  }
+
+  // setCurrentProfile() falls back to another profile, with an error box, when the
+  // profile does not exist
+  const auto profiles = QDir(m_core.settings().paths().profiles())
+                            .entryList(QDir::AllDirs | QDir::NoDotAndDotDot);
+  const bool exists =
+      std::any_of(profiles.begin(), profiles.end(), [&](const QString& name) {
+        return name.compare(m_pending.profileName, Qt::CaseInsensitive) == 0;
+      });
+  if (!exists) {
+    log::error("modlist import: the profile {} does not exist", m_pending.profileName);
+    return ProfileState::Gone;
+  }
+
+  try {
+    // the lists of the profile the user switched to
+    m_core.saveCurrentLists();
+    m_core.setCurrentProfile(m_pending.profileName);
+  } catch (const std::exception& e) {
+    log::error("cannot select the profile {}: {}", m_pending.profileName, e.what());
+  }
+  profile = m_core.currentProfile();
+  if (!isDestination()) {
+    return ProfileState::Gone;
+  }
+
+  log::info("modlist import: selected the profile {} again", profile->name());
+  emit profileSelected(profile->name());
+  return ProfileState::Selected;
+}
+
+void ModlistInstaller::withProfile(std::function<void()> f)
+{
+  switch (selectProfile()) {
+  case ProfileState::Current:
+    f();
+    return;
+
+  case ProfileState::Gone:
+    profileGone();
+    return;
+
+  case ProfileState::Selected:
+    // the mods and plugins of the profile are read again first
+    try {
+      refreshThen([this, f] {
+        withProfile(f);
+      });
+    } catch (const std::exception& e) {
+      log::error("modlist import: refresh failed: {}", e.what());
+      f();
+    }
+    return;
+  }
+}
+
+void ModlistInstaller::profileGone()
+{
+  const QString message =
+      tr("The profile \"%1\" no longer exists").arg(m_pending.profileName);
+  for (int e : remainingEntries(m_pending, plan())) {
+    addRow(e, Outcome::Failed, message);
+  }
+  m_summary.rows.push_back(failedRow(tr("Profile"), message));
+
+  // the record stays, the import can be continued once the profile is back
+  savePending();
+  m_installing = false;
+  emit finished(m_summary);
 }
 
 void ModlistInstaller::retry(std::vector<int> entries)
@@ -131,32 +203,44 @@ void ModlistInstaller::afterDownloads()
   m_connections.clear();
   m_batchMessages.reset();
 
-  guarded(tr("Installation"), [this] {
-    installEntries();
-  });
+  // the main window stayed usable during the downloads: the mods go into the profile
+  // the user chose in the review, whatever profile is current now
+  withProfile([this] {
+    guarded(tr("Installation"), [this] {
+      installEntries();
+    });
 
-  // createMod() (separators, bundled mods) adds the mod to the collection but not
-  // to the indices by name nor to the mod status of the profile; only a refresh
-  // does, so the order waits for one after the batch
-  whenIdle([this] {
-    try {
-      refreshThen([this] {
-        guarded(tr("Mod order"), [this] {
-          applyModOrder();
-        });
-        try {
-          refreshThen([this] {
-            afterModOrder();
+    // createMod() (separators, bundled mods) adds the mod to the collection but not
+    // to the indices by name nor to the mod status of the profile; only a refresh
+    // does, so the order waits for one after the batch
+    whenIdle([this] {
+      try {
+        refreshThen([this] {
+          withProfile([this] {
+            guarded(tr("Mod order"), [this] {
+              applyModOrder();
+            });
+            try {
+              refreshThen([this] {
+                withProfile([this] {
+                  afterModOrder();
+                });
+              });
+            } catch (const std::exception& e) {
+              log::error("modlist import: refresh failed: {}", e.what());
+              withProfile([this] {
+                afterModOrder();
+              });
+            }
           });
-        } catch (const std::exception& e) {
-          log::error("modlist import: refresh failed: {}", e.what());
+        });
+      } catch (const std::exception& e) {
+        log::error("modlist import: refresh failed: {}", e.what());
+        withProfile([this] {
           afterModOrder();
-        }
-      });
-    } catch (const std::exception& e) {
-      log::error("modlist import: refresh failed: {}", e.what());
-      afterModOrder();
-    }
+        });
+      }
+    });
   });
 }
 
@@ -221,6 +305,7 @@ void ModlistInstaller::fail(const QString& message)
   for (int e : remainingEntries(m_pending, plan())) {
     addRow(e, Outcome::Failed, message);
   }
+  m_installing = false;
   emit finished(m_summary);
 }
 
