@@ -53,23 +53,29 @@ ambiente de um executável cujo nome contém `KEY`, `TOKEN`, `SECRET`, `PASS`, `
 
 Dê dois cliques num `.mo2list` no gerenciador de arquivos (abre no Mod Organizer, aberto ou
 não) ou use **File → Import modlist…**. O Mod Organizer nunca executa nada da lista.
+O clique duplo funciona depois que o Mod Organizer foi aberto ao menos uma vez, porque ele
+registra o tipo de arquivo ao iniciar. Se outro aplicativo já é o padrão para arquivos
+`.mo2list`, o Mod Organizer não o substitui; use **File → Import modlist…** ou escolha o
+Mod Organizer em "Abrir com" no gerenciador de arquivos.
 
 1. **Destino:** uma instância nova, um perfil novo ou um perfil existente. Nada vem
    pré-marcado. Uma lista de outro jogo só entra numa instância nova desse jogo. Uma lista
    feita por um Mod Organizer mais novo é recusada, com a mensagem para atualizar.
 2. **Revisão:** os mods, com os opcionais **desmarcados**. Se você já tem um mod em outra
-   versão, escolha **Use mine** ou **Use the list's**. O rodapé diz se você tem Nexus
+   versão, escolha **Download the list's version** ou **Use mine**. O rodapé diz se você tem Nexus
    Premium ou "No Premium: you will click N downloads on Nexus" (cliques guiados).
    Se a lista traz executáveis, arquivos nativos (`.dll`, `.exe`, scripts...) ou INIs que
    carregam DLLs, uma seção **Executable content** os lista (os executáveis com binário,
    argumentos, pasta de trabalho e ambiente) e você precisa confirmá-la para continuar.
 3. **Downloads:** com Premium, automáticos. Sem Premium, uma janela abre a página de cada
    arquivo da Nexus; clique em **Mod Manager Download** nela e o arquivo volta para o Mod
-   Organizer. A janela tem **Skip**, **Open again** e **Stop waiting**. Os mods de fonte
-   manual têm **Open page** e **Choose downloaded file**. Um arquivo que você já tem (mesma
+   Organizer. A janela tem **Skip**, **Open again** e **Stop waiting / Cancel**. Os mods de fonte
+   manual têm **Open page** e **Choose downloaded file…**. Um arquivo que você já tem (mesma
    soma de verificação) é reaproveitado.
 4. **Instalação:** todos os mods instalam em lote, **sem diálogos**. O que exigiria uma
-   decisão vai para o resumo.
+   decisão vai para o resumo. Ao importar num perfil existente, se alguns mods reaproveitados
+   estiverem fora do lugar, uma pergunta aparece antes: "Move N reused mods to the list's
+   order?" (Yes move, No mantém a sua ordem).
 5. **Resumo:** Installed, Reused, Failed e Skipped, com **Install manually** (abre o
    instalador de sempre para aquele mod), **Retry failed**, **Sort with LOOT** e **Copy**
    (o resumo como texto).
@@ -88,6 +94,8 @@ Organizer no meio de uma importação, a próxima abertura oferece **Continue**,
   lista permitida de ajustes do Proton, DXVK e VKD3D sobrevive (por exemplo `PROTON_LOG`,
   `DXVK_*`, `VKD3D_*`, `WINEDLLOVERRIDES`, `MANGOHUD`); as outras são listadas no resumo.
 - Só os INIs do jogo são aplicados. Num perfil existente, o Mod Organizer pergunta antes.
+  Se o perfil não usa INIs locais, os INIs da lista **não** são aplicados (ligar os INIs
+  locais é decisão sua) e aparecem no resumo em "INI files not applied".
 - Instância nova e perfil novo saem com INIs locais e saves locais.
 
 ### Limites conhecidos

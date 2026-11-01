@@ -32,7 +32,8 @@ so everyone downloads them from Nexus. Only mods you mark as made by you carry t
    and asks for confirmation (**Save anyway**). Absolute paths of the instance, game,
    Proton prefix and home are replaced by markers (`%INSTANCE%`, `%GAME%`,
    `%PROTON_PREFIX%`, `%HOME%`) and restored on import.
-7. Saving checksums (MD5) the archives, with a progress window you can cancel.
+7. While saving, Mod Organizer computes the MD5 checksum of the downloaded archives,
+   with a progress window you can cancel.
 
 Never included: saves, `ModOrganizer.ini`, tokens, API keys and logs. Environment
 variables of an executable whose name contains `KEY`, `TOKEN`, `SECRET`, `PASS`, `AUTH`,
@@ -51,23 +52,29 @@ variables of an executable whose name contains `KEY`, `TOKEN`, `SECRET`, `PASS`,
 
 Double-click a `.mo2list` in the file manager (it opens in Mod Organizer, running or not)
 or use **File → Import modlist…**. Mod Organizer never runs anything from the list.
+Double-click works once Mod Organizer has been started at least once, because it registers
+the file type at startup. If another application is already the default for `.mo2list`
+files, Mod Organizer does not replace it; use **File → Import modlist…** or choose Mod
+Organizer in the file manager's "Open with".
 
 1. **Destination:** a new instance, a new profile or an existing profile. Nothing is
    pre-selected. A list for another game only goes into a new instance of that game. A list
    from a newer Mod Organizer is refused with a message to update.
 2. **Review:** the mods, with optional ones **unchecked**. If you already have a mod in a
-   different version, choose **Use mine** or **Use the list's**. The footer says whether
+   different version, choose **Download the list's version** or **Use mine**. The footer says whether
    you have Nexus Premium or "No Premium: you will click N downloads on Nexus".
    If the list carries executables, native files (`.dll`, `.exe`, scripts...) or INIs that
    load DLLs, an **Executable content** section lists them (executables with binary,
    arguments, working directory and environment) and you must confirm it to continue.
 3. **Downloads:** with Premium they are automatic. Without Premium a window opens the page
    of each Nexus file; click **Mod Manager Download** there and the file comes back to
-   Mod Organizer. **Skip**, **Open again** and **Stop waiting** are in the window. Mods with
-   a manual source have **Open page** and **Choose downloaded file**. A file you already
+   Mod Organizer. **Skip**, **Open again** and **Stop waiting / Cancel** are in the window. Mods with
+   a manual source have **Open page** and **Choose downloaded file…**. A file you already
    have (same checksum) is reused.
 4. **Install:** all mods install in a batch, **with no dialogs**. What would need a
-   decision goes to the summary.
+   decision goes to the summary. When you import into an existing profile and some reused
+   mods are out of place, one question appears first: "Move N reused mods to the list's
+   order?" (Yes moves them, No leaves your order).
 5. **Summary:** Installed, Reused, Failed and Skipped, with **Install manually**
    (opens the usual installer for that mod), **Retry failed**, **Sort with LOOT** and
    **Copy** (the summary as text).
@@ -87,6 +94,9 @@ Organizer in the middle of an import, the next start offers **Continue**, **Late
   Proton, DXVK and VKD3D tuning ones survive (for example `PROTON_LOG`, `DXVK_*`,
   `VKD3D_*`, `WINEDLLOVERRIDES`, `MANGOHUD`); the others are listed in the summary.
 - Only the game's INI files are applied. In an existing profile, Mod Organizer asks first.
+  If the profile does not use local INI files, the list's INIs are **not** applied (turning
+  local INIs on is your call) and they are listed in the summary under "INI files not
+  applied".
 - A new instance and a new profile get local INI files and local saves.
 
 ### Known limits

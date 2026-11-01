@@ -27,9 +27,9 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 
 - [ ] **File → Import modlist…**, escolher o arquivo do item 1. Esperado: o destino **não vem pré-marcado** (nova instância / novo perfil / perfil existente); escolher **nova instância**.
 - [ ] Janela de revisão: linhas opcionais desmarcadas; rodapé "No Premium: you will click N downloads on Nexus"; se houver executáveis, a seção **Executable content** exige confirmação para continuar.
-- [ ] Downloads: abre a janela guiada, que abre a página de cada arquivo da Nexus (**Mod Manager Download**); **Skip**, **Open again** e **Stop waiting** funcionam; um `nxm://` repetido não conta duas vezes e um item pulado não ressuscita sozinho.
+- [ ] Downloads: abre a janela guiada, que abre a página de cada arquivo da Nexus (**Mod Manager Download**); **Skip**, **Open again** e **Stop waiting / Cancel** funcionam; um `nxm://` repetido não conta duas vezes e um item pulado não ressuscita sozinho.
 - [ ] Com a janela guiada aberta e a pergunta "Files left" visível, clicar num **Mod Manager Download** de um arquivo da lista. Esperado: o `nxm://` é tratado sem queda do MO2.
-- [ ] Mods de fonte manual: **Open page** e **Choose downloaded file** funcionam.
+- [ ] Mods de fonte manual: **Open page** e **Choose downloaded file…** funcionam.
 - [ ] A instalação em lote roda **sem nenhuma pergunta modal** (só a janela de progresso). O que precisaria de decisão vai para o resumo.
 - [ ] O MO2 reinicia sozinho na instância nova e a importação continua. Resumo: Installed / Reused / Failed / Skipped, **Install manually**, **Retry failed**, **Sort with LOOT** e **Copy** funcionam.
 - [ ] Repetir com a conta **Premium**: os downloads são automáticos, sem a janela guiada.
@@ -48,8 +48,9 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 
 ## 6. Importar num perfil existente
 
-- [ ] Preparar um perfil com alguns mods que a lista também tem (mesma versão) e um com versão **diferente** da lista. **Import modlist…** → **perfil existente**. Esperado: o MO2 pergunta antes de aplicar os INIs; os mods iguais aparecem como **Reused** e não são baixados; os de versão diferente mostram **Use mine** / **Use the list's**.
-- [ ] Escolher **Use the list's** num deles. Esperado: instala ao lado como `<nome> [<lista>]`; o mod antigo fica **desativado só neste perfil** (continua ativo nos outros perfis); nada seu foi apagado nem reinstalado por cima. Com **Use mine**, o mod continua como estava e nada novo entra.
+- [ ] Preparar um perfil com alguns mods que a lista também tem (mesma versão) e um com versão **diferente** da lista. **Import modlist…** → **perfil existente**. Esperado: o MO2 pergunta antes de aplicar os INIs; os mods iguais aparecem como **Reused** e não são baixados; os de versão diferente mostram a escolha **Download the list's version** / **Use mine**.
+- [ ] Escolher **Download the list's version** num deles. Esperado: instala ao lado como `<nome> [<lista>]`; o mod antigo fica **desativado só neste perfil** (continua ativo nos outros perfis); nada seu foi apagado nem reinstalado por cima. Com **Use mine**, o mod continua como estava e nada novo entra.
+- [ ] Se houver mods reaproveitados fora da ordem da lista, aparece uma pergunta "Move N reused mods to the list's order?"; **Yes** os move, **No** mantém a ordem. Se o perfil não usa INIs locais, os INIs da lista não são aplicados e aparecem no resumo em "INI files not applied".
 - [ ] A instalação em lote não mostrou nenhuma pergunta modal (só a janela de progresso).
 
 ## 7. Conteúdo executável em `bundled`
@@ -69,6 +70,7 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 - [ ] No Dolphin, clicar duas vezes num `.mo2list` com o MO2 **aberto** (iniciado no box): a janela de importação abre no MO2 que já roda.
 - [ ] O mesmo com o MO2 **fechado**: ele abre e, depois da janela principal, abre a importação.
 - [ ] O mesmo com um arquivo de nome com espaço, `My List.mo2list`, nos dois casos acima.
+- [ ] O registro do tipo de arquivo acontece ao iniciar o MO2 (precisa ter sido aberto ao menos uma vez) e não substitui outro aplicativo que já seja o padrão para `.mo2list`: com outro aplicativo como padrão, o clique duplo continua abrindo esse aplicativo e **File → Import modlist…** funciona.
 
 ## 11. Executáveis importados
 

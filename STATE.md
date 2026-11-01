@@ -27,6 +27,8 @@ Entregue: modelo do plano e JSON; marcadores de caminho e verificação de vazam
 - FOMOD: o botão voltar ainda alcança a página 0 escondida no modo interativo; grupo obrigatório todo "NotUsable" grava vazio e a reaplicação falha alto.
 - Exportação: a janela reconstrói a prévia a cada tecla; o `overwrite` conta como mod; INI só decodifica UTF-8; `bundledText` lê o arquivo (até 2 MiB) antes da checagem de NUL; vazamento de executável listado duas vezes; segredos em argumentos de executável não são filtrados (a janela mostra a linha de comando para o autor conferir); `SecretEnvDropped` não nomeia a variável.
 - Importação: `ExitModOrganizer` ignorado; sem limpeza se a cópia do pacote falha após criar a instância; cópia do pacote síncrona na thread da interface; argumento `.mo2list` inexistente tratado como nome de executável; sem teste de `CommandLine`.
+- Importação (Tasks 5, 7, 8, 9): a contagem de FOMOD (`idx`) segue a ordem de exibição depois de ordenar, e o Vortex pode usar a ordem do XML (parte 2); `findReusableDownload` recalcula o MD5 sem necessidade; a contagem de movidos da Task 8 conta a mais e o nome `freePath` é impreciso; em `runDeferred` a ordem de execução e a conexão que mantém a fila viva no desmonte (Task 9) ficam para revisar.
+- `DirectoryCreator` no Linux divide o caminho em `\` e não cria pastas (já existia antes; inofensivo, porque `OrganizerCore::bootstrap` cria as pastas no primeiro início).
 - Caminhos de interface sem teste automático (o checklist manual os cobre).
 
 **Riscos aceitos** (rulings do ledger):
