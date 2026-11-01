@@ -40,6 +40,9 @@ struct Summary
   std::vector<QString> executablesWithoutTarget;
   // "<title>: <program> <arguments>" of each executable the import added
   std::vector<QString> executablesAdded;
+  // titles of the executables of the list that the instance already had (same program,
+  // arguments and working directory): skipped, not added again
+  std::vector<QString> executablesAlreadyPresent;
   bool offerLoot              = false;
   bool userPluginOrderChanged = false;
 };

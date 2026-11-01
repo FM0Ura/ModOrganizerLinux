@@ -2,6 +2,10 @@
 
 #include "modlists/importreview.h"
 
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
+
 using namespace modlists;
 
 namespace
@@ -194,4 +198,37 @@ TEST(ImportReview, SameGameAndPath)
   EXPECT_FALSE(isMo2ListPath(".mo2list"));
   EXPECT_FALSE(isMo2ListPath("/home/u/list.mo2list.zip"));
   EXPECT_FALSE(isMo2ListPath("nxm://skyrimspecialedition/mods/1/files/2"));
+}
+
+TEST(ImportReview, LaunchKeyAlreadyPresent)
+{
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  const QString game = tmp.path() + "/game";
+  ASSERT_TRUE(QDir().mkpath(game + "/sub"));
+  QFile skse(game + "/skse64_loader.exe");
+  ASSERT_TRUE(skse.open(QIODevice::WriteOnly));
+  skse.close();
+  // the same folder through a symbolic link
+  ASSERT_TRUE(QFile::link(game, tmp.path() + "/link"));
+
+  const std::vector<LaunchKey> existing = {
+      launchKey(game + "/skse64_loader.exe", "", game),
+      launchKey(game + "/sub/../skse64_loader.exe", "-forcesteamloader", "")};
+
+  // same program, arguments and working directory, written another way
+  EXPECT_TRUE(alreadyPresent(
+      launchKey(tmp.path() + "/link/skse64_loader.exe", "", game + "/"), existing));
+  // an empty working directory is the folder of the program
+  EXPECT_TRUE(alreadyPresent(launchKey(game + "/skse64_loader.exe", "", ""), existing));
+  EXPECT_TRUE(alreadyPresent(
+      launchKey(game + "/skse64_loader.exe", "-forcesteamloader", game), existing));
+
+  // other arguments, another working directory, another program
+  EXPECT_FALSE(alreadyPresent(
+      launchKey(game + "/skse64_loader.exe", "-other", game), existing));
+  EXPECT_FALSE(alreadyPresent(
+      launchKey(game + "/skse64_loader.exe", "", game + "/sub"), existing));
+  EXPECT_FALSE(alreadyPresent(launchKey(game + "/SkyrimSE.exe", "", game), existing));
+  EXPECT_FALSE(alreadyPresent(launchKey(game + "/skse64_loader.exe", "", game), {}));
 }

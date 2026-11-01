@@ -3,6 +3,8 @@
 #include "exportreview.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 
 #include <algorithm>
 
@@ -243,6 +245,30 @@ QString executableContentText(const std::vector<ExecFinding>& findings,
   }
 
   return lines.join('\n');
+}
+
+LaunchKey launchKey(const QString& binary, const QString& arguments,
+                    const QString& workingDirectory)
+{
+  const auto canonical = [](const QString& path) {
+    const QString c = QFileInfo(path).canonicalFilePath();
+    return c.isEmpty() ? QDir::cleanPath(QFileInfo(path).absoluteFilePath()) : c;
+  };
+
+  LaunchKey key;
+  key.binary           = canonical(binary);
+  key.arguments        = arguments;
+  key.workingDirectory = canonical(
+      workingDirectory.isEmpty() ? QFileInfo(binary).absolutePath() : workingDirectory);
+  return key;
+}
+
+bool alreadyPresent(const LaunchKey& imported, const std::vector<LaunchKey>& existing)
+{
+  return std::any_of(existing.begin(), existing.end(), [&](const LaunchKey& e) {
+    return e.binary == imported.binary && e.arguments == imported.arguments &&
+           e.workingDirectory == imported.workingDirectory;
+  });
 }
 
 bool sameGame(const Header& header, const QString& instanceGameShortName)

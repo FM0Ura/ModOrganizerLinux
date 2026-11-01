@@ -82,6 +82,23 @@ bool hasExecutableContent(const std::vector<ExecFinding>& findings,
 QString executableContentText(const std::vector<ExecFinding>& findings,
                               const std::vector<ExecutableEntry>& executables);
 
+// how an executable runs: its program and working directory as canonical paths (as
+// written when they do not exist), and its arguments; an empty working directory is
+// the folder of the program, as when MO2 runs it
+struct LaunchKey
+{
+  QString binary;
+  QString arguments;
+  QString workingDirectory;
+};
+
+LaunchKey launchKey(const QString& binary, const QString& arguments,
+                    const QString& workingDirectory);
+
+// an executable of the list that runs exactly like one already in the instance (the
+// executables the game plugin adds, mostly): the import skips it, it is never merged
+bool alreadyPresent(const LaunchKey& imported, const std::vector<LaunchKey>& existing);
+
 // the game of the plan is the game of the instance (Header::gameName is the
 // gameShortName() of the game plugin; compared without case)
 bool sameGame(const Header& header, const QString& instanceGameShortName);

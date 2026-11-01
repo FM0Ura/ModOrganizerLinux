@@ -412,6 +412,13 @@ void ModlistInstaller::applyExecutables()
            });
   };
 
+  // how the executables of the instance run, before the import adds any
+  std::vector<LaunchKey> existing;
+  for (const auto& e : *list) {
+    existing.push_back(launchKey(e.binaryInfo().absoluteFilePath(), e.arguments(),
+                                 e.workingDirectory()));
+  }
+
   for (const auto& exe : plan().executables) {
     const QString binary = restore(exe.binary);
     if (exe.title.isEmpty() || binary.isEmpty() || !QFileInfo::exists(binary)) {
@@ -422,6 +429,15 @@ void ModlistInstaller::applyExecutables()
       m_summary.executablesWithoutTarget.push_back(
           tr("%1 (outside the game, instance, mods and overwrite folders)")
               .arg(exe.title));
+      continue;
+    }
+
+    // the same launcher as one of the instance (the game, SKSE... that the game plugin
+    // adds): skipped rather than added again as "<title> [<list>]"; never merged
+    const QString arguments = restore(exe.arguments);
+    if (alreadyPresent(
+            launchKey(binary, arguments, restore(exe.workingDirectory)), existing)) {
+      m_summary.executablesAlreadyPresent.push_back(exe.title);
       continue;
     }
 
@@ -449,7 +465,6 @@ void ModlistInstaller::applyExecutables()
       }
     }
 
-    const QString arguments = restore(exe.arguments);
     Executable e(title);
     e.binaryInfo(QFileInfo(binary))
         .arguments(arguments)

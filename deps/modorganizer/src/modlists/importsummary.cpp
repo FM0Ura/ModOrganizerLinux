@@ -58,6 +58,8 @@ QString summaryText(const Summary& summary)
   section(out, "Executables without a target",
           toList(summary.executablesWithoutTarget));
   section(out, "Executables added", toList(summary.executablesAdded));
+  section(out, "Executables already present",
+          toList(summary.executablesAlreadyPresent));
 
   QStringList notes;
   if (summary.userPluginOrderChanged) {

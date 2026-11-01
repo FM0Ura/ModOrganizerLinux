@@ -30,6 +30,7 @@ TEST(ImportSummary, TextHasEverySection)
   s.inisNotApplied           = {"Skyrim.ini"};
   s.executablesWithoutTarget = {"SKSE"};
   s.executablesAdded         = {"xEdit [My List]: /games/sse/xEdit.exe -quickautoclean"};
+  s.executablesAlreadyPresent = {"SKSE"};
   s.offerLoot                = true;
   s.userPluginOrderChanged   = true;
 
@@ -38,7 +39,7 @@ TEST(ImportSummary, TextHasEverySection)
   for (const char* section :
        {"Installed", "Reused", "Failed", "Skipped", "Plugins not installed",
         "Missing masters", "INI files not applied", "Executables without a target",
-        "Executables added"}) {
+        "Executables added", "Executables already present"}) {
     EXPECT_TRUE(text.contains(section)) << section;
   }
   for (const char* mod : {"Alpha Mod", "Beta Mod", "Gamma Mod", "Delta Mod"}) {
@@ -67,6 +68,7 @@ TEST(ImportSummary, EmptySectionsAreLeftOut)
   EXPECT_FALSE(text.contains("Missing masters"));
   EXPECT_FALSE(text.contains("LOOT"));
   EXPECT_FALSE(text.contains("Executables added"));
+  EXPECT_FALSE(text.contains("already present"));
 }
 
 TEST(ImportSummary, RetryableOnlyFailed)
