@@ -47,7 +47,8 @@ public:
   // asks to continue the import recorded in the current instance, if there is one
   void resumePending();
 
-  // an import is running or its summary is open
+  // an import is being started (its dialogs are open), is running, or its summary is
+  // open
   bool busy() const;
 
 signals:
@@ -73,6 +74,11 @@ private:
   // loop): the progress window is not deleted under it, closeProgress() waits
   int m_nested               = 0;
   bool m_closeProgressPending = false;
+  // startFromFile() or resumePending() is running: their dialogs and questions are
+  // nested event loops, in which another .mo2list (from the file manager) or the
+  // resume at startup could start a second import
+  bool m_starting = false;
+  class Starting;
 
   QString pendingPath() const;
   QString packageCopyPath() const;

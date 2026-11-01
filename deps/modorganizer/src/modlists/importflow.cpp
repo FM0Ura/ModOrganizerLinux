@@ -132,6 +132,24 @@ namespace
 
 }  // namespace
 
+// holds ImportFlow::m_starting while it lives
+class ImportFlow::Starting
+{
+public:
+  explicit Starting(ImportFlow& flow) : m_flow(&flow) { flow.m_starting = true; }
+  ~Starting()
+  {
+    if (m_flow) {
+      m_flow->m_starting = false;
+    }
+  }
+  Starting(const Starting&)            = delete;
+  Starting& operator=(const Starting&) = delete;
+
+private:
+  QPointer<ImportFlow> m_flow;
+};
+
 ImportFlow::ImportFlow(OrganizerCore& core, QWidget* parent)
     : QObject(parent), m_core(core), m_parent(parent)
 {}
@@ -147,7 +165,7 @@ ImportFlow::~ImportFlow()
 
 bool ImportFlow::busy() const
 {
-  return !m_installer.isNull();
+  return m_starting || !m_installer.isNull();
 }
 
 QString ImportFlow::pendingPath() const
@@ -184,10 +202,11 @@ void ImportFlow::startFromFile(const QString& path)
   const QString title = tr("Import modlist");
   if (busy()) {
     QMessageBox::information(m_parent, title,
-                             tr("An import is already running. Wait for its summary "
-                                "and close it first."));
+                             tr("An import is already running. Finish it (close its "
+                                "windows or its summary) first."));
     return;
   }
+  const Starting starting(*this);
 
   std::optional<Mo2ListPackage> package;
   try {
@@ -410,9 +429,11 @@ void ImportFlow::startInNewInstance(const QString& name, IPluginGame* game,
 void ImportFlow::resumePending()
 {
   const QString path = pendingPath();
+  // a .mo2list being opened asks about the record itself
   if (busy() || !QFile::exists(path)) {
     return;
   }
+  const Starting starting(*this);
   const QString title = tr("Unfinished modlist import");
 
   // Later keeps the record for the next start, Discard removes it
