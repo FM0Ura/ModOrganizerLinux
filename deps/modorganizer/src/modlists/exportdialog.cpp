@@ -363,6 +363,25 @@ void ExportDialog::save()
     return;
   }
 
+  // the missing MD5 the preview already showed (archives not in the downloads folder)
+  const auto noMd5 = [](const ExportResult& result) {
+    return std::count_if(result.warnings.begin(), result.warnings.end(), [](auto& w) {
+      return w.kind == ExportWarning::Kind::NoMd5;
+    });
+  };
+  const ExportResult preview =
+      buildExport(withPendingMd5(m_mods), m_plugins, m_inis, m_executables, m_config,
+                  m_markers, m_overwriteDir, o, m_base);
+  const auto expected = noMd5(preview);
+
+  // before the checksums, which take long: the package could not be written
+  const QString tooLarge = packageSizeProblem(preview.package);
+  if (!tooLarge.isEmpty()) {
+    QMessageBox::warning(this, tr("Export modlist"),
+                         tr("The modlist cannot be saved.\n\n%1").arg(tooLarge));
+    return;
+  }
+
   QString path = QFileDialog::getSaveFileName(
       this, tr("Save modlist"), QDir(QDir::homePath()).filePath(o.listName + ".mo2list"),
       tr("Mod Organizer modlist (*.mo2list)"));
@@ -378,16 +397,6 @@ void ExportDialog::save()
       return;
     }
   }
-
-  // the missing MD5 the preview already showed (archives not in the downloads folder)
-  const auto noMd5 = [](const ExportResult& result) {
-    return std::count_if(result.warnings.begin(), result.warnings.end(), [](auto& w) {
-      return w.kind == ExportWarning::Kind::NoMd5;
-    });
-  };
-  const auto expected =
-      noMd5(buildExport(withPendingMd5(m_mods), m_plugins, m_inis, m_executables,
-                        m_config, m_markers, m_overwriteDir, o, m_base));
 
   if (!computeMd5(o)) {
     return;

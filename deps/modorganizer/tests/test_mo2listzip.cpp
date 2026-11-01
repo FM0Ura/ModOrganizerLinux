@@ -529,3 +529,70 @@ TEST(Mo2ListZip, FixtureOpens)
   EXPECT_EQ(p.plugins.size(), 6u);
   EXPECT_TRUE(findExecutableContent(pkg).empty());
 }
+
+// QZipWriter has no Zip64: 4 GiB or more would be written as a corrupt package
+TEST(Mo2ListZip, RefusesPackagesOverZip32)
+{
+  QTemporaryDir tmp;
+  // sparse files: nothing is read before the sizes are checked
+  const auto sparse = [&](const QString& name, qint64 size) {
+    const QString path = tmp.filePath(name);
+    QFile f(path);
+    EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+    EXPECT_TRUE(f.resize(size));
+    return path;
+  };
+
+  PackageInput small;
+  small.plan = makePlan();
+  small.bundledFiles.push_back({"m/a", sparse("a", 1024)});
+  EXPECT_TRUE(packageSizeProblem(small).isEmpty());
+
+  // one file of 4 GiB
+  PackageInput huge = small;
+  huge.bundledFiles.push_back({"m/big.bsa", sparse("big", MaxZipSize)});
+  const QString problem = packageSizeProblem(huge);
+  EXPECT_TRUE(problem.contains("m/big.bsa")) << problem.toStdString();
+  EXPECT_TRUE(problem.contains("4 GiB")) << problem.toStdString();
+
+  // files under 4 GiB that add up to the limit
+  PackageInput total = small;
+  total.bundledFiles.push_back({"m/b", sparse("b", MaxPackageSize / 2)});
+  total.bundledFiles.push_back({"m/c", sparse("c", MaxPackageSize / 2)});
+  const QString totalProblem = packageSizeProblem(total);
+  EXPECT_FALSE(totalProblem.isEmpty());
+  EXPECT_TRUE(totalProblem.contains("4 GiB")) << totalProblem.toStdString();
+
+  // writeMo2List() refuses before writing anything, the old file stays
+  const QString path = tmp.filePath("list.mo2list");
+  writeMo2List(path, small);
+  const qint64 before = QFileInfo(path).size();
+  for (const auto* in : {&huge, &total}) {
+    try {
+      writeMo2List(path, *in);
+      ADD_FAILURE() << "wrote a package over 4 GiB";
+    } catch (const std::runtime_error& e) {
+      EXPECT_TRUE(QString(e.what()).contains("4 GiB")) << e.what();
+    }
+    EXPECT_EQ(QFileInfo(path).size(), before);
+    EXPECT_FALSE(QFile::exists(path + ".part"));
+  }
+}
+
+TEST(Mo2ListZip, ReaderLimitsMatchTheWriter)
+{
+  EXPECT_EQ(MaxEntrySize, MaxZipSize);
+  EXPECT_EQ(MaxTotalSize, MaxZipSize);
+
+  // two entries that each fit, over 4 GiB together
+  QTemporaryDir tmp;
+  const auto path = rawPackage(tmp, {{"bundled/m/a", "1", qint64(3) << 30},
+                                     {"bundled/m/b", "2", qint64(3) << 30}});
+  try {
+    Mo2ListPackage::open(path);
+    ADD_FAILURE() << "accepted 6 GiB";
+  } catch (const PlanError& e) {
+    EXPECT_EQ(e.kind(), PlanError::Kind::Invalid);
+    EXPECT_TRUE(QString(e.what()).contains("4 GiB")) << e.what();
+  }
+}

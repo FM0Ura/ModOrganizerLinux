@@ -142,8 +142,44 @@ QString bundledDirName(const QString& modName)
   return safe + "-" + QString::fromLatin1(hash.left(8));
 }
 
+QString packageSizeProblem(const PackageInput& input)
+{
+  const auto mib = [](qint64 size) {
+    return QString("%1 MiB").arg(size >> 20);
+  };
+  const QString limit = "a modlist cannot hold 4 GiB or more yet";
+
+  qint64 total =
+      QJsonDocument(toJson(input.plan)).toJson(QJsonDocument::Indented).size() +
+      input.readme.toUtf8().size();
+  for (const auto& [name, data] : input.profileFiles) {
+    total += data.size();
+  }
+  for (const auto& [name, disk] : input.bundledFiles) {
+    const qint64 size = QFileInfo(disk).size();
+    if (size >= MaxZipSize) {
+      return QString("The included file %1 has %2: %3. Leave that mod out or give it "
+                     "a manual source.")
+          .arg(name, mib(size), limit);
+    }
+    total += size;
+  }
+  if (total >= MaxPackageSize) {
+    return QString("The included files add up to %1: %2. Include fewer mods or "
+                   "overwrite files.")
+        .arg(mib(total), limit);
+  }
+  return {};
+}
+
 void writeMo2List(const QString& path, const PackageInput& input)
 {
+  // before anything is written: the ZIP would be corrupt
+  const QString tooLarge = packageSizeProblem(input);
+  if (!tooLarge.isEmpty()) {
+    throw std::runtime_error(tooLarge.toStdString());
+  }
+
   const QString part = path + ".part";
   QFile::remove(part);
   auto fail = [&](const QString& what) {
@@ -224,11 +260,11 @@ Mo2ListPackage Mo2ListPackage::open(const QString& path)
       invalid("manifest.json is over the limit of 32 MiB");
     }
     if (info.size > MaxEntrySize) {
-      invalid("Entry over the limit of 8 GiB: " + info.filePath);
+      invalid("Entry over the limit of 4 GiB: " + info.filePath);
     }
     total += info.size;
     if (total > MaxTotalSize) {
-      invalid("The modlist is over the limit of 32 GiB (at " + info.filePath + ")");
+      invalid("The modlist is over the limit of 4 GiB (at " + info.filePath + ")");
     }
     package.m_files.append(info.filePath);
     package.m_sizes.insert(info.filePath, info.size);

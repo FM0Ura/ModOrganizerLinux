@@ -20,11 +20,17 @@
 namespace modlists
 {
 
+// QZipWriter and QZipReader have no Zip64: sizes and offsets are 32-bit, so neither a
+// file nor the package can reach 4 GiB (a larger export needs a writer of our own).
+inline constexpr qint64 MaxZipSize = qint64(4) << 30;
+// what writeMo2List() writes at most, a margin left for the headers and compression
+inline constexpr qint64 MaxPackageSize = MaxZipSize - (qint64(64) << 20);
+
 // Limits checked by open() from the sizes declared in the ZIP headers, before anything
 // is read.
 inline constexpr qint64 MaxManifestSize = qint64(32) << 20;
-inline constexpr qint64 MaxEntrySize    = qint64(8) << 30;
-inline constexpr qint64 MaxTotalSize    = qint64(32) << 30;
+inline constexpr qint64 MaxEntrySize    = MaxZipSize;
+inline constexpr qint64 MaxTotalSize    = MaxZipSize;
 inline constexpr int MaxEntries         = 200000;
 // bundled files larger than this and without a known data extension are not read to
 // look for a native header
@@ -46,8 +52,13 @@ struct PackageInput
   QString readme;
 };
 
+// Empty when writeMo2List() can write the package; otherwise why not, for the user: a
+// file of MaxZipSize or more, or a package of MaxPackageSize or more (the files are
+// not read, only their sizes).
+QString packageSizeProblem(const PackageInput& input);
+
 // Writes to "<path>.part" and renames at the end. Throws std::runtime_error on I/O
-// errors.
+// errors and, before writing anything, when packageSizeProblem() is not empty.
 void writeMo2List(const QString& path, const PackageInput& input);
 
 class Mo2ListPackage
