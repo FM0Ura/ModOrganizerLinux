@@ -1,5 +1,6 @@
 #include "importflow.h"
 
+#include "background.h"
 #include "destinationdialog.h"
 #include "guideddownloadsdialog.h"
 #include "importreview.h"
@@ -34,6 +35,8 @@
 #include <QSettings>
 
 #include <algorithm>
+#include <atomic>
+#include <memory>
 
 // The import from the user's side up to the installation: the checks of the file,
 // the destination and the review, the new instance and the resume of an import
@@ -149,6 +152,27 @@ public:
 private:
   QPointer<ImportFlow> m_flow;
 };
+
+bool ImportFlow::copyPackageInBackground(const QString& from, const QString& to)
+{
+  // a package with bundled mods can be big: copied on another thread, the window
+  // responsive (a nested event loop; the caller checks that it still exists)
+  QPointer<QProgressDialog> progress =
+      new QProgressDialog(tr("Copying the modlist…"), QString(), 0, 0, m_parent);
+  progress->setWindowTitle(tr("Import modlist"));
+  progress->setWindowModality(Qt::WindowModal);
+  progress->setMinimumDuration(500);
+  progress->setCancelButton(nullptr);
+
+  auto ok = std::make_shared<std::atomic<bool>>(false);
+  runInBackground(
+      [ok, from, to] {
+        *ok = copyPackage(from, to);
+      },
+      [] {});
+  delete progress.data();
+  return *ok;
+}
 
 ImportFlow::ImportFlow(OrganizerCore& core, QWidget* parent)
     : QObject(parent), m_core(core), m_parent(parent)
@@ -315,7 +339,12 @@ void ImportFlow::startFromFile(const QString& path)
   // recorded with a copy of the package, so the import can be resumed after a
   // restart even if the file is moved
   pending.packagePath = path;
-  if (copyPackage(path, packageCopyPath())) {
+  QPointer<ImportFlow> self(this);
+  const bool copied = copyPackageInBackground(path, packageCopyPath());
+  if (!self) {
+    return;
+  }
+  if (copied) {
     pending.packagePath = packageCopyPath();
   } else {
     log::warn("cannot copy {} to {}, the import refers to the original", path,
@@ -397,7 +426,12 @@ void ImportFlow::startInNewInstance(const QString& name, IPluginGame* game,
   // the record and the copy of the package go into the new instance
   QDir().mkpath(ci.paths.base);
   const QString copy = QDir(ci.paths.base).filePath(PackageCopy);
-  if (!copyPackage(packagePath, copy)) {
+  QPointer<ImportFlow> self(this);
+  const bool copied = copyPackageInBackground(packagePath, copy);
+  if (!self) {
+    return;
+  }
+  if (!copied) {
     QMessageBox::warning(m_parent, title,
                          tr("The instance \"%1\" was created, but the list cannot be "
                             "copied into it (%2).")

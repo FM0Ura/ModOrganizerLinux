@@ -178,6 +178,7 @@ void ModlistInstaller::run(std::vector<int> entries)
   m_guided        = false;
   m_guidedDone    = false;
   m_downloadsOver = false;
+  m_archiveMd5.clear();
 
   classifyEntries(m_work);
   findDownloads();
@@ -186,7 +187,7 @@ void ModlistInstaller::run(std::vector<int> entries)
 
 void ModlistInstaller::maybeAfterDownloads()
 {
-  if (m_downloadsOver || waitingForDownloads() || (m_guided && !m_guidedDone)) {
+  if (m_lookingForDownloads || m_downloadsOver || waitingForDownloads() || (m_guided && !m_guidedDone)) {
     return;
   }
   m_downloadsOver = true;
@@ -202,6 +203,13 @@ void ModlistInstaller::afterDownloads()
 {
   m_connections.clear();
   m_batchMessages.reset();
+
+  // the checksums before the batch, which runs no event loop
+  QPointer<ModlistInstaller> self(this);
+  hashArchives();
+  if (!self) {
+    return;
+  }
 
   // the main window stayed usable during the downloads: the mods go into the profile
   // the user chose in the review, whatever profile is current now

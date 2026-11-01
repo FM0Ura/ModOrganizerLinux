@@ -1,6 +1,7 @@
 #include "exportdialog.h"
 #include "ui_exportdialog.h"
 
+#include "background.h"
 #include "exportreview.h"
 #include "profile.h"
 
@@ -11,10 +12,8 @@
 #include <QComboBox>
 #include <QDir>
 #include <QDirIterator>
-#include <QEventLoop>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFutureWatcher>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QProgressDialog>
@@ -22,7 +21,6 @@
 #include <QStandardItemModel>
 #include <QTimer>
 #include <QTreeWidgetItemIterator>
-#include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
 #include <atomic>
@@ -56,28 +54,6 @@ namespace
       emit canceled();
     }
   };
-
-  // runs `work` on another thread and returns when it is done, the GUI responsive
-  // meanwhile; `tick` runs on the GUI thread every 100 ms
-  void runInBackground(const std::function<void()>& work,
-                       const std::function<void()>& tick)
-  {
-    QEventLoop loop;
-    QFutureWatcher<void> watcher;
-    QObject::connect(&watcher, &QFutureWatcher<void>::finished, &loop,
-                     &QEventLoop::quit);
-    QTimer timer;
-    timer.setInterval(100);
-    QObject::connect(&timer, &QTimer::timeout, tick);
-
-    QFuture<void> future = QtConcurrent::run(work);
-    watcher.setFuture(future);
-    timer.start();
-    if (!future.isFinished()) {
-      loop.exec();
-    }
-    future.waitForFinished();
-  }
 
 }  // namespace
 

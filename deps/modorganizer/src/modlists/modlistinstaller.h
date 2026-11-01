@@ -139,7 +139,10 @@ private:
   QString rowName(int entry);
 
   // modlistinstaller_downloads.cpp: steps 1 to 3
+  // off the GUI thread, with progress (a nested event loop)
   void findDownloads();
+  // the MD5 of the archives checkArchive() compares, off the GUI thread
+  void hashArchives();
   void requestDownloads();
   void startQueuedDownloads();
   void onNXMQueued(int modId, int fileId, int downloadId);
@@ -198,6 +201,10 @@ private:
   bool m_guidedDone       = false;
   bool m_downloadsOver    = false;
   bool m_installing       = false;
+  // findDownloads() runs (its nested loop): nothing may start the installation
+  bool m_lookingForDownloads = false;
+  // archive -> MD5, from hashArchives()
+  std::map<QString, QString> m_archiveMd5;
   std::vector<boost::signals2::scoped_connection> m_connections;
   // DownloadManager::setBatchMessages() while the import waits for downloads
   struct BatchMessages

@@ -1,5 +1,7 @@
 #include "modlistinstaller.h"
 
+#include "background.h"
+
 #include "apiuseraccount.h"
 #include "downloadmanager.h"
 #include "nexusinterface.h"
@@ -14,6 +16,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
+
+#include <algorithm>
+#include <atomic>
+#include <memory>
 
 // Steps 1 to 3 of the import: reuse the archives already downloaded, download the
 // rest (Premium) or ask for the guided downloads, and compare the size and MD5 of the
@@ -109,63 +115,146 @@ void ModlistInstaller::findDownloads()
           ? QString()
           : m_pending.sourceDownloadsDir;
 
-  const auto here  = candidatesIn(instanceDir);
-  const auto there = candidatesIn(otherDir);
-
-  std::map<QString, QString> hashes;
-  const auto cachedMd5 = [&](const QString& path) {
-    auto it = hashes.find(path);
-    if (it == hashes.end()) {
-      it = hashes.emplace(path, md5Of(path)).first;
-    }
-    return it->second;
+  // the sources to look for in the downloads folders
+  struct Lookup
+  {
+    int entry;
+    std::size_t source;
+    Source plan;
+    QString archive;
   };
+  auto lookups = std::make_shared<std::vector<Lookup>>();
 
-  int done = 0;
   for (int e : m_work) {
-    emit progress(done++, static_cast<int>(m_work.size()),
-                  tr("Looking for downloaded files"));
     if (!willInstall(e)) {
       continue;
     }
-
     const auto& entry = plan().mods[e];
     auto& work        = m_entries[e];
     for (std::size_t s = 0; s < entry.sources.size(); ++s) {
-      const Source& source = entry.sources[s];
-      SourceWork& sw       = work.sources[s];
-
-      if (source.kind == SourceKind::Bundled) {
-        sw.state = SourceState::Ready;
-        continue;
+      if (entry.sources[s].kind == SourceKind::Bundled) {
+        work.sources[s].state = SourceState::Ready;
+      } else {
+        lookups->push_back({e, s, entry.sources[s], {}});
       }
-
-      if (auto found = findReusableDownload(source, here, cachedMd5)) {
-        sw.state    = SourceState::Ready;
-        sw.archive  = *found;
-        sw.verified = !source.md5.isEmpty();
-        continue;
-      }
-
-      auto found = findReusableDownload(source, there, cachedMd5);
-      if (!found) {
-        continue;
-      }
-
-      // from another instance: copied with its .meta, the original stays
-      const QString target = freePath(QDir(instanceDir), QFileInfo(*found).fileName());
-      if (!QFile::copy(*found, target)) {
-        log::warn("cannot copy {} to {}, it will be downloaded", *found, target);
-        continue;
-      }
-      if (QFile::exists(*found + ".meta") &&
-          !QFile::copy(*found + ".meta", target + ".meta")) {
-        log::warn("cannot copy the .meta of {}", *found);
-      }
-      sw.state    = SourceState::Ready;
-      sw.archive  = target;
-      sw.verified = !source.md5.isEmpty();
     }
+  }
+  if (lookups->empty()) {
+    return;
+  }
+
+  // the MD5 of big archives and the copies from another instance take minutes: on
+  // another thread, which only uses its own copies (the installer may be deleted
+  // during the nested loop). Nothing may start the installation meanwhile
+  // (maybeAfterDownloads() and stopWaitingForDownloads() wait).
+  const int total = static_cast<int>(lookups->size());
+  auto done       = std::make_shared<std::atomic<int>>(0);
+  QPointer<ModlistInstaller> self(this);
+  m_lookingForDownloads = true;
+  runInBackground(
+      [lookups, done, instanceDir, otherDir] {
+        const auto here  = candidatesIn(instanceDir);
+        const auto there = candidatesIn(otherDir);
+
+        std::map<QString, QString> hashes;
+        const auto cachedMd5 = [&](const QString& path) {
+          auto it = hashes.find(path);
+          if (it == hashes.end()) {
+            it = hashes.emplace(path, md5Of(path)).first;
+          }
+          return it->second;
+        };
+
+        for (auto& lookup : *lookups) {
+          if (auto found = findReusableDownload(lookup.plan, here, cachedMd5)) {
+            lookup.archive = *found;
+          } else if (auto other = findReusableDownload(lookup.plan, there, cachedMd5)) {
+            // from another instance: copied with its .meta, the original stays
+            const QString target =
+                freePath(QDir(instanceDir), QFileInfo(*other).fileName());
+            if (!QFile::copy(*other, target)) {
+              log::warn("cannot copy {} to {}, it will be downloaded", *other, target);
+            } else {
+              if (QFile::exists(*other + ".meta") &&
+                  !QFile::copy(*other + ".meta", target + ".meta")) {
+                log::warn("cannot copy the .meta of {}", *other);
+              }
+              lookup.archive = target;
+            }
+          }
+          ++*done;
+        }
+      },
+      [this, self, done, total] {
+        if (self) {
+          emit progress(*done, total, tr("Looking for downloaded files"));
+        }
+      });
+  if (!self) {
+    return;
+  }
+  m_lookingForDownloads = false;
+
+  for (const auto& lookup : *lookups) {
+    if (!lookup.archive.isEmpty()) {
+      SourceWork& sw = m_entries[lookup.entry].sources[lookup.source];
+      sw.state       = SourceState::Ready;
+      sw.archive     = lookup.archive;
+      sw.verified    = !lookup.plan.md5.isEmpty();
+    }
+  }
+}
+
+void ModlistInstaller::hashArchives()
+{
+  // the archives whose MD5 is still to compare with the plan, each once
+  auto paths = std::make_shared<std::vector<QString>>();
+  for (int e : m_work) {
+    auto it = m_entries.find(e);
+    if (it == m_entries.end() || !willInstall(e)) {
+      continue;
+    }
+    const auto& sources = plan().mods[e].sources;
+    for (std::size_t s = 0; s < sources.size() && s < it->second.sources.size(); ++s) {
+      const SourceWork& sw = it->second.sources[s];
+      const QFileInfo info(sw.archive);
+      if (sources[s].kind == SourceKind::Bundled || sources[s].md5.isEmpty() ||
+          sw.verified || sw.state != SourceState::Ready || sw.archive.isEmpty() ||
+          !info.exists() || (sources[s].size >= 0 && info.size() != sources[s].size) ||
+          m_archiveMd5.count(sw.archive) ||
+          std::find(paths->begin(), paths->end(), sw.archive) != paths->end()) {
+        continue;
+      }
+      paths->push_back(sw.archive);
+    }
+  }
+  if (paths->empty()) {
+    return;
+  }
+
+  // on another thread, as in findDownloads()
+  const int total = static_cast<int>(paths->size());
+  auto hashes     = std::make_shared<std::vector<QString>>(paths->size());
+  auto done       = std::make_shared<std::atomic<int>>(0);
+  QPointer<ModlistInstaller> self(this);
+  runInBackground(
+      [paths, hashes, done] {
+        for (std::size_t i = 0; i < paths->size(); ++i) {
+          (*hashes)[i] = md5Of((*paths)[i]);
+          ++*done;
+        }
+      },
+      [this, self, done, total] {
+        if (self) {
+          emit progress(*done, total, tr("Checking the downloaded files"));
+        }
+      });
+  if (!self) {
+    return;
+  }
+
+  for (std::size_t i = 0; i < paths->size(); ++i) {
+    m_archiveMd5[(*paths)[i]] = (*hashes)[i];
   }
 }
 
@@ -402,6 +491,10 @@ void ModlistInstaller::guidedDownloadsFinished(const std::vector<GuidedItem>& it
 
 void ModlistInstaller::stopWaitingForDownloads()
 {
+  // nothing is downloaded yet, and the guided window is still to come
+  if (m_lookingForDownloads) {
+    return;
+  }
   m_downloadQueue.clear();
   for (auto& [e, work] : m_entries) {
     for (auto& sw : work.sources) {
@@ -425,7 +518,10 @@ QString ModlistInstaller::checkArchive(const Source& source, SourceWork& work)
     return QStringLiteral("Checksum mismatch");
   }
   if (!source.md5.isEmpty() && !work.verified) {
-    if (QString::compare(md5Of(work.archive), source.md5, Qt::CaseInsensitive) != 0) {
+    // hashArchives() computed it, off the GUI thread
+    const auto it     = m_archiveMd5.find(work.archive);
+    const QString md5 = it != m_archiveMd5.end() ? it->second : md5Of(work.archive);
+    if (QString::compare(md5, source.md5, Qt::CaseInsensitive) != 0) {
       return QStringLiteral("Checksum mismatch");
     }
     work.verified = true;

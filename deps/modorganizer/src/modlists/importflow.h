@@ -85,6 +85,8 @@ private:
   // removes the record and the copy of the package (never the user's file); the
   // copy stays when it is `keep` (the file being opened)
   void discardPending(const QString& keep = {});
+  // copyPackage() off the GUI thread, with a progress window
+  bool copyPackageInBackground(const QString& from, const QString& to);
 
   // creates the instance, records the import in it and restarts into it
   void startInNewInstance(const QString& name, MOBase::IPluginGame* game,
