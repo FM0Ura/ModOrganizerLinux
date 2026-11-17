@@ -6,7 +6,7 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 
 ## 0. Fixture e página de arquivo da Nexus
 
-- [ ] Confirmar o formato de `nexusFilePageUrl`: abrir `https://www.nexusmods.com/skyrimspecialedition/mods/12604?tab=files&file_id=<id do arquivo>` no navegador. Esperado: abre a aba de arquivos do mod com aquele arquivo em foco e o botão **Mod Manager Download** disponível (é o endereço que o assistente de downloads guiados abre para cada arquivo).
+- [ ] *(não verificado — só usado pelos downloads guiados, sem Premium)* Confirmar o formato de `nexusFilePageUrl`: abrir `https://www.nexusmods.com/skyrimspecialedition/mods/12604?tab=files&file_id=<id do arquivo>` no navegador. Esperado: abre a aba de arquivos do mod com aquele arquivo em foco e o botão **Mod Manager Download** disponível (é o endereço que o assistente de downloads guiados abre para cada arquivo).
 - [x] Conferir na Nexus os ids de [`deps/modorganizer/tests/fixtures/modlists/README.md`](../../deps/modorganizer/tests/fixtures/modlists/README.md). Feito em 2026-11-17 pela API GraphQL pública: SkyUI 12604/35407 (5.2SE, versão antiga, ainda baixável); Better MessageBox Controls 1428/**11023** e Better Dialogue Controls 1429/**11022** (eram 1429 e 1430). README, teste e `small.mo2list` corrigidos.
 
 ## 1. Exportar um perfil real de Skyrim
@@ -28,7 +28,7 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 - [x] **File → Import modlist…**, escolher o arquivo do item 1. Esperado: o destino **não vem pré-marcado** (nova instância / novo perfil / perfil existente); escolher **nova instância**.
 - [x] Janela de revisão: linhas opcionais desmarcadas; rodapé de conta Premium; se houver executáveis, a seção **Executable content** exige confirmação para continuar.
 - [x] Downloads automáticos, sem a janela guiada; com o arquivo grande de um mod da lista **já presente** em Downloads, ele aparece como reaproveitado e não é baixado de novo (a conferência do MD5 não trava a interface).
-- [ ] Durante os downloads, trocar de perfil no MO2. Esperado: a importação continua no destino escolhido (ou avisa claramente), sem queda nem mods no perfil errado.
+- [ ] *(não verificado — com todos os arquivos reaproveitados não houve download para interromper)* Durante os downloads, trocar de perfil no MO2. Esperado: a importação continua no destino escolhido (ou avisa claramente), sem queda nem mods no perfil errado.
 - [ ] *(não verificado — exige conta sem Premium)* Downloads: abre a janela guiada, que abre a página de cada arquivo da Nexus (**Mod Manager Download**); **Skip**, **Open again** e **Stop waiting / Cancel** funcionam; um `nxm://` repetido não conta duas vezes e um item pulado não ressuscita sozinho.
 - [ ] *(não verificado — exige conta sem Premium)* Com a janela guiada aberta e a pergunta "Files left" visível, clicar num **Mod Manager Download** de um arquivo da lista. Esperado: o `nxm://` é tratado sem queda do MO2.
 - [x] Mods de fonte manual: **Open page** e **Choose downloaded file…** funcionam.
@@ -43,7 +43,7 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 - [x] INIs do jogo (`Skyrim.ini`, `SkyrimPrefs.ini`, `SkyrimCustom.ini`) iguais, com os caminhos voltando para a instância nova; só os INIs do jogo foram aplicados.
 - [x] Escolhas de FOMOD: os mods instalados por FOMOD depois desta versão voltaram com as mesmas opções, sem janela de instalação. Mods de FOMOD antigos (sem escolhas gravadas) aparecem no resumo para **Install manually**.
 - [x] Numa instância nova, o SKSE (que o MO2 já cria) recebe o ambiente da lista (por exemplo `DXVK_HUD=fps`), e o resumo diz "the list's settings were applied". Num perfil existente com ambiente próprio no SKSE, o seu fica e o resumo diz "your settings were kept".
-- [ ] Os executáveis importados estão na lista, com a linha de comando e o ambiente mostrados na revisão. Do ambiente, só as variáveis de ajuste do Proton/DXVK/VKD3D da lista permitida sobreviveram (as outras estão no resumo).
+- [x] Os executáveis importados estão na lista, com a linha de comando e o ambiente mostrados na revisão. Do ambiente, só as variáveis de ajuste do Proton/DXVK/VKD3D da lista permitida sobreviveram (as outras estão no resumo).
 
 ## 5. Jogar
 
