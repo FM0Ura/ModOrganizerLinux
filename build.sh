@@ -343,7 +343,7 @@ build_game_bethesda() {
 }
 
 # the installer plugins, installed in bin/plugins; with --tests each must load, and the
-# GoogleTest suite of installer_fomod parses the FOMOD sample of tests/fixtures.
+# GoogleTest suite of installer_fomod parses the FOMOD samples of tests/fixtures.
 build_installer_quick() {
     cmake_build installer_quick "$ROOT/deps/installer_quick"
     check_plugins installer "$INSTALL/bin/plugins/libinstaller_quick.so"
@@ -356,7 +356,9 @@ build_installer_manual() {
 
 build_installer_fomod() {
     cmake_build installer_fomod "$ROOT/deps/installer_fomod" \
-        -DFOMOD_SAMPLE_DIR="$ROOT/tests/fixtures/fomod-sample"
+        -DFOMOD_SAMPLE_DIR="$ROOT/tests/fixtures/fomod-sample" \
+        -DFOMOD_SAMPLE2_DIR="$ROOT/tests/fixtures/fomod-sample-conditional" \
+        -DFOMOD_SAMPLE3_DIR="$ROOT/tests/fixtures/fomod-sample-hidden-first"
     check_plugins installer "$INSTALL/bin/plugins/libinstaller_fomod.so"
 }
 

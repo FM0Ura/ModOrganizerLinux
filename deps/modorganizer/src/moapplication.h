@@ -57,6 +57,9 @@ public:
   //
   int run(MOMultiProcess& multiProcess);
 
+  // a .mo2list to import after the main window of the next run() is shown; used once
+  void setStartupMo2list(const QString& path);
+
   // called from main() when MO "restarts", must clean up everything so setup()
   // starts fresh
   //
@@ -70,6 +73,10 @@ public:
   //
   bool notify(QObject* receiver, QEvent* event) override;
 
+  // handles a message from another instance (moshortcut, nxm link, .mo2list path,
+  // command line); also used for a .mo2list given on this instance's command line
+  void externalMessage(const QString& message);
+
 public slots:
   bool setStyleFile(const QString& style);
 
@@ -81,13 +88,13 @@ private:
   QString m_defaultStyle;
   std::unique_ptr<env::ModuleNotification> m_modules;
 
+  QString m_startupMo2list;
   std::shared_ptr<Instance> m_instance;
   std::unique_ptr<Settings> m_settings;
   std::unique_ptr<NexusInterface> m_nexus;
   std::unique_ptr<PluginContainer> m_plugins;
   std::unique_ptr<OrganizerCore> m_core;
 
-  void externalMessage(const QString& message);
   std::shared_ptr<Instance> getCurrentInstance(bool forceSelect);
   std::optional<int> setupInstanceLoop(Instance& currentInstance, PluginContainer& pc);
   void purgeOldFiles();

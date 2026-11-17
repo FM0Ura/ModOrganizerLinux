@@ -4,6 +4,7 @@
 #include "messagedialog.h"
 #include "nexuspage.h"
 #include "moddatacontent.h"
+#include "modlists/installorder.h"
 #include "organizercore.h"
 #include "plugincontainer.h"
 #include "report.h"
@@ -237,6 +238,7 @@ void ModInfoRegular::readMeta()
                                     metaFile.value("fileid").toInt());
   }
   metaFile.endArray();
+  m_InstalledFilesOrder = metaFile.value("installedFilesOrder").toStringList();
 
   // Plugin settings:
   metaFile.beginGroup("Plugins");
@@ -306,6 +308,11 @@ void ModInfoRegular::saveMeta()
         metaFile.setValue("fileid", iter->second);
       }
       metaFile.endArray();
+      if (m_InstalledFilesOrder.isEmpty()) {
+        metaFile.remove("installedFilesOrder");
+      } else {
+        metaFile.setValue("installedFilesOrder", m_InstalledFilesOrder);
+      }
 
       // Plugin settings:
       metaFile.remove("Plugins");
@@ -984,6 +991,11 @@ void ModInfoRegular::addInstalledFile(int modId, int fileId)
     m_InstalledFileIDs.erase(existing);
   }
   m_InstalledFileIDs.push_back(entry);
+  // without Nexus ids the key comes from the archive name, as in
+  // InstallationManager::install()
+  m_InstalledFilesOrder = modlists::appendInstallOrder(
+      m_InstalledFilesOrder,
+      modlists::fileKey(modId, fileId, QFileInfo(m_InstallationFile).fileName()));
   m_MetaInfoChanged = true;
 }
 

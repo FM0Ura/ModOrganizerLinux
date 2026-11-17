@@ -112,7 +112,15 @@ Spec: [`docs/superpowers/specs/2026-10-24-phase5-distribuicao-design.md`](docs/s
 Dividida em duas subfases, ambas a partir do `main`.
 
 - (6a) Suporte ao Stellar Blade: plugin de jogo próprio no `basic_games` (arrumação dos mods `.pak` e UE4SS na instalação, `mods.txt` do UE4SS gerado pelo perfil, saves e configs). Spec: [`docs/superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md`](docs/superpowers/specs/2026-10-25-phase6a-stellar-blade-design.md) · Plano: [`docs/superpowers/plans/2026-10-25-phase6a-stellar-blade.md`](docs/superpowers/plans/2026-10-25-phase6a-stellar-blade.md) · Checklist manual: [`docs/testing/phase6a-manual-checklist.md`](docs/testing/phase6a-manual-checklist.md)
-- (6b) Nexus Collections. Spec: [`docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md`](docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md)
+- (6b) Nexus Collections. Spec: [`docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md`](docs/superpowers/specs/2026-10-25-phase6b-nexus-collections-design.md) (substituída pela spec de modlists, abaixo).
+
+## Modlists — núcleo, `.mo2list` e Collections
+
+Spec: [`docs/superpowers/specs/2026-10-28-modlists-design.md`](docs/superpowers/specs/2026-10-28-modlists-design.md) · Checklist manual da parte 1: [`docs/testing/modlists-manual-checklist.md`](docs/testing/modlists-manual-checklist.md)
+
+- **Parte 1 — núcleo + `.mo2list`:** implementada no branch `modlists-parte1` (exportar/importar um perfil, downloads guiados sem Premium, escolhas de FOMOD, abrir pelo gerenciador de arquivos); teste manual pendente. Detalhes e pendências: [`STATE.md`](STATE.md#modlists-parte-1--progresso).
+- **Parte 2 — Collections:** importador de Nexus Collections (Skyrim SE e Stellar Blade, `ftoobp`) sobre o mesmo plano de modlist; vem depois da parte 1.
+- **Depois:** importador de Wabbajack e o assistente de IA, cada um com spec própria.
 
 ## Depois da Fase 5 — correções dos testes manuais de 2026-10-24
 

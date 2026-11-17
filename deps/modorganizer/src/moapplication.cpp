@@ -23,6 +23,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "loglist.h"
 #include "mainwindow.h"
 #include "messagedialog.h"
+#include "modlists/importreview.h"
 #include "multiprocess.h"
 #include "nexusinterface.h"
 #include "nxmaccessmanager.h"
@@ -35,6 +36,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "tutorialmanager.h"
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QPainter>
 #include <QProxyStyle>
 #include <QSslSocket>
@@ -311,6 +313,11 @@ int MOApplication::setup(MOMultiProcess& multiProcess, bool forceSelect)
   return 0;
 }
 
+void MOApplication::setStartupMo2list(const QString& path)
+{
+  m_startupMo2list = path;
+}
+
 int MOApplication::run(MOMultiProcess& multiProcess)
 {
   // checking command line
@@ -379,6 +386,15 @@ int MOApplication::run(MOMultiProcess& multiProcess)
     mainWindow.activateWindow();
     splash.close();
 
+    // after the main window exists and is shown, from the event loop below; taken so
+    // that a restart does not import it again
+    if (!m_startupMo2list.isEmpty()) {
+      const auto path = std::exchange(m_startupMo2list, QString());
+      QTimer::singleShot(0, this, [this, path] {
+        externalMessage(path);
+      });
+    }
+
     tt.stop();
 
     res = exec();
@@ -419,6 +435,20 @@ void MOApplication::externalMessage(const QString& message)
     } else {
       MessageDialog::showMessage(tr("Download started"), qApp->activeWindow(), false);
       m_core->downloadRequestedNXM(message);
+    }
+  } else if (modlists::isMo2ListPath(message) && QFileInfo(message).isFile()) {
+    // a .mo2list opened from the file manager
+    MainWindow* window = nullptr;
+    for (auto* w : QApplication::topLevelWidgets()) {
+      if (auto* mw = qobject_cast<MainWindow*>(w)) {
+        window = mw;
+        break;
+      }
+    }
+    if (m_core == nullptr || window == nullptr) {
+      reportError(tr("You need to select an instance before importing a modlist."));
+    } else {
+      window->importModlist(message);
     }
   } else {
     cl::CommandLine cl;

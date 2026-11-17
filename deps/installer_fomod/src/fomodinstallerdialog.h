@@ -21,6 +21,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <QDialog>
 #include <QGroupBox>
+#include <QJsonArray>
 #include <QMetaType>
 #include <QObject>
 #include <QString>
@@ -253,6 +254,35 @@ public:
 
   void transformToSmallInstall();
 
+  /**
+   * @brief Sets whether the dialog may ask the user (true, the default). Without the
+   *     user, the problems that would open a message box (an unreadable
+   *     ModuleConfig.xml, files missing from the archive) throw a std::runtime_error.
+   *     Call it before initData().
+   */
+  void setInteractive(bool interactive) { m_Interactive = interactive; }
+
+  /**
+   * @return the choices of the pages shown so far, in the order they were shown, in
+   *     the format of the Vortex collections:
+   *     [{"name": <step>, "groups": [{"name": <group>, "choices": [{"name": <option>,
+   *     "idx": <index in the group>}]}]}]
+   */
+  QJsonArray selectedChoices() const;
+
+  /**
+   * @brief Replays recorded choices (the format of selectedChoices()) without the
+   *     user, from the first page after initData() to the last visible page, as if
+   *     "Next" was clicked on each.
+   *
+   * A visible page without a record keeps the defaults of the XML. An option is found
+   * by its name ("idx" only picks between options of the same name).
+   *
+   * @throws std::runtime_error when a recorded step, group or option does not exist,
+   *     or when a recorded step is not shown with these choices.
+   */
+  void applyChoices(const QJsonArray& choices);
+
 protected:
   virtual bool eventFilter(QObject* object, QEvent* event);
 
@@ -470,6 +500,9 @@ private:
 
   // The web page in the fomod (if supplied)
   QString m_URL;
+
+  // false when the dialog must not ask the user (replayed choices)
+  bool m_Interactive = true;
 };
 
 Q_DECLARE_METATYPE(FomodInstallerDialog::GroupType)

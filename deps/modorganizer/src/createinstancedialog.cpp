@@ -296,24 +296,17 @@ void CreateInstanceDialog::changePage(int d)
   }
 }
 
-void CreateInstanceDialog::finish()
+bool createInstanceFiles(const CreateInstanceDialog::CreationInfo& ci,
+                         const std::function<void(QString)>& log)
 {
-  ui->creationLog->clear();
-  logCreation(tr("Creating instance..."));
-
-  const auto& m = InstanceManager::singleton();
-  const auto ci = creationInfo();
-
-  auto logger = [&](QString s) {
-    logCreation(s);
+  // the strings keep the context of the dialog they came from
+  const auto tr = [](const char* text) {
+    return QCoreApplication::translate("CreateInstanceDialog", text);
   };
 
   auto createDir = [&](QString path) {
-    return DirectoryCreator::create(path, logger);
+    return DirectoryCreator::create(path, log);
   };
-
-  // don't restart if this is the first instance, it'll be selected and opened
-  const bool mustRestart = InstanceManager::singleton().hasAnyInstances();
 
   try {
     std::vector<std::unique_ptr<DirectoryCreator>> dirs;
@@ -360,7 +353,7 @@ void CreateInstanceDialog::finish()
     s.setProfileLocalSaves(ci.profileSettings.localSaves);
     s.setProfileArchiveInvalidation(ci.profileSettings.archiveInvalidation);
 
-    logCreation(tr("Writing %1...").arg(ci.iniPath));
+    log(tr("Writing %1...").arg(ci.iniPath));
 
     // writing ini
     const auto r = s.sync();
@@ -368,15 +361,15 @@ void CreateInstanceDialog::finish()
     if (r != QSettings::NoError) {
       switch (r) {
       case QSettings::AccessError:
-        logCreation(formatSystemMessage(ERROR_ACCESS_DENIED));
+        log(QString::fromStdWString(formatSystemMessage(ERROR_ACCESS_DENIED)));
         break;
 
       case QSettings::FormatError:
-        logCreation(tr("Format error."));
+        log(tr("Format error."));
         break;
 
       default:
-        logCreation(tr("Error %1.").arg(static_cast<int>(r)));
+        log(tr("Error %1.").arg(static_cast<int>(r)));
         break;
       }
 
@@ -388,23 +381,44 @@ void CreateInstanceDialog::finish()
       d->commit();
     }
 
-    logCreation(tr("Done."));
-
-    // launch the new instance
-    if (ui->launch->isChecked()) {
-      InstanceManager::singleton().setCurrentInstance(ci.instanceName);
-
-      if (mustRestart) {
-        ExitModOrganizer(Exit::Restart);
-        m_switching = true;
-      }
-    }
-
-    // close the dialog
-    accept();
+    log(tr("Done."));
+    return true;
   } catch (Failed&) {
     // if Failed was thrown, all the directories have been deleted
+    return false;
   }
+}
+
+void CreateInstanceDialog::finish()
+{
+  ui->creationLog->clear();
+  logCreation(tr("Creating instance..."));
+
+  const auto ci = creationInfo();
+
+  auto logger = [&](QString s) {
+    logCreation(s);
+  };
+
+  // don't restart if this is the first instance, it'll be selected and opened
+  const bool mustRestart = InstanceManager::singleton().hasAnyInstances();
+
+  if (!createInstanceFiles(ci, logger)) {
+    return;
+  }
+
+  // launch the new instance
+  if (ui->launch->isChecked()) {
+    InstanceManager::singleton().setCurrentInstance(ci.instanceName);
+
+    if (mustRestart) {
+      ExitModOrganizer(Exit::Restart);
+      m_switching = true;
+    }
+  }
+
+  // close the dialog
+  accept();
 }
 
 void CreateInstanceDialog::logCreation(const QString& s)

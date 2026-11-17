@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>GuidedDownloadsDialog</class>
+ <widget class="QDialog" name="GuidedDownloadsDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>480</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Download the files of the list</string>
+  </property>
+  <layout class="QVBoxLayout" name="mainLayout">
+   <item>
+    <widget class="QLabel" name="introLabel">
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+     <property name="text">
+      <string>Each file is downloaded from its page. On Nexus, click "Mod Manager Download" and the page of the next file opens. A file from elsewhere is downloaded in the browser, then chosen here.</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="progressLabel">
+     <property name="textFormat">
+      <enum>Qt::PlainText</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="currentLabel">
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::PlainText</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="currentButtons">
+     <item>
+      <widget class="QPushButton" name="openAgain">
+       <property name="text">
+        <string>Open again</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="openPage">
+       <property name="text">
+        <string>Open page</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="chooseFile">
+       <property name="text">
+        <string>Choose downloaded file…</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="skip">
+       <property name="text">
+        <string>Skip</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="currentSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>10</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="messageLabel">
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+     <property name="textFormat">
+      <enum>Qt::PlainText</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="listLabel">
+     <property name="text">
+      <string>Files of the list</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QListWidget" name="items"/>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="bottomButtons">
+     <item>
+      <widget class="QPushButton" name="unskip">
+       <property name="text">
+        <string>Download it after all</string>
+       </property>
+       <property name="toolTip">
+        <string>Puts the selected skipped file back in the queue</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="bottomSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>10</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="stopWaiting">
+       <property name="text">
+        <string>Stop waiting / Cancel</string>
+       </property>
+       <property name="toolTip">
+        <string>Gives up on the files that are not downloaded yet; the rest of the list is installed</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="continueButton">
+       <property name="text">
+        <string>Continue</string>
+       </property>
+       <property name="toolTip">
+        <string>Installs the list once the queued downloads are over</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

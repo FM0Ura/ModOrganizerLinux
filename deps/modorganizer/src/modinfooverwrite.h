@@ -81,6 +81,7 @@ public:
   virtual QStringList archives(bool checkOnDisk = false) override;
   virtual void addInstalledFile(int, int) override {}
   virtual std::set<std::pair<int, int>> installedFiles() const override { return {}; }
+  virtual QStringList installedFilesOrder() const override { return {}; }
 
   virtual QVariant pluginSetting(const QString& pluginName, const QString& key,
                                  const QVariant& defaultValue) const override

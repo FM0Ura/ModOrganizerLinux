@@ -38,6 +38,11 @@ bool isWindowsProgram(const QFileInfo& file);
 // logged and dropped
 QStringList validEnvironment(const QStringList& environment);
 
+// the Proton prefix (compatdata/<appid>) of the Steam game appId, the WINEPREFIX that
+// makeLaunch() gives its Windows programs; empty when the game is not installed or has
+// never run with Proton
+QString gamePrefix(const QString& appId);
+
 // what to ask the helper to start: native programs directly, Windows programs through
 // umu-run with the Steam and Proton environment; throws LaunchError
 VfsSpawnRequest makeLaunch(const LaunchParameters& p);
