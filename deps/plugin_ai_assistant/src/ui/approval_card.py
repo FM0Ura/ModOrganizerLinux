@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
@@ -16,8 +17,8 @@ class ApprovalCard(QFrame):
         self.setStyleSheet(f"QFrame {{ border: 1px solid {border_color}; border-radius: 6px; padding: 6px; }}")
 
         layout = QVBoxLayout(self)
-        title = QLabel(f"<b>{'[Destructive] ' if destructive else ''}Pending Action: {tool_name}</b>")
-        args_label = QLabel(f"<code>{json.dumps(args, ensure_ascii=False)}</code>")
+        title = QLabel(f"<b>{'[Destructive] ' if destructive else ''}Pending Action: {html.escape(tool_name)}</b>")
+        args_label = QLabel(f"<code>{html.escape(json.dumps(args, ensure_ascii=False))}</code>")
         args_label.setWordWrap(True)
         layout.addWidget(title)
         layout.addWidget(args_label)

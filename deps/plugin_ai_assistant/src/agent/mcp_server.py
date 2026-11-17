@@ -45,6 +45,12 @@ class LocalMcpServer:
                     return
 
                 reply = outer._handle_rpc(msg)
+                if reply is None:
+                    # a JSON-RPC notification: acknowledged, never answered
+                    self.send_response(202)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 body = json.dumps(reply, ensure_ascii=False).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -64,10 +70,16 @@ class LocalMcpServer:
             self._httpd.server_close()
             self._httpd = None
 
-    def _handle_rpc(self, msg: dict[str, Any]) -> dict[str, Any]:
+    def _handle_rpc(self, msg: dict[str, Any]) -> dict[str, Any] | None:
+        if not isinstance(msg, dict) or "id" not in msg:
+            # notifications (e.g. notifications/initialized) must not be answered
+            return None
         rpc_id = msg.get("id")
         method = msg.get("method", "")
         params = msg.get("params") or {}
+
+        if method == "ping":
+            return {"jsonrpc": "2.0", "id": rpc_id, "result": {}}
 
         if method == "initialize":
             return {

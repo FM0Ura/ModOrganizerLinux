@@ -86,13 +86,13 @@ def test_mcp_lists_and_calls_tools(fake_organizer):
 
 
 def test_build_cli_command_supports_claude_codex_and_agy(tmp_path: Path):
-    mcp_cfg = tmp_path / "mcp.json"
-    cmd_claude = build_cli_command("claude_cli", "Check crash log", mcp_cfg, force_host_exec=True)
+    bridge, endpoint = tmp_path / "bridge.py", tmp_path / "endpoint.json"
+    cmd_claude = build_cli_command("claude_cli", "Check crash log", bridge, endpoint, force_host_exec=True)
     assert cmd_claude[0] == "distrobox-host-exec"
     assert "claude" in cmd_claude
 
-    cmd_codex = build_cli_command("codex_cli", "List mods", mcp_cfg, force_host_exec=False)
+    cmd_codex = build_cli_command("codex_cli", "List mods", bridge, endpoint, force_host_exec=False)
     assert cmd_codex[0] == "codex"
 
-    cmd_agy = build_cli_command("agy_cli", "List mods", mcp_cfg, force_host_exec=False)
+    cmd_agy = build_cli_command("agy_cli", "List mods", bridge, endpoint, force_host_exec=False)
     assert cmd_agy[0] == "agy"

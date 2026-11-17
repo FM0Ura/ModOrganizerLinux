@@ -54,14 +54,20 @@ def build_agent_graph(
     dispatcher: MainThreadDispatcher,
     model: BaseChatModel,
     sqlite_path: Path | None = None,
+    system_prompt: str | None = None,
 ):
+    """system_prompt is built by the caller on the main thread: the graph runs in a
+    worker thread and must not use the organizer directly (tools go through the
+    dispatcher). Without it, the prompt is built here, which is only safe on the main thread."""
+    if system_prompt is None:
+        system_prompt = build_system_prompt(dispatcher._organizer)
     safe_tools, write_tools = dispatcher._registry.to_langchain_tools(dispatcher)
     all_tools = safe_tools + write_tools
     write_names = {t.name for t in write_tools}
     bound_model = model.bind_tools(all_tools)
 
     def agent_node(state: MessagesState):
-        sys_msg = SystemMessage(content=build_system_prompt(dispatcher._organizer))
+        sys_msg = SystemMessage(content=system_prompt)
         msgs = state["messages"]
         if not msgs or not isinstance(msgs[0], SystemMessage):
             msgs = [sys_msg] + list(msgs)

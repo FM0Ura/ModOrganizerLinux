@@ -7,15 +7,15 @@ from ..config import AssistantConfig
 
 DEFAULT_MODELS = {
     "ollama": "qwen2.5-coder:7b",
-    "openai": "gpt-4o",
-    "gemini": "gemini-2.5-flash",
-    "anthropic": "claude-3-7-sonnet-latest",
+    "openai": "gpt-5.5",
+    "gemini": "gemini-flash-latest",
+    "anthropic": "claude-sonnet-5-5",
 }
 
 
 def create_chat_model(config: AssistantConfig) -> BaseChatModel:
     provider = config.provider
-    model = config.model_name.strip() or DEFAULT_MODELS.get(provider, "gpt-4o")
+    model = config.model_name.strip() or DEFAULT_MODELS.get(provider, DEFAULT_MODELS["openai"])
 
     if provider == "ollama":
         return ChatOpenAI(
