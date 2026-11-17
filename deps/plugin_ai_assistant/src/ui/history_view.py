@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 from ..history.store import ConversationStore
 
 ID_ROLE = Qt.ItemDataRole.UserRole
+TITLE_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 def _local_stamp(iso: str) -> str:
@@ -87,6 +88,7 @@ class HistoryView(QWidget):
             )
             item = QListWidgetItem(text)
             item.setData(ID_ROLE, e["id"])
+            item.setData(TITLE_ROLE, e["title"])
             self.list.addItem(item)
         if not entries:
             self.message_label.setText(self.tr("No conversations found."))
@@ -106,7 +108,7 @@ class HistoryView(QWidget):
         for i in range(self.list.count()):
             item = self.list.item(i)
             if item.data(ID_ROLE) == conv_id:
-                return item.text().split("  ·  ")[0]
+                return item.data(TITLE_ROLE) or ""
         return ""
 
     def rename(self, conv_id: str) -> None:
@@ -120,7 +122,7 @@ class HistoryView(QWidget):
         answer = QMessageBox.question(
             self,
             self.tr("Delete conversation"),
-            self.tr("Delete \"{0}\"? This cannot be undone.").format(self._title_of(conv_id)),
+            self.tr("Delete \"{0}\"? This cannot be undone.").format(self._title_of(conv_id) or self.tr("(untitled)")),
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.delete_requested.emit(conv_id)

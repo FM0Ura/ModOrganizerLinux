@@ -431,14 +431,16 @@ class ChatPanel(QWidget):
             return
         self.store.delete(conv_id)
         if is_open:
-            # nothing of the deleted conversation may be saved again: no draft stash here
+            # nothing of the deleted conversation may be saved again: no draft stash here, but
+            # what is typed or queued right now is the user's and moves to the new conversation
+            typed = self.draft_text()
             self._cancel_pending_cards_silently()
             self._clear_queue()
             self.conversation = Conversation.new(self._config.provider)
             self._select_provider(self.conversation.provider)
             self._dispatcher.reset_session_approvals()
             self.transcript.clear()
-            self.input_box.clear()
+            self.input_box.setPlainText(typed)
         self.history_view.refresh()
 
     def _cancel_pending_cards_silently(self) -> None:

@@ -172,3 +172,48 @@ def test_buttons_disabled_while_busy(seeded):
     assert panel.stack.currentWidget() is panel.chat_page
     FakeWorker.instances[-1].finish("done")
     assert panel.clear_btn.isEnabled() and panel.history_btn.isEnabled()
+
+
+def test_delete_open_keeps_typed_text_and_rejects_cards(seeded, env):
+    panel, store, a, _ = seeded
+    _, disp, _ = env
+    panel.open_conversation(a.id)
+    resolved = []
+    disp.resolve_approval = lambda r, d: resolved.append((r, d))
+    disp.approval_requested.emit("r1", "remove_mod", {"mod_name": "Lux"}, True)
+    disp._session_approved_all = True
+    panel.input_box.setPlainText("half typed")
+    panel.enqueue("queued one")
+    panel.show_history()
+    panel.history_view.delete_requested.emit(a.id)
+    assert panel.conversation.id != a.id
+    assert panel.input_box.toPlainText() == "half typed\n\nqueued one"
+    assert resolved == [("r1", "reject")]
+    assert disp._session_approved_all is False
+    assert panel.queue == []
+    assert store.load(a.id) is None
+    assert a.id not in [e["id"] for e in store.list()]
+
+
+def test_title_with_separator_is_kept_for_prompts(seeded, monkeypatch):
+    panel, store, a, _ = seeded
+    store.rename(a.id, "one  ·  two")
+    panel.show_history()
+    view = panel.history_view
+    seen = {}
+
+    def fake_text(parent, title, label, text=""):
+        seen["prefill"] = text
+        return "", False
+
+    monkeypatch.setattr(QInputDialog, "getText", staticmethod(fake_text))
+    view.rename(a.id)
+    assert seen["prefill"] == "one  ·  two"
+
+    def fake_q(parent, title, text, *args):
+        seen["prompt"] = text
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(fake_q))
+    view.delete(a.id)
+    assert "one  ·  two" in seen["prompt"]
