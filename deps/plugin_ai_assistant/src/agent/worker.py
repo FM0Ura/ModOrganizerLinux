@@ -76,7 +76,7 @@ class AgentTurnWorker(QThread):
                     self._endpoint_path,
                     cwd=self._cwd,
                     cancel_event=self._cancel,
-                )
+                ).text  # Task 3 wires the session id and note
             else:
                 model = create_chat_model(self._config)
                 graph = build_agent_graph(

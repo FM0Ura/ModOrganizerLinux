@@ -134,7 +134,7 @@ def test_cli_turn_runs_in_the_given_directory(tmp_path: Path):
         "claude_cli", "hi", "context", tmp_path / "b.py", tmp_path / "e.json", cwd=work,
         command_builder=lambda *a, **k: ["sh", "-c", "pwd"],
     )
-    assert Path(reply) == work
+    assert Path(reply.text) == work
 
 
 def test_cli_turn_can_be_cancelled(tmp_path: Path):
