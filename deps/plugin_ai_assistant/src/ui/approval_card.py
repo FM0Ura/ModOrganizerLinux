@@ -9,7 +9,15 @@ from PyQt6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QPushButto
 class ApprovalCard(QFrame):
     decision_made = pyqtSignal(str, str)
 
-    def __init__(self, request_id: str, tool_name: str, args: dict, destructive: bool = False, parent=None) -> None:
+    def __init__(
+        self,
+        request_id: str,
+        tool_name: str,
+        args: dict,
+        destructive: bool = False,
+        parent=None,
+        turn: int | None = None,
+    ) -> None:
         super().__init__(parent)
         self.request_id = request_id
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -17,10 +25,12 @@ class ApprovalCard(QFrame):
         self.setStyleSheet(f"QFrame {{ border: 1px solid {border_color}; border-radius: 6px; padding: 6px; }}")
 
         layout = QVBoxLayout(self)
-        title = QLabel(f"<b>{'[Destructive] ' if destructive else ''}Pending Action: {html.escape(tool_name)}</b>")
+        prefix = "[Destructive] " if destructive else ""
+        turn_text = f" (turn {turn})" if turn else ""
+        self.title_label = QLabel(f"<b>{prefix}Pending Action{turn_text}: {html.escape(tool_name)}</b>")
         args_label = QLabel(f"<code>{html.escape(json.dumps(args, ensure_ascii=False))}</code>")
         args_label.setWordWrap(True)
-        layout.addWidget(title)
+        layout.addWidget(self.title_label)
         layout.addWidget(args_label)
 
         btn_row = QHBoxLayout()

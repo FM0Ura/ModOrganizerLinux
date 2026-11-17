@@ -176,8 +176,11 @@ def test_graph_uses_the_given_system_prompt_without_the_organizer():
 
 
 class _FakeWorker(QObject):
+    session_started = pyqtSignal(str)
     response_ready = pyqtSignal(str)
+    note_ready = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
+    late_response = pyqtSignal(str)
     finished = pyqtSignal()
     instances: list["_FakeWorker"] = []
 
