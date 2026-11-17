@@ -117,3 +117,30 @@ TEST(Lifetime, CyclicPluginAfterRunner)
     EXPECT_EQ(liveObjectsOfType("CyclicPlugin"), 0);
 }
 #endif
+
+#ifndef _WIN32
+// Linux: a package plugin with a namespace sub-package (a folder without __init__.py,
+// like rootbuilder/plugin in RootBuilder): unloading removes the package from
+// sys.modules before it reads the __path__ of the sub-package, which Python
+// recalculates from the parent package; that must not stop the unload (the cycles
+// would stay, and the leftover references would be released without the GIL)
+TEST(Lifetime, NamespaceSubPackageAfterRunner)
+{
+    const auto plugins_folder = QString(std::getenv("PLUGIN_DIR"));
+
+    auto runner = mo2::python::createPythonRunner();
+    runner->initialize(testPythonPaths());
+
+    QObject* parent    = new QObject();
+    const auto objects = runner->load(plugins_folder + "/nspkg_plugin");
+    ASSERT_EQ(objects.size(), 1);
+    objects[0]->setParent(parent);
+
+    EXPECT_EQ(liveObjectsOfType("NamespaceCyclicPlugin"), 1);
+
+    runner.reset();
+    delete parent;
+
+    EXPECT_EQ(liveObjectsOfType("NamespaceCyclicPlugin"), 0);
+}
+#endif

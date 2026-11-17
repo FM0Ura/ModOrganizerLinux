@@ -419,9 +419,16 @@ namespace mo2::python {
                 // We want to "unload" (remove from sys.modules) modules that come
                 // from this plugin (whose __path__ points under this module,
                 // including the module of the plugin itself).
+                //
+                // The modules are found first and removed afterwards: the __path__ of
+                // a namespace package (a folder without __init__.py, like
+                // rootbuilder/plugin in RootBuilder) is recalculated from its parent
+                // package in sys.modules, so reading it after the parent was removed
+                // raises a KeyError.
                 py::object sys   = py::module_::import("sys");
                 py::dict modules = sys.attr("modules");
                 py::list keys    = modules.attr("keys")();
+                std::vector<py::object> toUnload;
                 for (std::size_t i = 0; i < py::len(keys); ++i) {
                     py::object mod = modules[keys[i]];
                     if (PyObject_HasAttrString(mod.ptr(), "__path__")) {
@@ -434,9 +441,12 @@ namespace mo2::python {
                             log::debug("Unloading module {} from {} for {}.",
                                        keys[i].cast<std::string>(), mpath, identifier);
 
-                            PyDict_DelItem(modules.ptr(), keys[i].ptr());
+                            toUnload.push_back(keys[i]);
                         }
                     }
+                }
+                for (const auto& key : toUnload) {
+                    PyDict_DelItem(modules.ptr(), key.ptr());
                 }
             }
 
@@ -488,6 +498,11 @@ namespace mo2::python {
                            ex.what());
             }
         }
+
+        // the objects of a plugin whose unload failed are still here: release them
+        // with the GIL, not in the implicit destruction of the members
+        py::gil_scoped_acquire lock;
+        m_PythonObjects.clear();
     }
 #endif
 
