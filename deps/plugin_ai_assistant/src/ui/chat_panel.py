@@ -243,6 +243,8 @@ class ChatPanel(QWidget):
     def new_conversation(self, provider: str | None = None) -> None:
         if self.is_busy():
             return
+        # cards belong to the conversation being left: an approval must not carry over
+        self._cancel_pending_cards()
         saved = self._stash_draft()
         provider = provider or self._config.provider
         self.conversation = Conversation.new(provider)
@@ -254,16 +256,23 @@ class ChatPanel(QWidget):
             self.input_box.clear()
 
     def open_conversation(self, conv_id: str) -> bool:
-        if self.is_busy():
-            return False
-        self._stash_draft()
-        conv = self.store.load(conv_id)
+        if self.is_busy() or self.store.load(conv_id) is None:
+            return False  # panel unchanged
+        # cards belong to the conversation being left: an approval must not carry over
+        self._cancel_pending_cards()
+        typed = self.input_box.toPlainText()
+        saved = self._stash_draft()
+        conv = self.store.load(conv_id)  # loaded again: it may be the conversation just saved
         if conv is None:
             return False
         self.conversation = conv
         self._select_provider(conv.provider)
         self.render_transcript()
-        self.input_box.setPlainText(conv.draft)
+        draft = conv.draft
+        if not saved:
+            # the text typed in an unsaved conversation is stored nowhere else: keep it
+            draft = "\n\n".join(part for part in (conv.draft, typed) if part)
+        self.input_box.setPlainText(draft)
         self._dispatcher.reset_session_approvals()
         return True
 

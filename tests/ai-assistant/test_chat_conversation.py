@@ -396,3 +396,56 @@ def test_nothing_is_written_before_the_first_user_message(env, fake_organizer):
     panel = make_panel()
     panel.new_conversation("agy_cli")  # adds a note, but no user message yet
     assert not (data_dir / "conversations").exists()
+
+
+def test_open_conversation_keeps_text_typed_in_an_unsaved_conversation(env):
+    make_panel, _, _ = env
+    panel = make_panel()
+    _turn(panel, "with draft", "ok")
+    with_draft = panel.conversation.id
+    panel.input_box.setPlainText("saved draft")
+    panel.new_conversation()
+    _turn(panel, "no draft", "ok")
+    without_draft = panel.conversation.id
+
+    panel.new_conversation()
+    panel.input_box.setPlainText("typed in an empty one")
+    assert panel.open_conversation(without_draft) is True
+    assert panel.input_box.toPlainText() == "typed in an empty one"
+
+    panel.new_conversation()
+    panel.input_box.setPlainText("typed again")
+    assert panel.open_conversation(with_draft) is True
+    assert panel.input_box.toPlainText() == "saved draft\n\ntyped again"
+
+
+def test_pending_cards_do_not_survive_a_conversation_change(env, fake_organizer):
+    make_panel, disp, data_dir = env
+    panel = make_panel()
+    _turn(panel, "target", "ok")
+    target = panel.conversation.id
+    panel.new_conversation()
+    _turn(panel, "left", "ok")
+    left = panel.conversation.id
+
+    resolved = []
+    disp.resolve_approval = lambda r, d: resolved.append((r, d))
+    # raised while no turn runs (e.g. an Antigravity client registered outside a session)
+    disp.approval_requested.emit("r1", "remove_mod", {"mod_name": "Lux"}, True)
+    disp._session_approved_all = True
+    assert panel.open_conversation(target) is True
+
+    assert resolved == [("r1", "reject")]
+    assert _cards(panel) == []
+    assert disp._session_approved_all is False
+    store = _store(data_dir, fake_organizer)
+    assert [m.meta["decision"] for m in store.load(left).messages if m.role == "approval"] == ["cancelled"]
+    assert not [m for m in store.load(target).messages if m.role == "approval"]
+    assert not [m for m in panel.conversation.messages if m.role == "approval"]
+
+    disp.approval_requested.emit("r2", "remove_mod", {"mod_name": "Lux"}, True)
+    panel.new_conversation()
+    assert resolved[-1] == ("r2", "reject")
+    assert _cards(panel) == []
+    assert [m.meta["decision"] for m in store.load(target).messages if m.role == "approval"] == ["cancelled"]
+    assert panel.conversation.messages == []
