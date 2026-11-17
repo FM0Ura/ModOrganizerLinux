@@ -34,7 +34,7 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 - [x] Mods de fonte manual: **Open page** e **Choose downloaded file…** funcionam.
 - [x] A instalação em lote roda **sem nenhuma pergunta modal** (só a janela de progresso). O que precisaria de decisão vai para o resumo.
 - [x] O MO2 reinicia sozinho na instância nova e a importação continua. Resumo: Installed / Reused / Failed / Skipped, **Install manually**, **Retry failed**, **Sort with LOOT** e **Copy** funcionam.
-- [ ] Com a janela de revisão aberta, abrir um **segundo** `.mo2list` (File → Import modlist… ou clique duplo). Esperado: o MO2 recusa ou avisa que já há uma importação em andamento, sem abrir duas.
+- [x] Com a janela de revisão aberta (ela é modal: o menu fica bloqueado), abrir um **segundo** `.mo2list` por clique duplo no Dolphin (feito junto com a seção 10). Esperado: o MO2 recusa ou avisa que já há uma importação em andamento, sem abrir duas.
 
 ## 4. Comparar com o original
 
@@ -42,7 +42,7 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 - [x] Ordem dos plugins e plugins ativos iguais (rodar **Sort with LOOT** não é necessário para igualar).
 - [x] INIs do jogo (`Skyrim.ini`, `SkyrimPrefs.ini`, `SkyrimCustom.ini`) iguais, com os caminhos voltando para a instância nova; só os INIs do jogo foram aplicados.
 - [x] Escolhas de FOMOD: os mods instalados por FOMOD depois desta versão voltaram com as mesmas opções, sem janela de instalação. Mods de FOMOD antigos (sem escolhas gravadas) aparecem no resumo para **Install manually**.
-- [ ] Numa instância nova, o SKSE (que o MO2 já cria) recebe o ambiente da lista (por exemplo `DXVK_HUD=fps`), e o resumo diz "the list's settings were applied". Num perfil existente com ambiente próprio no SKSE, o seu fica e o resumo diz "your settings were kept".
+- [x] Numa instância nova, o SKSE (que o MO2 já cria) recebe o ambiente da lista (por exemplo `DXVK_HUD=fps`), e o resumo diz "the list's settings were applied". Num perfil existente com ambiente próprio no SKSE, o seu fica e o resumo diz "your settings were kept".
 - [ ] Os executáveis importados estão na lista, com a linha de comando e o ambiente mostrados na revisão. Do ambiente, só as variáveis de ajuste do Proton/DXVK/VKD3D da lista permitida sobreviveram (as outras estão no resumo).
 
 ## 5. Jogar
@@ -51,34 +51,34 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 
 ## 6. Importar num perfil existente
 
-- [ ] Preparar um perfil com alguns mods que a lista também tem (mesma versão) e um com versão **diferente** da lista. **Import modlist…** → **perfil existente**. Esperado: o MO2 pergunta antes de aplicar os INIs; os mods iguais aparecem como **Reused** e não são baixados; os de versão diferente mostram a escolha **Download the list's version** / **Use mine**.
-- [ ] Escolher **Download the list's version** num deles. Esperado: instala ao lado como `<nome> [<lista>]`; o mod antigo fica **desativado só neste perfil** (continua ativo nos outros perfis); nada seu foi apagado nem reinstalado por cima. Com **Use mine**, o mod continua como estava e nada novo entra.
-- [ ] Se houver mods reaproveitados fora da ordem da lista, aparece uma pergunta "Move N reused mods to the list's order?"; **Yes** os move, **No** mantém a ordem. Se o perfil não usa INIs locais, os INIs da lista não são aplicados e aparecem no resumo em "INI files not applied".
-- [ ] A instalação em lote não mostrou nenhuma pergunta modal (só a janela de progresso).
+- [x] Preparar um perfil com alguns mods que a lista também tem (mesma versão) e um com versão **diferente** da lista. **Import modlist…** → **perfil existente**. Esperado: o MO2 pergunta antes de aplicar os INIs; os mods iguais aparecem como **Reused** e não são baixados; os de versão diferente mostram a escolha **Download the list's version** / **Use mine**.
+- [x] Escolher **Download the list's version** num deles. Esperado: instala ao lado como `<nome> [<lista>]`; o mod antigo fica **desativado só neste perfil** (continua ativo nos outros perfis); nada seu foi apagado nem reinstalado por cima. Com **Use mine**, o mod continua como estava e nada novo entra.
+- [x] Se houver mods reaproveitados fora da ordem da lista, aparece uma pergunta "Move N reused mods to the list's order?"; **Yes** os move, **No** mantém a ordem. Se o perfil não usa INIs locais, os INIs da lista não são aplicados e aparecem no resumo em "INI files not applied".
+- [x] A instalação em lote não mostrou nenhuma pergunta modal (só a janela de progresso).
 
 ## 7. Conteúdo executável em `bundled`
 
-- [ ] Marcar um mod local como **Made by me — include files** com um `.dll` dentro (por exemplo um plugin do SKSE), exportar e importar. Esperado: a seção **Executable content** da revisão lista a DLL e só deixa continuar depois da confirmação explícita. Nada é executado pela importação.
+- [x] Marcar um mod local como **Made by me — include files** com um `.dll` dentro (por exemplo um plugin do SKSE), exportar e importar. Esperado: a seção **Executable content** da revisão lista a DLL e só deixa continuar depois da confirmação explícita. Nada é executado pela importação.
 
 ## 8. `schemaVersion` maior
 
-- [ ] Editar o `manifest.json` de um `.mo2list` (`unzip`, mudar `"schemaVersion": 1` para `2`, `zip -r` de novo) e importar. Esperado: recusado com "This modlist was made by a newer Mod Organizer. Update Mod Organizer to import it."
+- [x] Editar o `manifest.json` de um `.mo2list` (`unzip`, mudar `"schemaVersion": 1` para `2`, `zip -r` de novo) e importar. Esperado: recusado com "This modlist was made by a newer Mod Organizer. Update Mod Organizer to import it."
 
 ## 9. Fechar no meio da importação
 
-- [ ] Iniciar uma importação numa instância nova e fechar o MO2 no meio da instalação (ou dos downloads). Reabrir. Esperado: o MO2 oferece **Continue / Later / Discard**; **Continue** termina a importação sem duplicar os mods que já entraram; **Later** mantém a oferta para a próxima abertura; **Discard** a descarta.
+- [x] Iniciar uma importação numa instância nova e fechar o MO2 no meio da instalação (ou dos downloads). Reabrir. Esperado: o MO2 oferece **Continue / Later / Discard**; **Continue** termina a importação sem duplicar os mods que já entraram; **Later** mantém a oferta para a próxima abertura; **Discard** a descarta.
 
 ## 10. Abrir pelo gerenciador de arquivos
 
-- [ ] No Dolphin, clicar duas vezes num `.mo2list` com o MO2 **aberto** (iniciado no box): a janela de importação abre no MO2 que já roda.
-- [ ] O mesmo com o MO2 **fechado**: ele abre e, depois da janela principal, abre a importação.
-- [ ] O mesmo com um arquivo de nome com espaço, `My List.mo2list`, nos dois casos acima.
-- [ ] O registro do tipo de arquivo acontece ao iniciar o MO2 (precisa ter sido aberto ao menos uma vez) e não substitui outro aplicativo que já seja o padrão para `.mo2list`: com outro aplicativo como padrão, o clique duplo continua abrindo esse aplicativo e **File → Import modlist…** funciona.
+- [x] No Dolphin, clicar duas vezes num `.mo2list` com o MO2 **aberto** (iniciado no box): a janela de importação abre no MO2 que já roda.
+- [x] O mesmo com o MO2 **fechado**: ele abre e, depois da janela principal, abre a importação.
+- [x] O mesmo com um arquivo de nome com espaço, `My List.mo2list`, nos dois casos acima.
+- [x] O registro do tipo de arquivo acontece ao iniciar o MO2 (precisa ter sido aberto ao menos uma vez) e não substitui outro aplicativo que já seja o padrão para `.mo2list`: com outro aplicativo como padrão, o clique duplo continua abrindo esse aplicativo e **File → Import modlist…** funciona.
 
 ## 11. Executáveis importados
 
-- [ ] Importar uma lista com um executável de mesmo título de um que você já tem, e outra vez com o título só diferindo em maiúsculas/minúsculas. Esperado: entra um novo `<título> [<lista>]` e o seu fica intacto (binário, argumentos e ambiente). Um executável cujo binário fica fora das pastas do jogo, da instância, de `mods` e de `overwrite` não é adicionado e vai para o resumo.
+- [x] Importar uma lista com um executável de mesmo título de um que você já tem, e outra vez com o título só diferindo em maiúsculas/minúsculas. Esperado: entra um novo `<título> [<lista>]` e o seu fica intacto (binário, argumentos e ambiente). Um executável cujo binário fica fora das pastas do jogo, da instância, de `mods` e de `overwrite` não é adicionado e vai para o resumo.
 
 ## 12. Limites conhecidos (só conferir que a documentação bate)
 
-- [ ] Editar à mão um INI dentro da pasta de um mod da Nexus, exportar e importar: o INI editado **não** vai (quem importa recebe o original), como diz o guia do usuário. Repetir com a edição num mod separado ou no `overwrite`: vai.
+- [x] Editar à mão um INI dentro da pasta de um mod da Nexus, exportar e importar: o INI editado **não** vai (quem importa recebe o original), como diz o guia do usuário. Repetir com a edição num mod separado ou no `overwrite`: vai.
