@@ -46,6 +46,7 @@ Repetir esta sequência **uma vez por provedor**: **Claude Code**, **Codex** e *
 - [ ] Enviar uma pergunta longa (por exemplo, "Liste e explique todos os mods ativos, um por um") e, enquanto "Thinking… N s" aparece, digitar e enviar mais duas mensagens. Esperado: cada uma vira um item "⏳ Queued: …" com **✕**, abaixo do transcript e acima da linha de status. Os itens da fila não aparecem no histórico até serem enviados.
 - [ ] Clicar em **✕** de um item da fila. Esperado: o item some e não é enviado.
 - [ ] Deixar o turno terminar. Esperado: o item restante da fila é enviado automaticamente, em ordem.
+- [ ] O botão **Send** continua habilitado durante o turno: clicar nele também põe a mensagem na fila.
 - [ ] Os chips (**Diagnose Crash**, **Check Mod Conflicts**, **Review Load Order**) clicados durante um turno também entram na fila.
 - [ ] Repetir com duas mensagens na fila e clicar em **Cancel**. Esperado: o turno atual é interrompido, aparece a nota "Cancelled." e o texto dos itens da fila **volta para a caixa de entrada**, unidos por uma linha em branco; a fila fica vazia.
 - [ ] **Durante o "Cancelling…"** (status mostra "Cancelling" enquanto o worker termina, principalmente numa API), enviar mensagens. Esperado: não são enviadas; voltam para a caixa de entrada e o envio só é liberado quando o cancelamento termina.
@@ -62,7 +63,10 @@ Cada comando é tratado localmente e **nunca** é enviado à IA (conferir que ne
 - [ ] `/export` abre o seletor de arquivo e salva a conversa atual em `.md`; ao final, uma nota "Exported to …".
 - [ ] `/mode` (sem argumento) mostra o modo atual; `/mode autonomous` e `/mode safe` trocam o modo e o combo acompanha; `/mode xyz` mostra "Unknown mode 'xyz'; use safe or autonomous."
 - [ ] `/provider` (sem argumento) lista os provedores; `/provider codex` troca o provedor **e abre uma conversa nova**; `/provider xyz` mostra "Unknown provider 'xyz'. Available: …".
-- [ ] `/qualquercoisa` (nome desconhecido) mostra "Unknown command; /help lists the commands." e **não** envia o texto.
+- [ ] `/qualquercoisa bla` (nome desconhecido) mostra "Unknown command; /help lists the commands.", **não** envia nada à IA e o texto digitado **volta para a caixa de entrada**.
+- [ ] `/new` com texto depois (por exemplo, `/new` + Shift+Enter + `arrume minha load order`): mostra "/new takes no text; your message is back in the input box.", **não** abre conversa nova e o texto volta para a caixa. O mesmo vale para `/history` e `/export` com texto.
+- [ ] `/help me ajuda com a load order`: mostra a ajuda **e** devolve o texto para a caixa.
+- [ ] Um `/new texto` enfileirado durante um turno: quando sai da fila, o texto volta para a caixa (nada é perdido).
 - [ ] `//oi` envia a mensagem literal "/oi" para a IA.
 - [ ] Durante um turno, `/new`, `/history`, `/mode` etc. entram na fila como mensagem comum (só `/help` roda na hora).
 
@@ -82,7 +86,7 @@ Cada comando é tratado localmente e **nunca** é enviado à IA (conferir que ne
 - [ ] Botão direito → **Export .md**: o arquivo tem o título como `#`, uma seção por mensagem com papel e hora, e as aprovações como linhas "✔ Approved: …" / "✖ Rejected: …" (ver seção 8).
 - [ ] Botão direito → **Delete**: pede confirmação ("Delete "…"? This cannot be undone."); confirmar remove da lista e o arquivo some da pasta do histórico.
 - [ ] **Apagar a conversa aberta mantém o texto digitado:** com a conversa aberta e um texto não enviado na caixa de entrada, apagá-la pelo histórico. Esperado: vai para uma conversa nova vazia e o texto digitado **continua** na caixa.
-- [ ] As permissões do histórico: `ls -l` na pasta mostra arquivos `-rw-------` e pastas `drwx------`; abrir um `.json` e conferir que **não** há chave de API nem token MCP.
+- [ ] As permissões do histórico: `ls -l` na pasta mostra arquivos `-rw-------` e pastas `drwx------` (o `ai_assistant/checkpoints.sqlite` das conversas de API também é `-rw-------`); abrir um `.json` e conferir que **não** há chave de API nem token MCP.
 - [ ] Corromper de propósito um `<id>.json` (apagar a última chave) e abrir o histórico. Esperado: a conversa corrompida é ignorada e o painel não cai. Apagar o `index.json` e reabrir o histórico: a lista é reconstruída.
 
 ## 8. Aprovações no turno e no export
@@ -95,6 +99,7 @@ Em **Safe Mode**, pedir uma escrita (por exemplo, "Desative o mod X" ou "Ative o
 - [ ] **Approve All in Session:** pedir uma escrita e clicar em **Approve All in Session**. Esperado: aparece "✔ Approved for this conversation: …"; uma segunda escrita na mesma conversa **não** pede card e aparece como "✔ Automatic: tool(args)".
 - [ ] **Autonomous Mode:** trocar o modo e pedir uma escrita. Esperado: sem card; a linha "✔ Automatic: tool(args)" aparece.
 - [ ] **Cancelar com cards pendentes:** pedir uma escrita e, com o card aberto, clicar em **Cancel**. Esperado: o card some e aparece "✖ Cancelled: tool(args)".
+- [ ] **Pedido depois de Cancel (API):** num turno de API que vai pedir várias escritas, clicar em **Cancel** antes do primeiro card. Esperado: enquanto aparece "Cancelling…", **nenhum card novo** aparece; um pedido que chegue nessa janela vira "✖ Cancelled: tool(args)" e a escrita não acontece.
 - [ ] **Export:** exportar a conversa (botão direito → **Export .md** ou `/export`). Esperado: todas as linhas acima aparecem no `.md` como "✔ Approved", "✔ Approved for this conversation", "✔ Automatic", "✖ Rejected" e "✖ Cancelled".
 - [ ] **Reabrir:** fechar e reabrir o MO2 (ou reabrir pelo History). Esperado: as linhas de aprovação aparecem no transcript redesenhado, iguais às de antes.
 
@@ -130,6 +135,7 @@ Em **Safe Mode**, pedir uma escrita (por exemplo, "Desative o mod X" ou "Ative o
 
 - [ ] **Claude Code:** fazer uma conversa de 2 turnos. Com o MO2 fechado, apagar a sessão em `~/.claude/projects/…` (o arquivo `<id da sessão>.jsonl`; o id está em `claude_session_id` no `<id>.json` da conversa). Abrir o MO2, reabrir a conversa e continuar. Esperado: aparece a nota "The Claude memory of this conversation was lost; continuing in a new session.", a resposta chega (o pedido é reenviado numa sessão nova) e o transcript antigo continua intacto.
 - [ ] Depois da nota, mais um turno na mesma conversa funciona normalmente (o id novo foi gravado).
+- [ ] **Sem nota falsa:** numa conversa nova de Claude Code, enviar a 1ª mensagem e clicar em **Cancel** logo em seguida (antes de qualquer resposta). Enviar outra mensagem. Esperado: a resposta chega **sem** a nota "memory … was lost" (ainda não havia memória para perder).
 - [ ] **Codex (opcional):** o mesmo com a sessão do Codex em `~/.codex/sessions/…` apagada; a nota diz "The Codex memory …".
 
 ## 14. Regressões gerais
