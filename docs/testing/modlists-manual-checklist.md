@@ -11,42 +11,43 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 
 ## 1. Exportar um perfil real de Skyrim
 
-- [ ] **File → Export modlist…** no perfil real. Preencher nome, autor, versão e README. Esperado: a janela lista os mods; os mods da Nexus aparecem sem escolha de origem; cada mod que não é da Nexus tem **Manual source / Made by me — include files / Leave out** (o padrão é **Manual source**; **include files** fica desabilitado nos mods da Nexus); a pasta `overwrite` aparece arquivo por arquivo, **tudo desmarcado**; os avisos aparecem; os executáveis aparecem com a linha de comando completa e o ambiente.
-- [ ] Marcar **Include inactive mods as optional** e conferir que o resumo passa a contar os inativos.
-- [ ] Salvar. Esperado: a passada do MD5 mostra progresso; o arquivo `.mo2list` é criado.
-- [ ] Sem nenhum mod local marcado como **Made by me**, o pacote não contém `bundled/`: `unzip -l <arquivo>.mo2list`.
+- [x] **File → Export modlist…** no perfil real. Preencher nome, autor, versão e README. Esperado: a janela lista os mods; os mods da Nexus aparecem sem escolha de origem; cada mod que não é da Nexus tem **Manual source / Made by me — include files / Leave out** (o padrão é **Manual source**; **include files** fica desabilitado nos mods da Nexus); a pasta `overwrite` aparece arquivo por arquivo, **tudo desmarcado**; os avisos aparecem; os executáveis aparecem com a linha de comando completa e o ambiente.
+- [x] Marcar **Include inactive mods as optional** e conferir que o resumo passa a contar os inativos.
+- [x] Salvar. Esperado: a passada do MD5 mostra progresso; o arquivo `.mo2list` é criado.
+- [x] Sem nenhum mod local marcado como **Made by me**, o pacote não contém `bundled/`: `unzip -l <arquivo>.mo2list`.
 
 ## 2. Sem vazamento de home nem de nome de usuário
 
-- [ ] `unzip -p <arquivo>.mo2list manifest.json | grep -i <usuário>` e `unzip -p <arquivo>.mo2list 'profile/*' | grep -i <usuário>` não imprimem nada; o mesmo para `grep -i /home`. Caminhos aparecem como `%INSTANCE%`, `%GAME%`, `%HOME%` ou `%PROTON_PREFIX%`. O pacote não tem saves, `ModOrganizer.ini`, token nem log.
-- [ ] Variáveis de ambiente de executável com `KEY`, `TOKEN`, `SECRET`, `PASS`, `AUTH`, `COOKIE` ou `SESSION` no nome (criar uma de teste num executável) não estão no `manifest.json`, e o export avisou.
-- [ ] Colocar um caminho do home dentro de um INI do `overwrite` (por exemplo `sTest=/home/<usuário>/x`), marcar o arquivo e salvar. Esperado: aparece a confirmação do vazamento, dizendo onde está (arquivo e trecho), com **Save anyway**; cancelar não grava o arquivo.
-- [ ] Exportar de novo e cancelar durante a passada do MD5 (um mod com arquivo grande ajuda). Esperado: o botão mostra "Cancelling…" até parar; nenhum `.mo2list` fica pela metade.
+- [x] `unzip -p <arquivo>.mo2list manifest.json | grep -i <usuário>` e `unzip -p <arquivo>.mo2list 'profile/*' | grep -i <usuário>` não imprimem nada; o mesmo para `grep -i /home`. Caminhos aparecem como `%INSTANCE%`, `%GAME%`, `%HOME%` ou `%PROTON_PREFIX%`. O pacote não tem saves, `ModOrganizer.ini`, token nem log.
+- [x] Variáveis de ambiente de executável com `KEY`, `TOKEN`, `SECRET`, `PASS`, `AUTH`, `COOKIE` ou `SESSION` no nome (criar uma de teste num executável) não estão no `manifest.json`, e o export avisou.
+- [x] Colocar um caminho do home dentro de um INI do `overwrite` (por exemplo `sTest=/home/<usuário>/x`), marcar o arquivo e salvar. Esperado: aparece a confirmação do vazamento, dizendo onde está (arquivo e trecho), com **Save anyway**; cancelar não grava o arquivo.
+- [x] Exportar de novo e cancelar durante a passada do MD5 (um mod com arquivo grande ajuda). Esperado: o botão mostra "Cancelling…" até parar; nenhum `.mo2list` fica pela metade.
 
 ## 3. Importar numa instância nova, conta Premium
 
-- [ ] **File → Import modlist…**, escolher o arquivo do item 1. Esperado: o destino **não vem pré-marcado** (nova instância / novo perfil / perfil existente); escolher **nova instância**.
-- [ ] Janela de revisão: linhas opcionais desmarcadas; rodapé de conta Premium; se houver executáveis, a seção **Executable content** exige confirmação para continuar.
-- [ ] Downloads automáticos, sem a janela guiada; com o arquivo grande de um mod da lista **já presente** em Downloads, ele aparece como reaproveitado e não é baixado de novo (a conferência do MD5 não trava a interface).
+- [x] **File → Import modlist…**, escolher o arquivo do item 1. Esperado: o destino **não vem pré-marcado** (nova instância / novo perfil / perfil existente); escolher **nova instância**.
+- [x] Janela de revisão: linhas opcionais desmarcadas; rodapé de conta Premium; se houver executáveis, a seção **Executable content** exige confirmação para continuar.
+- [x] Downloads automáticos, sem a janela guiada; com o arquivo grande de um mod da lista **já presente** em Downloads, ele aparece como reaproveitado e não é baixado de novo (a conferência do MD5 não trava a interface).
 - [ ] Durante os downloads, trocar de perfil no MO2. Esperado: a importação continua no destino escolhido (ou avisa claramente), sem queda nem mods no perfil errado.
 - [ ] *(não verificado — exige conta sem Premium)* Downloads: abre a janela guiada, que abre a página de cada arquivo da Nexus (**Mod Manager Download**); **Skip**, **Open again** e **Stop waiting / Cancel** funcionam; um `nxm://` repetido não conta duas vezes e um item pulado não ressuscita sozinho.
 - [ ] *(não verificado — exige conta sem Premium)* Com a janela guiada aberta e a pergunta "Files left" visível, clicar num **Mod Manager Download** de um arquivo da lista. Esperado: o `nxm://` é tratado sem queda do MO2.
-- [ ] Mods de fonte manual: **Open page** e **Choose downloaded file…** funcionam.
-- [ ] A instalação em lote roda **sem nenhuma pergunta modal** (só a janela de progresso). O que precisaria de decisão vai para o resumo.
-- [ ] O MO2 reinicia sozinho na instância nova e a importação continua. Resumo: Installed / Reused / Failed / Skipped, **Install manually**, **Retry failed**, **Sort with LOOT** e **Copy** funcionam.
+- [x] Mods de fonte manual: **Open page** e **Choose downloaded file…** funcionam.
+- [x] A instalação em lote roda **sem nenhuma pergunta modal** (só a janela de progresso). O que precisaria de decisão vai para o resumo.
+- [x] O MO2 reinicia sozinho na instância nova e a importação continua. Resumo: Installed / Reused / Failed / Skipped, **Install manually**, **Retry failed**, **Sort with LOOT** e **Copy** funcionam.
 - [ ] Com a janela de revisão aberta, abrir um **segundo** `.mo2list` (File → Import modlist… ou clique duplo). Esperado: o MO2 recusa ou avisa que já há uma importação em andamento, sem abrir duas.
 
 ## 4. Comparar com o original
 
-- [ ] Prioridade dos mods, separadores e ativo/inativo iguais ao perfil original.
-- [ ] Ordem dos plugins e plugins ativos iguais (rodar **Sort with LOOT** não é necessário para igualar).
-- [ ] INIs do jogo (`Skyrim.ini`, `SkyrimPrefs.ini`, `SkyrimCustom.ini`) iguais, com os caminhos voltando para a instância nova; só os INIs do jogo foram aplicados.
-- [ ] Escolhas de FOMOD: os mods instalados por FOMOD depois desta versão voltaram com as mesmas opções, sem janela de instalação. Mods de FOMOD antigos (sem escolhas gravadas) aparecem no resumo para **Install manually**.
+- [x] Prioridade dos mods, separadores e ativo/inativo iguais ao perfil original.
+- [x] Ordem dos plugins e plugins ativos iguais (rodar **Sort with LOOT** não é necessário para igualar).
+- [x] INIs do jogo (`Skyrim.ini`, `SkyrimPrefs.ini`, `SkyrimCustom.ini`) iguais, com os caminhos voltando para a instância nova; só os INIs do jogo foram aplicados.
+- [x] Escolhas de FOMOD: os mods instalados por FOMOD depois desta versão voltaram com as mesmas opções, sem janela de instalação. Mods de FOMOD antigos (sem escolhas gravadas) aparecem no resumo para **Install manually**.
+- [ ] Numa instância nova, o SKSE (que o MO2 já cria) recebe o ambiente da lista (por exemplo `DXVK_HUD=fps`), e o resumo diz "the list's settings were applied". Num perfil existente com ambiente próprio no SKSE, o seu fica e o resumo diz "your settings were kept".
 - [ ] Os executáveis importados estão na lista, com a linha de comando e o ambiente mostrados na revisão. Do ambiente, só as variáveis de ajuste do Proton/DXVK/VKD3D da lista permitida sobreviveram (as outras estão no resumo).
 
 ## 5. Jogar
 
-- [ ] Executar o Skyrim pelo MO2 na instância importada e chegar ao menu principal e a um jogo carregado, com os mods ativos funcionando (por exemplo SkyUI).
+- [x] Executar o Skyrim pelo MO2 na instância importada e chegar ao menu principal e a um jogo carregado, com os mods ativos funcionando (por exemplo SkyUI).
 
 ## 6. Importar num perfil existente
 

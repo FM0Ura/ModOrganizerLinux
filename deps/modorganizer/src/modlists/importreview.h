@@ -96,8 +96,29 @@ LaunchKey launchKey(const QString& binary, const QString& arguments,
                     const QString& workingDirectory);
 
 // an executable of the list that runs exactly like one already in the instance (the
-// executables the game plugin adds, mostly): the import skips it, it is never merged
+// executables the game plugin adds, mostly): the import does not add it again
 bool alreadyPresent(const LaunchKey& imported, const std::vector<LaunchKey>& existing);
+
+// the index in `existing` of the executable that runs exactly like `imported`
+std::optional<std::size_t> presentIndex(const LaunchKey& imported,
+                                        const std::vector<LaunchKey>& existing);
+
+// what the import does with the environment and Proton of an executable of the list
+// that the instance already has: Same (nothing to do: the list has none, or the same),
+// Applied (the instance's has none of its own, as in a new instance, where the game
+// plugin added it: it gets the list's) or KeptYours (the user's own settings are never
+// replaced; the summary says what the list had)
+enum class PresentSettings
+{
+  Same,
+  Applied,
+  KeptYours
+};
+
+PresentSettings presentSettings(const QStringList& yourEnvironment,
+                                const QString& yourProton,
+                                const QStringList& listEnvironment,
+                                const QString& listProton);
 
 // the game of the plan is the game of the instance (Header::gameName is the
 // gameShortName() of the game plugin; compared without case)

@@ -263,12 +263,39 @@ LaunchKey launchKey(const QString& binary, const QString& arguments,
   return key;
 }
 
+std::optional<std::size_t> presentIndex(const LaunchKey& imported,
+                                        const std::vector<LaunchKey>& existing)
+{
+  for (std::size_t i = 0; i < existing.size(); ++i) {
+    const auto& e = existing[i];
+    if (e.binary == imported.binary && e.arguments == imported.arguments &&
+        e.workingDirectory == imported.workingDirectory) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
 bool alreadyPresent(const LaunchKey& imported, const std::vector<LaunchKey>& existing)
 {
-  return std::any_of(existing.begin(), existing.end(), [&](const LaunchKey& e) {
-    return e.binary == imported.binary && e.arguments == imported.arguments &&
-           e.workingDirectory == imported.workingDirectory;
-  });
+  return presentIndex(imported, existing).has_value();
+}
+
+PresentSettings presentSettings(const QStringList& yourEnvironment,
+                                const QString& yourProton,
+                                const QStringList& listEnvironment,
+                                const QString& listProton)
+{
+  if (listEnvironment.isEmpty() && listProton.isEmpty()) {
+    return PresentSettings::Same;
+  }
+  if (yourEnvironment == listEnvironment && yourProton == listProton) {
+    return PresentSettings::Same;
+  }
+  if (yourEnvironment.isEmpty() && yourProton.isEmpty()) {
+    return PresentSettings::Applied;
+  }
+  return PresentSettings::KeptYours;
 }
 
 bool sameGame(const Header& header, const QString& instanceGameShortName)

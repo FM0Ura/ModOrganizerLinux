@@ -106,7 +106,9 @@ e a importação continua registrada (**Continue** na próxima abertura).
   minúsculas não contam), o novo entra como `<título> [<lista>]`. Um executável que roda
   exatamente como um que você já tem (mesmo programa, argumentos e pasta de trabalho, por
   exemplo o jogo ou o SKSE que o próprio Mod Organizer adiciona) não é adicionado de novo; o
-  resumo o lista em "Executables already present". O binário precisa estar na
+  resumo o lista em "Executables already present". Se o seu não tem ambiente nem versão do
+  Proton próprios (como numa instância nova), ele recebe os da lista; se tem, os seus ficam
+  e o resumo diz o que a lista trazia. O binário precisa estar na
   pasta do jogo, da instância, de `mods` ou de `overwrite`. Das variáveis de ambiente, só uma
   lista permitida de ajustes do Proton, DXVK e VKD3D sobrevive (por exemplo `PROTON_LOG`,
   `DXVK_*`, `VKD3D_*`, `WINEDLLOVERRIDES`, `MANGOHUD`); as outras são listadas no resumo.

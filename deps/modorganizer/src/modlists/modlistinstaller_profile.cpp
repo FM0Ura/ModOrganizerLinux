@@ -414,9 +414,11 @@ void ModlistInstaller::applyExecutables()
 
   // how the executables of the instance run, before the import adds any
   std::vector<LaunchKey> existing;
+  std::vector<QString> existingTitles;
   for (const auto& e : *list) {
     existing.push_back(launchKey(e.binaryInfo().absoluteFilePath(), e.arguments(),
                                  e.workingDirectory()));
+    existingTitles.push_back(e.title());
   }
 
   for (const auto& exe : plan().executables) {
@@ -432,15 +434,6 @@ void ModlistInstaller::applyExecutables()
       continue;
     }
 
-    // the same launcher as one of the instance (the game, SKSE... that the game plugin
-    // adds): skipped rather than added again as "<title> [<list>]"; never merged
-    const QString arguments = restore(exe.arguments);
-    if (alreadyPresent(launchKey(binary, arguments, restore(exe.workingDirectory)),
-                       existing)) {
-      m_summary.executablesAlreadyPresent.push_back(exe.title);
-      continue;
-    }
-
     // only the variables known to tune the game (DXVK, Proton, Mesa...) are kept,
     // anything else could make the program or Proton load code from elsewhere
     // (the review dialog shows the same split, see splitImportedEnvironment())
@@ -449,6 +442,44 @@ void ModlistInstaller::applyExecutables()
     QStringList environment;
     for (const auto& variable : split.kept) {
       environment.append(restore(variable));
+    }
+
+    // the same launcher as one of the instance (the game, SKSE... that the game plugin
+    // adds): not added again as "<title> [<list>]"; it gets the list's environment and
+    // Proton only when it has none of its own (see presentSettings())
+    const QString arguments = restore(exe.arguments);
+    if (const auto index = presentIndex(
+            launchKey(binary, arguments, restore(exe.workingDirectory)), existing)) {
+      const auto it = list->find(existingTitles[*index]);
+      QString line  = exe.title;
+      if (it != list->end()) {
+        QStringList listSettings = environment;
+        if (!exe.proton.isEmpty()) {
+          listSettings.append(tr("Proton %1").arg(exe.proton));
+        }
+        switch (presentSettings(it->environment(), it->proton(), environment,
+                                exe.proton)) {
+        case PresentSettings::Same:
+          break;
+        case PresentSettings::Applied: {
+          Executable updated = *it;
+          updated.environment(environment).proton(exe.proton);
+          list->setExecutable(updated);
+          line += tr(" (the list's settings were applied: %1)")
+                      .arg(listSettings.join(", "));
+          break;
+        }
+        case PresentSettings::KeptYours:
+          line += tr(" (your settings were kept; the list had: %1)")
+                      .arg(listSettings.join(", "));
+          break;
+        }
+      }
+      if (!dropped.isEmpty()) {
+        line += tr(" (left out: %1)").arg(dropped.join(", "));
+      }
+      m_summary.executablesAlreadyPresent.push_back(line);
+      continue;
     }
 
     // never merged into an executable of the user: a taken title gets the list's name

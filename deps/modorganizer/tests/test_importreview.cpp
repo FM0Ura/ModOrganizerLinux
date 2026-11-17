@@ -232,3 +232,34 @@ TEST(ImportReview, LaunchKeyAlreadyPresent)
   EXPECT_FALSE(alreadyPresent(launchKey(game + "/SkyrimSE.exe", "", game), existing));
   EXPECT_FALSE(alreadyPresent(launchKey(game + "/skse64_loader.exe", "", game), {}));
 }
+
+TEST(ImportReview, PresentIndex)
+{
+  const std::vector<LaunchKey> existing = {launchKey("/g/SkyrimSE.exe", "", "/g"),
+                                           launchKey("/g/skse64_loader.exe", "", "/g")};
+  EXPECT_EQ(presentIndex(launchKey("/g/skse64_loader.exe", "", ""), existing),
+            std::optional<std::size_t>(1));
+  EXPECT_EQ(presentIndex(launchKey("/g/other.exe", "", ""), existing), std::nullopt);
+}
+
+// an executable the instance already has gets the list's environment and Proton only
+// when it has none of its own (a new instance: the executables of the game plugin)
+TEST(ImportReview, PresentSettings)
+{
+  const QStringList none;
+  const QStringList hud = {"DXVK_HUD=fps"};
+
+  // nothing in the list, or exactly the same settings
+  EXPECT_EQ(presentSettings(none, "", none, ""), PresentSettings::Same);
+  EXPECT_EQ(presentSettings(hud, "", none, ""), PresentSettings::Same);
+  EXPECT_EQ(presentSettings(hud, "proton_9", hud, "proton_9"), PresentSettings::Same);
+
+  // the instance has nothing of its own
+  EXPECT_EQ(presentSettings(none, "", hud, ""), PresentSettings::Applied);
+  EXPECT_EQ(presentSettings(none, "", none, "proton_9"), PresentSettings::Applied);
+
+  // the user's own settings are never replaced
+  EXPECT_EQ(presentSettings({"MANGOHUD=1"}, "", hud, ""), PresentSettings::KeptYours);
+  EXPECT_EQ(presentSettings(none, "proton_8", hud, ""), PresentSettings::KeptYours);
+  EXPECT_EQ(presentSettings(hud, "", hud, "proton_9"), PresentSettings::KeptYours);
+}
