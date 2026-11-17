@@ -27,7 +27,7 @@ ALL_TARGETS=(
     installer_bain installer_bundle preview_base preview_bsa bsa_extractor diagnose_basic
     check_fnis tool_inieditor tool_inibakery plugin_python
     preview_dds form43_checker script_extender_plugin_checker tool_configurator
-    installer_wizard fnistool basic_games bsapacker
+    installer_wizard fnistool basic_games ai_assistant bsapacker
 )
 
 ONLY=()
@@ -456,7 +456,9 @@ build_plugin_python() {
 # must compile in the system's Python (python3 -m py_compile) after installation
 python_plugin() {
     local target="$1"; shift
-    cmake_build "$target" "$ROOT/deps/$target"
+    local src="$ROOT/deps/$target"
+    [[ -d $src ]] || src="$ROOT/deps/plugin_$target"
+    cmake_build "$target" "$src"
     [[ $TESTS == 1 ]] || return 0
     # the compiled files go to a scratch folder: the installed plugins stay as installed
     local f cache="$BUILD_OUT/$target/pycache"
@@ -497,6 +499,17 @@ build_basic_games() {
         PYTHONPATH="$INSTALL/bin/plugins/plugin_python/libs:$INSTALL/bin/plugins" \
         python3 -m pytest -p no:cacheprovider "$ROOT/tests/basic-games" -q ||
         die "basic_games tests failed"
+}
+
+build_ai_assistant() {
+    python_plugin ai_assistant ai_assistant
+    [[ $TESTS == 1 ]] || return 0
+    [[ -d $INSTALL/bin/plugins/ai_assistant/lib/langgraph ]] ||
+        die "ai_assistant: langgraph is not installed in lib/"
+    PYTHONDONTWRITEBYTECODE=1 \
+        PYTHONPATH="$INSTALL/bin/plugins/plugin_python/libs:$INSTALL/bin/plugins:$INSTALL/bin/plugins/ai_assistant/lib" \
+        python3 -m pytest -p no:cacheprovider "$ROOT/tests/ai-assistant" -q ||
+        die "ai_assistant tests failed"
 }
 
 # bsapacker (Phase 4e): the BSA Packer tool, which packs the loose files of a mod into
