@@ -44,6 +44,9 @@ class FakeWorker(QObject):
     def isRunning(self):
         return self.running
 
+    def wait(self, *_):
+        return True
+
     def cancel(self):
         self.cancelled = True
 

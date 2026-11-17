@@ -265,6 +265,8 @@ class ChatPanel(QWidget):
             kind = event.type()
             if kind == QEvent.Type.InputMethod:
                 self._composing = bool(event.preeditString())
+            elif kind == QEvent.Type.FocusOut:
+                self._composing = False  # a preedit abandoned on focus loss must not block Enter
             elif kind == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 if not event.modifiers() & Qt.KeyboardModifier.ShiftModifier and not self._composing:
                     self._on_send_clicked()
@@ -297,7 +299,11 @@ class ChatPanel(QWidget):
         text = text.strip()
         if not text:
             return
-        if self.is_busy():
+        if self.is_busy() and self._turn_cancelled:
+            # a cancelled turn drops its queue: new text goes back to the box instead of being stranded
+            current = self.input_box.toPlainText()
+            self.input_box.setPlainText("\n\n".join(part for part in (current, text) if part.strip()))
+        elif self.is_busy():
             self.enqueue(text)
         else:
             self.send_prompt(text)
@@ -428,6 +434,9 @@ class ChatPanel(QWidget):
             cwd = None
 
         self._turn_cancelled = False
+        if self._worker is not None:
+            # the previous QThread must really have ended before its last reference is dropped
+            self._worker.wait()
         self._worker = AgentTurnWorker(
             dispatcher=self._dispatcher,
             config=self._config,
@@ -507,7 +516,16 @@ class ChatPanel(QWidget):
         if self._turn_cancelled:
             self._append_note("Cancelled.")
         self._set_busy(False)
-        if self._queue and not self._turn_cancelled:
+        if self._turn_cancelled:
+            if self._queue:
+                self.input_box.setPlainText(self.draft_text())
+                self._clear_queue()
+        elif self._queue:
+            # not inside the finished signal of the thread that is ending
+            QTimer.singleShot(0, self._drain_queue)
+
+    def _drain_queue(self) -> None:
+        if self._queue and not self.is_busy():
             self.send_prompt(self._queue.pop(0))
             self.queue_view.set_items(self._queue)
 
