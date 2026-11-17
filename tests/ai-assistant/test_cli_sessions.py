@@ -171,3 +171,72 @@ def test_cancel_still_raises_turn_cancelled(tmp_path: Path):
             command_builder=_py_builder(lambda n: "import time; time.sleep(30)", []),
             session_id=UUID,
         )
+
+
+def _run_resume(tmp_path, provider, scripts, sid=UUID):
+    bridge, endpoint = _paths(tmp_path)
+    calls: list = []
+    res = run_cli_turn(
+        provider, "hi", "CTX", bridge, endpoint, cwd=tmp_path,
+        command_builder=_py_builder(lambda n: scripts[min(n, len(scripts)) - 1], calls),
+        session_id=sid, resume=True,
+    )
+    return res, calls
+
+
+def test_successful_resume_runs_once(tmp_path: Path):
+    res, calls = _run_resume(tmp_path, "claude_cli", ["print('fine')"])
+    assert len(calls) == 1 and res.note is None and res.text == "fine"
+
+
+def test_retry_failure_raises_without_third_attempt(tmp_path: Path):
+    calls: list = []
+    bridge, endpoint = _paths(tmp_path)
+    scripts = [f"print({LOST_SESSION_MARKERS[0]!r})", "import sys; sys.stderr.write('boom'); sys.exit(1)"]
+    with pytest.raises(RuntimeError, match="boom"):
+        run_cli_turn(
+            "claude_cli", "hi", "CTX", bridge, endpoint, cwd=tmp_path,
+            command_builder=_py_builder(lambda n: scripts[min(n, 2) - 1], calls),
+            session_id=UUID, resume=True,
+        )
+    assert len(calls) == 2
+
+
+def test_agy_lost_session_retries_once_with_note(tmp_path: Path):
+    payload = json.dumps({"conversation_id": "new", "response": "hi"})
+    scripts = ["import sys; sys.exit(1)", f"print({payload!r})"]
+    res, calls = _run_resume(tmp_path, "agy_cli", scripts, sid="old")
+    assert len(calls) == 2
+    assert res.note == "The Antigravity memory of this conversation was lost; continuing in a new session."
+    assert (res.text, res.session_id) == ("hi", "new")
+
+
+def test_quoted_marker_in_claude_answer_does_not_retry(tmp_path: Path):
+    res, calls = _run_resume(
+        tmp_path, "claude_cli", [f"print('The CLI says: ' + {LOST_SESSION_MARKERS[0]!r})"]
+    )
+    assert len(calls) == 1 and res.note is None
+
+
+def test_quoted_marker_in_codex_message_does_not_retry(tmp_path: Path):
+    events = [
+        {"type": "thread.started", "thread_id": "t1"},
+        {"type": "item.completed", "item": {"type": "agent_message", "text": LOST_SESSION_MARKERS[1]}},
+    ]
+    out = "\n".join(json.dumps(e) for e in events)
+    res, calls = _run_resume(tmp_path, "codex_cli", [f"print({out!r})"], sid="t1")
+    assert len(calls) == 1 and res.note is None and LOST_SESSION_MARKERS[1] in res.text
+
+
+@pytest.mark.parametrize("provider", ["claude_cli", "codex_cli"])
+def test_non_marker_resume_failure_raises_without_retry(tmp_path: Path, provider):
+    bridge, endpoint = _paths(tmp_path)
+    calls: list = []
+    with pytest.raises(RuntimeError, match="rate limit"):
+        run_cli_turn(
+            provider, "hi", "CTX", bridge, endpoint, cwd=tmp_path,
+            command_builder=_py_builder(
+                lambda n: "import sys; sys.stderr.write('rate limit'); sys.exit(1)", calls),
+            session_id="s", resume=True,
+        )
+    assert len(calls) == 1

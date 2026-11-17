@@ -221,6 +221,21 @@ def _spawn(cmd: list[str], cwd, cancel_event) -> tuple[int, str, str]:
     return proc.returncode, out.get("stdout", ""), out.get("stderr", "")
 
 
+def _session_lost(provider: str, code: int, stdout: str, stderr: str) -> bool:
+    """Whether a resume failed because the CLI no longer has the session. Markers are
+    matched narrowly so an answer that merely quotes one never discards a good turn."""
+    def has(text: str) -> bool:
+        return any(m in text for m in LOST_SESSION_MARKERS)
+
+    if provider == "claude_cli":
+        # exits 0 and prints only the marker line
+        return stdout.strip().startswith(LOST_SESSION_MARKERS[0]) or (code != 0 and has(stderr))
+    if provider == "codex_cli":
+        plain = "\n".join(l for l in stdout.splitlines() if not l.lstrip().startswith("{"))
+        return code != 0 and (has(stderr) or has(plain))
+    return code != 0  # agy: no known marker
+
+
 def run_cli_turn(
     provider: str,
     user_message: str,
@@ -267,7 +282,7 @@ def run_cli_turn(
         return code, stdout, stderr, CliTurnResult(text.strip() or "(Empty response from CLI)", new_sid)
 
     code, stdout, stderr, result = attempt(session_id, resume)
-    lost = resume and (code != 0 or any(m in stdout or m in stderr for m in LOST_SESSION_MARKERS))
+    lost = resume and _session_lost(provider, code, stdout, stderr)
     if lost:
         new_id = str(uuid.uuid4()) if provider == "claude_cli" else None
         code, stdout, stderr, result = attempt(new_id, False)
