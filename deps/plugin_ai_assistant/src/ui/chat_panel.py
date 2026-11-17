@@ -355,7 +355,7 @@ class ChatPanel(QWidget):
         if not arg:
             current = next((k for k, v in PROVIDER_ALIASES.items() if v == self.conversation.provider), "")
             self._append_note(f"Current provider: {current}. Available: {names}.")
-        elif arg in PROVIDER_ALIASES:
+        elif arg in PROVIDER_ALIASES and self.provider_combo.findData(PROVIDER_ALIASES[arg]) >= 0:
             idx = self.provider_combo.findData(PROVIDER_ALIASES[arg])
             if idx == self.provider_combo.currentIndex():
                 self.new_conversation(PROVIDER_ALIASES[arg])
@@ -594,7 +594,17 @@ class ChatPanel(QWidget):
             while self._queue and not self.is_busy():
                 text = self._queue.pop(0)
                 self.queue_view.set_items(self._queue)
-                self._run_text(text)
+                if isinstance(parse_slash(text), SlashCommand):
+                    # a command (/new, /provider) must not swallow what was queued after it
+                    rest, self._queue = self._queue, []
+                    try:
+                        self._run_text(text)
+                    finally:
+                        self._queue = rest + self._queue
+                    if rest:
+                        self._queue_changed()
+                else:
+                    self._run_text(text)
 
     # --- approvals --------------------------------------------------------------------------
 

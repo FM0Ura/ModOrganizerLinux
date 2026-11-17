@@ -146,3 +146,28 @@ def test_queued_unknown_command_not_sent(env):
     QApplication.processEvents()
     assert len(FakeWorker.instances) == 1
     assert "Unknown command" in _notes(panel)[-1]
+
+
+def test_queued_new_keeps_items_queued_after_it(env):
+    make_panel, _, _ = env
+    panel = make_panel()
+    panel.submit("hi")
+    old = panel.conversation
+    panel.submit("/new")
+    panel.submit("after")
+    FakeWorker.instances[0].finish("r")
+    QApplication.processEvents()
+    assert panel.conversation.id != old.id
+    assert [w.kwargs["user_text"] for w in FakeWorker.instances] == ["hi", "after"]
+    assert "after" not in old.draft
+    assert [m.text for m in panel.conversation.messages if m.role == "user"] == ["after"]
+
+
+def test_provider_missing_from_combo_notes_and_changes_nothing(env):
+    make_panel, _, _ = env
+    panel = make_panel()
+    panel.provider_combo.removeItem(panel.provider_combo.findData("codex_cli"))
+    old = panel.conversation.id
+    panel.submit("/provider codex")
+    assert panel.conversation.id == old
+    assert "codex" in _notes(panel)[-1] and "Unknown provider" in _notes(panel)[-1]
