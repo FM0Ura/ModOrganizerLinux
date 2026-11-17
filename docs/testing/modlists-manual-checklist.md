@@ -2,12 +2,12 @@
 
 Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/specs/2026-10-28-modlists-design.md) (§9) · Plano: [`../superpowers/plans/2026-10-31-modlists-parte1-nucleo-mo2list.md`](../superpowers/plans/2026-10-31-modlists-parte1-nucleo-mo2list.md) · Guia do usuário: [`../user/pt-BR/modlists.md`](../user/pt-BR/modlists.md)
 
-**Ambiente:** Bazzite (KDE Plasma 6), MO2 iniciado **pelo box**: `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer`, com o `install/` do worktree `modlists-parte1` (`./build.sh` na distrobox `mo2-run`). Skyrim Special Edition (Steam) rodado ao menos uma vez pela Steam. Uma instância de Skyrim SE com um perfil real (mods da Nexus, ao menos um mod instalado por FOMOD depois desta versão, um mod local sem origem na Nexus, plugins ordenados, INIs editados, um executável do SKSE). Duas contas da Nexus: uma Premium e uma **sem Premium** (a sem Premium é a do teste principal). Downloads pelo botão **Mod Manager Download** do site da Nexus (handler `nxm://` da Fase 4a).
+**Ambiente:** Bazzite (KDE Plasma 6), MO2 iniciado **pelo box**: `distrobox enter mo2-run -- <pasta do build>/bin/ModOrganizer`, com o `install/` do worktree `modlists-parte1` (`./build.sh` na distrobox `mo2-run`), ou pelo AppImage gerado desse `install/` (`appimage-out/ModOrganizer-2.5.2.5-modlists-x86_64.AppImage`). Skyrim Special Edition (Steam) rodado ao menos uma vez pela Steam. Uma instância de Skyrim SE com um perfil real (mods da Nexus, ao menos um mod instalado por FOMOD depois desta versão, um mod local sem origem na Nexus, plugins ordenados, INIs editados, um executável do SKSE). Conta da Nexus **Premium** (decisão do usuário, 2026-11-17: o teste é feito só com Premium; os itens de downloads guiados, que exigem uma conta sem Premium, ficam marcados como **não verificados** e não bloqueiam o merge). Downloads pelo botão **Mod Manager Download** do site da Nexus (handler `nxm://` da Fase 4a).
 
 ## 0. Fixture e página de arquivo da Nexus
 
 - [ ] Confirmar o formato de `nexusFilePageUrl`: abrir `https://www.nexusmods.com/skyrimspecialedition/mods/12604?tab=files&file_id=<id do arquivo>` no navegador. Esperado: abre a aba de arquivos do mod com aquele arquivo em foco e o botão **Mod Manager Download** disponível (é o endereço que o assistente de downloads guiados abre para cada arquivo).
-- [ ] Conferir na Nexus os ids de [`deps/modorganizer/tests/fixtures/modlists/README.md`](../../deps/modorganizer/tests/fixtures/modlists/README.md): SkyUI (mod 12604), Better MessageBox Controls (mod 1428), Better Dialogue Controls (mod 1429) e os ids de arquivo da tabela (35407, 1429, 1430, que o README já diz serem prováveis erros). Se algum estiver errado, corrigir a tabela do README **e** o teste `Mo2ListZip.DISABLED_WriteFixture`, e regerar o `small.mo2list` (o README diz como).
+- [x] Conferir na Nexus os ids de [`deps/modorganizer/tests/fixtures/modlists/README.md`](../../deps/modorganizer/tests/fixtures/modlists/README.md). Feito em 2026-11-17 pela API GraphQL pública: SkyUI 12604/35407 (5.2SE, versão antiga, ainda baixável); Better MessageBox Controls 1428/**11023** e Better Dialogue Controls 1429/**11022** (eram 1429 e 1430). README, teste e `small.mo2list` corrigidos.
 
 ## 1. Exportar um perfil real de Skyrim
 
@@ -23,16 +23,18 @@ Spec: [`../superpowers/specs/2026-10-28-modlists-design.md`](../superpowers/spec
 - [ ] Colocar um caminho do home dentro de um INI do `overwrite` (por exemplo `sTest=/home/<usuário>/x`), marcar o arquivo e salvar. Esperado: aparece a confirmação do vazamento, dizendo onde está (arquivo e trecho), com **Save anyway**; cancelar não grava o arquivo.
 - [ ] Exportar de novo e cancelar durante a passada do MD5 (um mod com arquivo grande ajuda). Esperado: o botão mostra "Cancelling…" até parar; nenhum `.mo2list` fica pela metade.
 
-## 3. Importar numa instância nova, conta sem Premium
+## 3. Importar numa instância nova, conta Premium
 
 - [ ] **File → Import modlist…**, escolher o arquivo do item 1. Esperado: o destino **não vem pré-marcado** (nova instância / novo perfil / perfil existente); escolher **nova instância**.
-- [ ] Janela de revisão: linhas opcionais desmarcadas; rodapé "No Premium: you will click N downloads on Nexus"; se houver executáveis, a seção **Executable content** exige confirmação para continuar.
-- [ ] Downloads: abre a janela guiada, que abre a página de cada arquivo da Nexus (**Mod Manager Download**); **Skip**, **Open again** e **Stop waiting / Cancel** funcionam; um `nxm://` repetido não conta duas vezes e um item pulado não ressuscita sozinho.
-- [ ] Com a janela guiada aberta e a pergunta "Files left" visível, clicar num **Mod Manager Download** de um arquivo da lista. Esperado: o `nxm://` é tratado sem queda do MO2.
+- [ ] Janela de revisão: linhas opcionais desmarcadas; rodapé de conta Premium; se houver executáveis, a seção **Executable content** exige confirmação para continuar.
+- [ ] Downloads automáticos, sem a janela guiada; com o arquivo grande de um mod da lista **já presente** em Downloads, ele aparece como reaproveitado e não é baixado de novo (a conferência do MD5 não trava a interface).
+- [ ] Durante os downloads, trocar de perfil no MO2. Esperado: a importação continua no destino escolhido (ou avisa claramente), sem queda nem mods no perfil errado.
+- [ ] *(não verificado — exige conta sem Premium)* Downloads: abre a janela guiada, que abre a página de cada arquivo da Nexus (**Mod Manager Download**); **Skip**, **Open again** e **Stop waiting / Cancel** funcionam; um `nxm://` repetido não conta duas vezes e um item pulado não ressuscita sozinho.
+- [ ] *(não verificado — exige conta sem Premium)* Com a janela guiada aberta e a pergunta "Files left" visível, clicar num **Mod Manager Download** de um arquivo da lista. Esperado: o `nxm://` é tratado sem queda do MO2.
 - [ ] Mods de fonte manual: **Open page** e **Choose downloaded file…** funcionam.
 - [ ] A instalação em lote roda **sem nenhuma pergunta modal** (só a janela de progresso). O que precisaria de decisão vai para o resumo.
 - [ ] O MO2 reinicia sozinho na instância nova e a importação continua. Resumo: Installed / Reused / Failed / Skipped, **Install manually**, **Retry failed**, **Sort with LOOT** e **Copy** funcionam.
-- [ ] Repetir com a conta **Premium**: os downloads são automáticos, sem a janela guiada.
+- [ ] Com a janela de revisão aberta, abrir um **segundo** `.mo2list` (File → Import modlist… ou clique duplo). Esperado: o MO2 recusa ou avisa que já há uma importação em andamento, sem abrir duas.
 
 ## 4. Comparar com o original
 

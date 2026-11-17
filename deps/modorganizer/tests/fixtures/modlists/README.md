@@ -15,14 +15,14 @@ to the highest:
 | --- | --- | --- | --- |
 | Interface | separator | | |
 | SkyUI | nexus | 12604 | 35407 |
-| Better MessageBox Controls | nexus | 1428 | 1429 |
-| Better Dialogue Controls | nexus | 1429 | 1430 |
+| Better MessageBox Controls | nexus | 1428 | 11023 |
+| Better Dialogue Controls | nexus | 1429 | 11022 |
 | Fixture Notes | bundled (`readme.txt`) | | |
 
 Plus `profile/Skyrim.ini`, a README and six plugins (the five official masters and
 `SkyUI_SE.esp`). No executables.
 
-The ids were chosen without looking them up on Nexus and **must be confirmed by hand**
-before relying on a real download: the mod ids are believed right, the file ids are
-likely wrong (the files may also have been replaced by newer ones). MD5 and size are
+The ids were confirmed on 2026-11-17 with the public Nexus GraphQL API (`modFiles`):
+the two Better Controls ids are their MAIN files (v1.2); SkyUI 35407 is the 5.2SE file,
+now listed as an old version (still downloadable). MD5 and size are
 left unknown (empty and -1), so the importer does not verify the archives.

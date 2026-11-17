@@ -454,8 +454,8 @@ TEST(Mo2ListZip, DISABLED_WriteFixture)
   p.mods.push_back(separator);
 
   p.mods.push_back(nexusMod("SkyUI", "5.2SE", 12604, 35407));
-  p.mods.push_back(nexusMod("Better MessageBox Controls", "1.2", 1428, 1429));
-  p.mods.push_back(nexusMod("Better Dialogue Controls", "1.2", 1429, 1430));
+  p.mods.push_back(nexusMod("Better MessageBox Controls", "1.2", 1428, 11023));
+  p.mods.push_back(nexusMod("Better Dialogue Controls", "1.2", 1429, 11022));
 
   const QString notes = "Fixture Notes";
   ModEntry bundled;
