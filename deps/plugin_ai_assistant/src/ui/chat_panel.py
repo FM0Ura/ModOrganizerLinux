@@ -26,6 +26,7 @@ from ..history.store import Conversation, ConversationStore, Message, session_ke
 from .approval_card import ApprovalCard
 from .queue_view import QueueView
 from .settings_dialog import AssistantSettingsDialog
+from .slash_commands import HELP_TEXT, PROVIDER_ALIASES, SlashCommand, parse_slash
 
 _MARKDOWN_FEATURES = (
     QTextDocument.MarkdownFeature.MarkdownDialectGitHub | QTextDocument.MarkdownFeature.MarkdownNoHTML
@@ -295,18 +296,81 @@ class ChatPanel(QWidget):
         self.queue_view.set_items([])
 
     def submit(self, text: str) -> None:
-        """Single entry point for user text: sends it, or queues it while a turn runs."""
+        """Single entry point for user text: runs a slash command, sends it, or queues it while a turn runs."""
         text = text.strip()
         if not text:
             return
-        if self.is_busy() and self._turn_cancelled:
+        parsed = parse_slash(text)
+        if isinstance(parsed, SlashCommand) and parsed.name == "help":
+            self._append_note(HELP_TEXT)  # always immediate, even during a turn
+        elif self.is_busy() and self._turn_cancelled:
             # a cancelled turn drops its queue: new text goes back to the box instead of being stranded
             current = self.input_box.toPlainText()
             self.input_box.setPlainText("\n\n".join(part for part in (current, text) if part.strip()))
         elif self.is_busy():
             self.enqueue(text)
         else:
+            self._run_text(text)
+
+    def _run_text(self, text: str) -> bool:
+        """Runs a command or sends the text; True when it started a turn."""
+        parsed = parse_slash(text)
+        if parsed is None:
             self.send_prompt(text)
+            return self.is_busy()
+        if isinstance(parsed, str):
+            self.send_prompt(parsed)
+            return self.is_busy()
+        self._run_command(parsed)
+        return False
+
+    def _run_command(self, cmd: SlashCommand) -> None:
+        name, arg = cmd.name, cmd.arg
+        if name == "help":
+            self._append_note(HELP_TEXT)
+        elif name == "new":
+            self.new_conversation()
+        elif name == "history":
+            self.show_history()
+        elif name == "export":
+            self.export_current()
+        elif name == "mode":
+            self._command_mode(arg.lower())
+        elif name == "provider":
+            self._command_provider(arg.lower())
+        else:
+            self._append_note("Unknown command; /help lists the commands.")
+
+    def _command_mode(self, arg: str) -> None:
+        if not arg:
+            self._append_note(f"Permission mode: {self._config.permission_mode} (safe or autonomous).")
+        elif arg in ("safe", "autonomous"):
+            self.mode_combo.setCurrentIndex(self.mode_combo.findData(arg))  # runs _on_mode_changed
+            self._append_note(f"Permission mode set to {arg}.")
+        else:
+            self._append_note(f"Unknown mode '{arg}'; use safe or autonomous.")
+
+    def _command_provider(self, arg: str) -> None:
+        names = ", ".join(PROVIDER_ALIASES)
+        if not arg:
+            current = next((k for k, v in PROVIDER_ALIASES.items() if v == self.conversation.provider), "")
+            self._append_note(f"Current provider: {current}. Available: {names}.")
+        elif arg in PROVIDER_ALIASES:
+            idx = self.provider_combo.findData(PROVIDER_ALIASES[arg])
+            if idx == self.provider_combo.currentIndex():
+                self.new_conversation(PROVIDER_ALIASES[arg])
+            else:
+                self.provider_combo.setCurrentIndex(idx)  # runs _on_provider_changed: new conversation
+        else:
+            self._append_note(f"Unknown provider '{arg}'. Available: {names}.")
+
+    def show_history(self) -> None:
+        """Replaced by the history view (Task 8)."""
+        self._append_note("The history view is not available yet.")
+
+    def export_current(self) -> None:
+        """Replaced by the export action (Task 8)."""
+        self._append_note("Export is not available yet.")
 
     def new_conversation(self, provider: str | None = None) -> None:
         if self.is_busy():
@@ -526,8 +590,11 @@ class ChatPanel(QWidget):
 
     def _drain_queue(self) -> None:
         if self._queue and not self.is_busy():
-            self.send_prompt(self._queue.pop(0))
-            self.queue_view.set_items(self._queue)
+            # queued commands run as commands; a command does not start a turn, so keep going
+            while self._queue and not self.is_busy():
+                text = self._queue.pop(0)
+                self.queue_view.set_items(self._queue)
+                self._run_text(text)
 
     # --- approvals --------------------------------------------------------------------------
 
