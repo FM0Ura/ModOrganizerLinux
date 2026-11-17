@@ -26,6 +26,9 @@ def default_vfs_mounted_check(organizer) -> bool:
     return False
 
 
+CLOSED_RESULT = {"ok": False, "error": "The AI Assistant was closed."}
+
+
 class MainThreadDispatcher(QObject):
     approval_requested = pyqtSignal(str, str, dict, bool)
     # (tool_name, args, decision): decision is approved | approved_session | auto.
@@ -48,6 +51,9 @@ class MainThreadDispatcher(QObject):
         self._lock = threading.Lock()
         self._pending_calls: dict[str, dict[str, Any]] = {}
         self._pending_approvals: dict[str, dict[str, Any]] = {}
+        # set when MO2 closes or restarts: a turn that outlives the run must not reach the
+        # organizer of the previous run
+        self._closed = False
         self._invoke_signal.connect(self._on_main_thread_invoke)
 
     def set_permission_mode(self, mode: str) -> None:
@@ -61,7 +67,28 @@ class MainThreadDispatcher(QObject):
     def reset_session_approvals(self) -> None:
         self._session_approved_all = False
 
+    def close(self) -> None:
+        """Refuses every later tool call and releases the ones waiting, without running them."""
+        with self._lock:
+            self._closed = True
+            for entry in self._pending_calls.values():
+                entry["result"] = dict(CLOSED_RESULT)
+                entry["event"].set()
+            for info in self._pending_approvals.values():
+                info["decision"] = "reject"
+                info["event"].set()
+
+    def reopen(self) -> None:
+        with self._lock:
+            self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
     def execute(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+        if self._closed:
+            return dict(CLOSED_RESULT)
         spec = self._registry.get(tool_name)
         if spec is None:
             return {"ok": False, "error": f"Unknown tool: {tool_name}"}
@@ -92,6 +119,8 @@ class MainThreadDispatcher(QObject):
             else:
                 write_decision = "approved"
 
+        if self._closed:  # closed while waiting for the approval
+            return dict(CLOSED_RESULT)
         app = QApplication.instance()
         if app is None or QThread.currentThread() == self.thread():
             result = self._run_spec_directly(spec, validated_args)
@@ -101,6 +130,8 @@ class MainThreadDispatcher(QObject):
         call_id = str(uuid.uuid4())
         done_event = threading.Event()
         with self._lock:
+            if self._closed:
+                return dict(CLOSED_RESULT)
             self._pending_calls[call_id] = {
                 "spec": spec,
                 "args": validated_args,
@@ -144,8 +175,8 @@ class MainThreadDispatcher(QObject):
     def _on_main_thread_invoke(self, call_id: str) -> None:
         with self._lock:
             entry = self._pending_calls.get(call_id)
-        if entry is None:
-            return
+            if entry is None or self._closed or entry["result"] is not None:
+                return  # an invocation queued before close() is not run
         entry["result"] = self._run_spec_directly(entry["spec"], entry["args"])
         # Emitted here, on the dispatcher's (main) thread, before waking the worker.
         self._emit_if_write_ran(entry["spec"], entry["args"], entry["result"], entry["decision"])

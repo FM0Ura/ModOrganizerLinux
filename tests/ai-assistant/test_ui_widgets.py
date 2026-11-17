@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QShortcut
 from PyQt6.QtWidgets import QMainWindow
@@ -312,7 +313,6 @@ def test_reinit_with_an_instance_without_history_starts_empty(plugin_env, fake_o
 def test_reinit_after_the_old_main_window_was_deleted(plugin_env, fake_organizer):
     win1 = QMainWindow()
     fake_organizer._ui_callback(win1)
-    port = plugin_env._mcp_server.port
     plugin_env._on_about_to_quit()  # MO2 exits the event loop, then deletes the window
     win1.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
@@ -320,4 +320,80 @@ def test_reinit_after_the_old_main_window_was_deleted(plugin_env, fake_organizer
     fake_organizer._ui_callback(win2)
     assert plugin_env._dock.parentWidget() is win2
     assert win2.dockWidgetArea(plugin_env._dock) == Qt.DockWidgetArea.LeftDockWidgetArea
-    assert plugin_env._mcp_server.port == port
+    # aboutToQuit stopped the server and closed the dispatcher: the new run starts them again
+    assert plugin_env._mcp_server._httpd is not None and plugin_env._mcp_server.port > 0
+    assert plugin_env._dispatcher.execute("list_mods", {}).get("error") != "The AI Assistant was closed."
+
+
+class StubbornWorker(FakeWorker):
+    """An API turn: cancel() does not stop it, and wait() times out."""
+
+    def cancel(self):
+        self.cancelled = True
+
+
+def test_shutdown_hands_a_worker_that_does_not_stop_to_qt(plugin_env, fake_organizer, monkeypatch):
+    keep = [QMainWindow()]
+    fake_organizer._ui_callback(keep[-1])
+    monkeypatch.setattr(chat_panel_mod, "AgentTurnWorker", StubbornWorker)
+    panel = plugin_env._dock.chat_panel
+    panel.send_prompt("slow api question")
+    worker = FakeWorker.instances[-1]
+
+    panel.shutdown()
+
+    assert worker.cancelled and worker.isRunning()
+    assert not panel.is_busy() and panel._worker is None
+    # owned by C++ now, not by the panel's Python object (unloaded after a restart) ...
+    assert sip.ispyowned(worker) is False
+    # ... and deleted by Qt once its run() ends
+    worker.running = False
+    worker.finished.emit()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+    assert sip.isdeleted(worker)
+
+
+def test_shutdown_closes_the_dispatcher(plugin_env, fake_organizer):
+    keep = [QMainWindow()]
+    fake_organizer._ui_callback(keep[-1])
+    plugin_env._dock.chat_panel.shutdown()
+    assert plugin_env._dispatcher.execute("list_mods", {}) == {
+        "ok": False,
+        "error": "The AI Assistant was closed.",
+    }
+
+
+def test_switch_instance_reopens_the_dispatcher(plugin_env, fake_organizer, tmp_path):
+    keep = [QMainWindow()]
+    fake_organizer._ui_callback(keep[-1])
+    other = tmp_path / "instance-c"
+    other.mkdir()
+    fake_organizer.base_dir = other
+    keep.append(QMainWindow())
+    fake_organizer._ui_callback(keep[-1])
+    assert plugin_env._dispatcher.execute("list_mods", {}).get("error") != "The AI Assistant was closed."
+
+
+def test_about_to_quit_survives_an_exception_and_stops_the_server(plugin_env, fake_organizer):
+    keep = [QMainWindow()]
+    fake_organizer._ui_callback(keep[-1])
+    panel = plugin_env._dock.chat_panel
+
+    def boom():
+        raise OSError("disk full")
+
+    panel.shutdown = boom
+    plugin_env._on_about_to_quit()  # an exception in a PyQt6 slot would be qFatal
+    assert plugin_env._mcp_server._httpd is None
+
+
+def test_dock_close_uses_the_public_save_draft(plugin_env, fake_organizer):
+    keep = [QMainWindow()]
+    fake_organizer._ui_callback(keep[-1])
+    keep[-1].show()
+    panel = plugin_env._dock.chat_panel
+    saved = []
+    panel.save_draft = lambda: saved.append(True) or True
+    plugin_env._dock.close()
+    assert saved == [True]
+    keep[-1].close()

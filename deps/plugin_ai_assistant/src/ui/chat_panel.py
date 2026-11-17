@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QTextCursor, QTextDocument
 from PyQt6.QtWidgets import (
@@ -87,8 +88,6 @@ class ChatPanel(QWidget):
         self._store: ConversationStore | None = None
         self.conversation = Conversation.new(self._config.provider)
         self._worker: AgentTurnWorker | None = None
-        # API turns stopped at shutdown that were still running: kept alive until they end
-        self._abandoned_workers: list[AgentTurnWorker] = []
         self._busy = False
         self._turn_cancelled = False
         self._queue: list[str] = []
@@ -269,6 +268,10 @@ class ChatPanel(QWidget):
             # drawn but not recorded: recording it would try to save again
             self._append(_HEADERS["error"], f"Could not save the conversation: {exc}", markdown=False)
             return False
+
+    def save_draft(self) -> bool:
+        """Saves the input box and the queue as the draft of the current conversation."""
+        return self._stash_draft()
 
     def _stash_draft(self) -> bool:
         """Saves the current conversation with the input box and the queue as its draft."""
@@ -556,16 +559,21 @@ class ChatPanel(QWidget):
                     pass
             self._turn_cancelled = True
             worker.cancel()  # a CLI turn is killed; an API turn is abandoned
-        # rejecting the cards also releases a worker waiting for an approval
+        # a turn that outlives this run must not reach its organizer: every later tool call
+        # fails, and the calls and approvals it waits for are released
+        self._dispatcher.close()
         self._cancel_pending_cards()
         if interrupted:
             self._set_busy(False)
             if worker is not None:
-                # a killed CLI ends at once; a QThread dropped while running would abort
+                # a killed CLI ends at once; an API turn may not
                 worker.wait(_SHUTDOWN_WAIT_MS)
-                self._abandoned_workers = [w for w in self._abandoned_workers if w.isRunning()]
                 if worker.isRunning():
-                    self._abandoned_workers.append(worker)
+                    # a QThread freed by Python while running aborts MO2, and this panel's
+                    # Python object goes away when the plugin is unloaded: Qt owns it now
+                    # and deletes it when its run() ends
+                    sip.transferto(worker, None)
+                    worker.finished.connect(worker.deleteLater)
                 self._worker = None
             self._append_note(_INTERRUPTED_NOTE)
         self._turn_cancelled = False
@@ -577,6 +585,7 @@ class ChatPanel(QWidget):
     def switch_instance(self, instance_path: str) -> None:
         """Leaves the conversation of the current instance and opens the history of another."""
         self.shutdown()
+        self._dispatcher.reopen()  # same dispatcher and organizer object for the new run
         self._instance_path = instance_path
         self._store = None
         # what is left was saved nowhere (no user message yet, or the save failed): keep it

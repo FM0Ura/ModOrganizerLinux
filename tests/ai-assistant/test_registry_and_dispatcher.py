@@ -232,3 +232,47 @@ def test_write_executed_not_emitted_when_tool_fails(fake_organizer):
     assert disp.execute("boom", {"mod_name": "a"})["ok"] is False
     _run_in_thread(disp, [("boom", {"mod_name": "a"})])
     assert events == []
+
+
+def _counting_registry():
+    reg = ToolRegistry()
+    calls = []
+
+    @reg.register(name="count_read", description="Counts calls", args_schema=DummyReadArgs, is_mutating=False)
+    def count_read(org, query: str = "") -> dict:
+        calls.append(query)
+        return {"n": len(calls)}
+
+    return reg, calls
+
+
+def test_execute_after_close_returns_error_without_calling_the_tool(fake_organizer):
+    reg, calls = _counting_registry()
+    disp = MainThreadDispatcher(fake_organizer, reg, permission_mode="safe", vfs_mounted_check=lambda: False)
+    disp.close()
+    assert disp.execute("count_read", {}) == {"ok": False, "error": "The AI Assistant was closed."}
+    assert calls == []
+    disp.reopen()
+    assert disp.execute("count_read", {})["ok"] is True
+    assert calls == [""]
+
+
+def test_close_releases_a_pending_main_thread_call_without_running_it(fake_organizer):
+    from PyQt6.QtCore import QCoreApplication
+
+    reg, calls = _counting_registry()
+    disp = MainThreadDispatcher(fake_organizer, reg, permission_mode="safe", vfs_mounted_check=lambda: False)
+    results = []
+    worker = threading.Thread(target=lambda: results.append(disp.execute("count_read", {"query": "x"})))
+    worker.start()
+    for _ in range(200):  # wait until the call is queued for the main thread
+        with disp._lock:
+            if disp._pending_calls:
+                break
+        threading.Event().wait(0.01)
+    disp.close()
+    worker.join(timeout=5)
+    assert not worker.is_alive()
+    assert results == [{"ok": False, "error": "The AI Assistant was closed."}]
+    QCoreApplication.processEvents()  # the queued invocation of the previous run
+    assert calls == []

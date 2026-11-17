@@ -42,5 +42,5 @@ class AiAssistantDock(QDockWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         # closing the dock only hides it: a running turn goes on, but what is typed is
         # saved now; stopping the turn is for when MO2 itself closes (plugin aboutToQuit)
-        self.chat_panel._stash_draft()
+        self.chat_panel.save_draft()
         super().closeEvent(event)

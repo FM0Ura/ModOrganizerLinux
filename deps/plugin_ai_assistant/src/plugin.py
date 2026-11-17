@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import mobase
 from PyQt6 import sip
@@ -13,6 +14,8 @@ from .ui.dock_widget import AiAssistantDock
 
 ICON_PATH = Path(__file__).parent / "ui" / "icons" / "ai_assistant.svg"
 SHORTCUT = "Ctrl+Shift+A"
+
+_log = logging.getLogger(__name__)
 
 
 class AiAssistantPlugin(mobase.IPluginTool):
@@ -42,7 +45,10 @@ class AiAssistantPlugin(mobase.IPluginTool):
             reg = build_default_registry()
             self._dispatcher = MainThreadDispatcher(self._organizer, reg, permission_mode="safe")
             self._mcp_server = LocalMcpServer(self._dispatcher)
-            self._mcp_server.start()
+        else:
+            # after an aboutToQuit on this same object: both were closed
+            self._dispatcher.reopen()
+        self._mcp_server.start()  # no-op while it runs
         if self._dock is None:
             data_dir = Path(self._organizer.pluginDataPath()) / "ai_assistant"
             data_dir.mkdir(parents=True, exist_ok=True)
@@ -87,8 +93,20 @@ class AiAssistantPlugin(mobase.IPluginTool):
             except (TypeError, RuntimeError):
                 pass
             self._quit_connected = False
-        if self._dock is not None and not sip.isdeleted(self._dock):
-            self._dock.chat_panel.shutdown()
+        # an exception escaping a PyQt6 slot is fatal: log it instead
+        try:
+            if self._dock is not None and not sip.isdeleted(self._dock):
+                self._dock.chat_panel.shutdown()
+        except Exception:
+            _log.exception("AI Assistant: could not save the conversation on exit")
+        try:
+            if self._dispatcher is not None:
+                self._dispatcher.close()
+            if self._mcp_server is not None:
+                # this plugin object is unloaded after a restart: its server must not leak
+                self._mcp_server.stop()
+        except Exception:
+            _log.exception("AI Assistant: could not stop the MCP server on exit")
 
     def name(self) -> str:
         return "AI Assistant"
