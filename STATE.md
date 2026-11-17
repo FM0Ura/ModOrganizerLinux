@@ -2,13 +2,47 @@
 
 > Atualize este arquivo ao fim de cada tarefa, checkpoint ou decisão. O plano de cada fase continua sendo a fonte dos detalhes; aqui fica só o "onde estamos".
 
-**Última atualização:** 2026-10-25
-**Fase atual:** 6 — Fase 6a — Stellar Blade (merge no `main` em 2026-10-25, a pedido do usuário, com o [teste manual](docs/testing/phase6a-manual-checklist.md) ainda pendente; ver [Fase 6a — progresso](#fase-6a--progresso)); a Fase 6b (Nexus Collections) tem spec, sem plano · **Anterior:** Fase 5 — Distribuição (merge no `main` em 2026-10-25 pelo PR #11; falta o passo 7 do [teste manual](docs/testing/phase5-manual-checklist.md), atualização entre duas releases publicadas) · Fase 4 (4b a 4e) ✅ concluída em 2026-10-24 (merge no `main` pelos PRs #3 a #9). O que os testes acharam fica para depois da Fase 5: [Pendências por fase](#pendências-por-fase), "Testes manuais de 2026-10-24"
+**Última atualização:** 2026-10-31
+**Fase atual:** Modlists, parte 1 (núcleo + `.mo2list`) — implementada no branch `modlists-parte1`, aguardando o [teste manual](docs/testing/modlists-manual-checklist.md) (ver [Modlists, parte 1 — progresso](#modlists-parte-1--progresso)) · **Antes:** 6 — Fase 6a — Stellar Blade (merge no `main` em 2026-10-25, a pedido do usuário, com o [teste manual](docs/testing/phase6a-manual-checklist.md) ainda pendente; ver [Fase 6a — progresso](#fase-6a--progresso)); a Fase 6b (Nexus Collections) tem spec, sem plano · **Anterior:** Fase 5 — Distribuição (merge no `main` em 2026-10-25 pelo PR #11; falta o passo 7 do [teste manual](docs/testing/phase5-manual-checklist.md), atualização entre duas releases publicadas) · Fase 4 (4b a 4e) ✅ concluída em 2026-10-24 (merge no `main` pelos PRs #3 a #9). O que os testes acharam fica para depois da Fase 5: [Pendências por fase](#pendências-por-fase), "Testes manuais de 2026-10-24"
 **Branch principal:** `main` (Fases 1 a 4e; `fase-2-vfs-fuse`, `fase-3-steam-proton`, `fase-4a-nexus` e os branches de `fase-4b-loot` a `fase-4e-bsa` foram integrados; `claude/serene-maxwell-1dyrbg` é o antigo branch da Fase 1). **Branch da Fase 4b:** `fase-4b-loot` (a partir de `main`; PR #3). **Branch da Fase 4c.1:** `fase-4c1-plugins` (a partir de `fase-4b-loot`; worktree `../ModOrganizerLinux-4c1` enquanto o MO2 do usuário roda pelo checkout principal). **Branch da Fase 4c.2:** `fase-4c2-pendencias` (a partir de `fase-4c1-plugins`; worktree `../ModOrganizerLinux-4c2`). **Branch da Fase 4c.3:** `fase-4c3-ferramentas` (a partir de `fase-4c2-pendencias`; worktree `../ModOrganizerLinux-4c3`). **Branch da Fase 4d.1:** `fase-4d1-python` (a partir de `fase-4c3-ferramentas`; worktree `../ModOrganizerLinux-4d1`). **Branch da Fase 4d.2:** `fase-4d2-basic-games` (a partir de `fase-4d1-python`; worktree `../ModOrganizerLinux-4d2`). **Branch da Fase 4e:** `fase-4e-bsa` (a partir de `fase-4d2-basic-games`; worktree `../ModOrganizerLinux-4e`)
 
 ## Repositório
 
 Tudo fica em [`FM0Ura/ModOrganizerLinux`](https://github.com/FM0Ura/ModOrganizerLinux): build, CI, testes, docs, o app em `deps/modorganizer` e as demais dependências em `deps/`. O fork [`FM0Ura/modorganizer`](https://github.com/FM0Ura/modorganizer) (`bb46b18`) foi incorporado em 2026-10-15 e não recebe mais mudanças.
+
+## Modlists, parte 1 — progresso
+
+Spec: [`docs/superpowers/specs/2026-10-28-modlists-design.md`](docs/superpowers/specs/2026-10-28-modlists-design.md) (substitui a spec da 6b) · Plano: [`docs/superpowers/plans/2026-10-31-modlists-parte1-nucleo-mo2list.md`](docs/superpowers/plans/2026-10-31-modlists-parte1-nucleo-mo2list.md) · Checklist manual: [`docs/testing/modlists-manual-checklist.md`](docs/testing/modlists-manual-checklist.md) · Guia do usuário: [`docs/user/pt-BR/modlists.md`](docs/user/pt-BR/modlists.md)
+
+**Status:** parte 1 implementada (Tasks 1 a 12) no branch `modlists-parte1` (a partir de `main` 80754ca), **aguardando o teste manual**; nenhum item do checklist foi marcado. O PR vai para `main` por fast-forward.
+
+Entregue: modelo do plano e JSON; marcadores de caminho e verificação de vazamento; pacote `.mo2list` (ZIP com limites e verificação de conteúdo nativo); modo lote nos instaladores (`installer_quick`, `installer_bundle`, `uibase`); gravação e reaplicação de escolhas de FOMOD (`installer_fomod`); exportação (coletor, janela, MD5 com cancelamento); importação (planejamento, fila de downloads guiados, import pendente retomável, instalador em lote, janelas de revisão e resumo); associação do `.mo2list` no Linux (abrir pelo gerenciador de arquivos, com o MO2 aberto ou não).
+
+**Revisão final (2026-11-01, `final-review.md` do ledger):** corrigidos os cinco itens importantes e três menores. A importação não duplica mais os executáveis que a instância já tem (mesmo programa, argumentos e pasta de trabalho: o jogo, o SKSE... que o plugin do jogo adiciona); eles vão para "Executables already present" no resumo, sem mesclar. Se o usuário trocar de perfil durante os downloads, o instalador volta ao perfil de destino antes de instalar e de aplicar ordem, plugins, INIs e executáveis; se o perfil foi apagado, a importação para e o registro fica. Só uma importação por vez: `busy()` também conta a preparação (destino, revisão, perguntas e a retomada). O export recusa, antes das somas de verificação, um pacote com um arquivo de 4 GiB ou mais, ou com 4 GiB − 64 MiB ou mais no total (o `QZipWriter` não tem Zip64); os limites do leitor caíram para 4 GiB por entrada e no total. O MD5 e as cópias de arquivos da importação (e a cópia do pacote) rodam fora da thread da interface, com progresso. Menores: o instalador grava o arquivo da Nexus no mod (`addInstalledFile`) depois de cada instalação em lote; mods incluídos e manuais recebem a versão da lista no `meta.ini` (§5.2); teste de ida e volta export → pacote → import (`ExportBuilder.RoundTripThroughThePackage`).
+
+**Pendências adiadas que vale saber** (detalhes no ledger `.superpowers/sdd/2026-10-31-modlists-parte1-nucleo-mo2list/progress.md`, linhas "minor (deferred)"):
+
+- `fromJson` do plano não verifica o tipo dos contêineres (mensagens vagas em JSON malformado); `fromJson(toJson(Plan{}))` falha por nome de cabeçalho vazio; `versionChoices` não é verificado como objeto.
+- Verificação de vazamento: não pega a forma Wine do home (`Z:\home\...`), barras duplas de `QSettings` nem prefixos como `abc/home/x`; a restauração de `Z:%MARKER%` não tem borda à esquerda.
+- Pacote: arquivos extraídos com modo 0600; sobra `.mo2list-tmp-*` se o MO2 morrer na extração; pastas vazias ficam após uma entrada recusada.
+- Instalador em lote: pacote com vários arquivos (bundle) falha e vai para "Install manually"; mod sem ids da Nexus no bundle pode não casar o `fileKey`; separador do usuário pode ser tratado como próprio na retomada; downloads removidos/pausados esperam; mensagens do lote afetam os downloads do usuário próprio.
+- FOMOD: o botão voltar ainda alcança a página 0 escondida no modo interativo; grupo obrigatório todo "NotUsable" grava vazio e a reaplicação falha alto.
+- Exportação: a janela reconstrói a prévia a cada tecla; o `overwrite` conta como mod; INI só decodifica UTF-8; `bundledText` lê o arquivo (até 2 MiB) antes da checagem de NUL; vazamento de executável listado duas vezes; segredos em argumentos de executável não são filtrados (a janela mostra a linha de comando para o autor conferir); `SecretEnvDropped` não nomeia a variável.
+- Importação: `ExitModOrganizer` ignorado; sem limpeza se a cópia do pacote falha após criar a instância; argumento `.mo2list` inexistente tratado como nome de executável; sem teste de `CommandLine`.
+- Importação (Tasks 5, 7, 8, 9): a contagem de FOMOD (`idx`) segue a ordem de exibição depois de ordenar, e o Vortex pode usar a ordem do XML (parte 2); `findReusableDownload` recalcula o MD5 sem necessidade; a contagem de movidos da Task 8 conta a mais e o nome `freePath` é impreciso; em `runDeferred` a ordem de execução e a conexão que mantém a fila viva no desmonte (Task 9) ficam para revisar.
+- `DirectoryCreator` no Linux divide o caminho em `\` e não cria pastas (já existia antes; inofensivo, porque `OrganizerCore::bootstrap` cria as pastas no primeiro início).
+- Caminhos de interface sem teste automático (o checklist manual os cobre).
+
+**Riscos aceitos** (rulings do ledger):
+
+- Uma única entrada enorme de um `.mo2list` malicioso ainda pode esgotar a memória (o `QZipReader::fileData` pode inflar além do tamanho declarado; só nega serviço, importação iniciada pelo usuário). Limitar de verdade exige um inflate próprio com zlib.
+- Executáveis importados podem ser maliciosos: mitigado pela seção "Executable content" da revisão (binário, argumentos, pasta e ambiente, com confirmação explícita), pela regra de que o binário fique em pastas do jogo/instância/`mods`/`overwrite`, pela lista permitida de variáveis de ambiente e porque a importação nunca executa nada.
+- Um `.mo2list` legítimo com `:` no nome de um arquivo incluído é recusado (mais estrito que o pedido); uma variável de ambiente necessária cujo nome contenha `KEY`/`TOKEN`/... é descartada na exportação (o autor a recria); links simbólicos em mods do usuário não são exportados; uma lista que precisa de variáveis fora da lista permitida as perde (ficam no resumo).
+- Mod de várias partes na importação em lote vai para "Install manually" mesmo quando o instalador reconheceria o anterior (importações são instalações novas).
+- Uma modlist de 4 GiB ou mais (ou com um arquivo incluído de 4 GiB) ainda não pode ser exportada: o `QZipWriter`/`QZipReader` do Qt não têm Zip64, e um writer próprio fica para a parte 2.
+- Uma troca de perfil feita pelo usuário durante a importação é desfeita (o perfil de destino volta a ser o atual); um lançador da lista idêntico a um da instância, mas com outro ambiente, não é adicionado.
+- A revisão da importação não mostra `steamAppId` nem `proton` dos executáveis; as varreduras da pasta de downloads estão duplicadas (`downloadCandidates`/`candidatesIn`, com flags diferentes); cada arquivo incluído é extraído inteiro na memória.
+- Edições dentro da pasta de um mod da Nexus não vão no pacote (spec §6.4); FOMOD só grava escolhas de mods instalados depois desta versão.
 
 ## Fase 6a — progresso
 
@@ -261,6 +295,7 @@ Fase 1: Artefato `mo2-linux-install` da [execução Linux #28](https://github.co
 
 ## Próximos passos
 
+0. Modlists, parte 1: teste manual do usuário ([checklist](docs/testing/modlists-manual-checklist.md)), PR para `main` (fast-forward) e depois a parte 2 (Collections, spec §7).
 1. CI do PR #8 (Linux e Windows pelo `[windows-ci]`); os PRs #3 a #7 estão com os dois CIs verdes. Fase 4e: CI do PR #9 (`fase-4e-bsa` → `fase-4d2-basic-games`), Linux e Windows (`[windows-ci]`).
 2. Testes manuais do usuário, na ordem 4b → 4c.1 → 4c.2 → 4c.3 → 4d.1 → 4d.2 → 4e, com o build da 4e (seção acima) e **com o MO2 iniciado pelo box**; o da 4e é `docs/testing/phase4e-manual-checklist.md`.
 3. Merges no `main` na ordem PR #3 → #8 (e o da 4e depois), cada PR redirecionado ao `main` depois do merge do anterior; as specs passam a "aprovada; implementada".

@@ -27,6 +27,7 @@ along with Mod Organizer.  If not, see <http://www.gnu.org/licenses/>.
 #include "iplugininstallersimple.h"
 #include "messagedialog.h"
 #include "modinfo.h"
+#include "modlists/installorder.h"
 #include "nexusinterface.h"
 #include "queryoverwritedialog.h"
 #include "questionboxmemory.h"
@@ -361,6 +362,61 @@ InstallationManager::installArchive(GuessedValue<QString>& modName,
   return install(archiveName, modName, modId).result();
 }
 
+void InstallationManager::setInstallerOptions(const QString& installer,
+                                              QVariantMap options)
+{
+  m_InstallerOptions[installer] = std::move(options);
+}
+
+void InstallationManager::clearInstallerOptions()
+{
+  m_InstallerOptions.clear();
+}
+
+QVariantMap InstallationManager::installerOptions(const QString& installerName) const
+{
+  QVariantMap options;
+  const auto it = m_InstallerOptions.find(installerName);
+  if (it != m_InstallerOptions.end()) {
+    options = it->second;
+  }
+  options.insert(QStringLiteral("fileKey"), m_CurrentFileKey);
+  options.insert(QStringLiteral("batch"), m_Batch);
+  return options;
+}
+
+void InstallationManager::setInstallerDetail(const QString& detail)
+{
+  m_LastInstallerDetail = detail;
+}
+
+namespace
+{
+
+// the installers that work without the user in batch mode (the others are only tried
+// when their options say "batch")
+bool isBatchInstaller(const QString& name)
+{
+  return name == QLatin1String("Fomod Installer") ||
+         name == QLatin1String("Simple Installer") ||
+         name == QLatin1String("Bundle Installer");
+}
+
+}  // namespace
+
+bool InstallationManager::acceptsBatch(const IPluginInstaller* installer) const
+{
+  if (installer->isManualInstaller()) {
+    return false;
+  }
+  if (isBatchInstaller(installer->name())) {
+    return true;
+  }
+  const auto it = m_InstallerOptions.find(installer->name());
+  return it != m_InstallerOptions.end() &&
+         it->second.value(QStringLiteral("batch")).toBool();
+}
+
 QString InstallationManager::generateBackupName(const QString& directoryName) const
 {
   QString backupName = directoryName + "_backup";
@@ -383,6 +439,18 @@ InstallationResult InstallationManager::testOverwrite(GuessedValue<QString>& mod
 
   // this is only returned on success
   InstallationResult result{IPluginInstaller::RESULT_SUCCESS};
+
+  // batch mode: the caller passes a free name, never ask what to do with an existing
+  // mod
+  if (m_Batch && QDir(targetDirectory).exists()) {
+    if (!m_BatchMergeTarget.isEmpty() &&
+        m_BatchMergeTarget.compare(modName, Qt::CaseInsensitive) == 0) {
+      result.m_merged = true;
+      return result;
+    }
+    m_LastInstallerDetail = tr("A mod with this name already exists");
+    return {IPluginInstaller::RESULT_FAILED};
+  }
 
   while (QDir(targetDirectory).exists()) {
     Settings& settings(Settings::instance());
@@ -485,6 +553,11 @@ bool InstallationManager::ensureValidModName(GuessedValue<QString>& name) const
 
 InstallationResult InstallationManager::doInstall(ModInstallationInfo& info)
 {
+  if (m_Batch && info.modName->isEmpty()) {
+    m_LastInstallerDetail = tr("The mod name is invalid");
+    return {IPluginInstaller::RESULT_FAILED};
+  }
+
   if (!ensureValidModName(info.modName)) {
     return {IPluginInstaller::RESULT_FAILED};
   }
@@ -563,6 +636,7 @@ InstallationResult InstallationManager::doInstall(ModInstallationInfo& info)
     settingsFile.beginGroup("installedFiles");
     settingsFile.remove("");
     settingsFile.endGroup();
+    settingsFile.remove("installedFilesOrder");
   }
 
   return result;
@@ -633,9 +707,28 @@ InstallationResult InstallationManager::install(const QString& fileName,
     m_IsRunning = false;
   });
 
+  // a nested install (the archive inside a bundle) keeps the file key and the detail
+  // of the download
+  const bool outermost = m_InstallDepth == 0;
+  ++m_InstallDepth;
+  ON_BLOCK_EXIT([this]() {
+    --m_InstallDepth;
+  });
+
   QFileInfo fileInfo(fileName);
+  if (outermost) {
+    m_LastInstallerDetail.clear();
+    m_CurrentFileKey = modlists::fileKey(fileInfo.fileName());
+  }
+
   if (!getSupportedExtensions().contains(fileInfo.suffix(), Qt::CaseInsensitive)) {
-    reportError(tr("File format \"%1\" not supported").arg(fileInfo.suffix()));
+    const QString message =
+        tr("File format \"%1\" not supported").arg(fileInfo.suffix());
+    if (m_Batch) {
+      m_LastInstallerDetail = message;
+    } else {
+      reportError(message);
+    }
     return InstallationResult(IPluginInstaller::RESULT_FAILED);
   }
 
@@ -660,6 +753,10 @@ InstallationResult InstallationManager::install(const QString& fileName,
     QSettings metaFile(metaName, QSettings::IniFormat);
     gameName = metaFile.value("gameName", "").toString();
     modID    = metaFile.value("modID", 0).toInt();
+    if (outermost) {
+      const int fileID = metaFile.value("fileID", 0).toInt();
+      m_CurrentFileKey = modlists::fileKey(modID, fileID, fileInfo.fileName());
+    }
     QTextDocument doc;
     doc.setHtml(metaFile.value("name", "").toString());
     modName.update(doc.toPlainText(), GUESS_FALLBACK);
@@ -670,7 +767,11 @@ InstallationResult InstallationManager::install(const QString& fileName,
     category                   = metaFile.value("category", 0).toInt();
     unsigned int categoryIndex = CategoryFactory::instance().resolveNexusID(category);
     if (category != 0 && categoryIndex == 0U &&
-        Settings::instance().nexus().categoryMappings()) {
+        Settings::instance().nexus().categoryMappings() && m_Batch) {
+      // batch mode: "Proceed" without a category
+      log::debug("no category mapped for nexus category {}, proceeding", category);
+    } else if (category != 0 && categoryIndex == 0U &&
+               Settings::instance().nexus().categoryMappings()) {
       QMessageBox nexusQuery;
       nexusQuery.setWindowTitle(tr("No category found"));
       nexusQuery.setText(tr(
@@ -737,6 +838,12 @@ InstallationResult InstallationManager::install(const QString& fileName,
       m_ArchiveHandler->open(fileName.toStdWString(), [this]() -> std::wstring {
         m_Password = QString();
 
+        // batch mode: no dialog, the archive fails to open
+        if (m_Batch) {
+          m_LastInstallerDetail = tr("The archive needs a password");
+          return {};
+        }
+
         // Note: If we are not in the Qt event thread, we cannot use queryPassword()
         // directly, so we emit passwordRequested() that is connected to
         // queryPassword(). The connection is made using Qt::BlockingQueuedConnection,
@@ -772,6 +879,11 @@ InstallationResult InstallationManager::install(const QString& fileName,
     // don't use inactive installers (installer can't be null here but vc static code
     // analysis thinks it could)
     if ((installer == nullptr) || !m_PluginContainer->isEnabled(installer)) {
+      continue;
+    }
+
+    // batch mode: only the installers that need no user
+    if (m_Batch && !acceptsBatch(installer)) {
       continue;
     }
 
@@ -850,9 +962,13 @@ InstallationResult InstallationManager::install(const QString& fileName,
     // extracted to the correct location
     switch (installResult.result()) {
     case IPluginInstaller::RESULT_FAILED: {
-      QMessageBox::information(qApp->activeWindow(), tr("Installation failed"),
-                               tr("Something went wrong while installing this mod."),
-                               QMessageBox::Ok);
+      if (!m_Batch) {
+        QMessageBox::information(qApp->activeWindow(), tr("Installation failed"),
+                                 tr("Something went wrong while installing this mod."),
+                                 QMessageBox::Ok);
+      } else if (m_LastInstallerDetail.isEmpty()) {
+        m_LastInstallerDetail = tr("Something went wrong while installing this mod.");
+      }
       return installResult;
     } break;
     case IPluginInstaller::RESULT_SUCCESS:
@@ -863,6 +979,10 @@ InstallationResult InstallationManager::install(const QString& fileName,
             iniTweakEntry != nullptr && !iniTweakEntry->astree()->empty();
       }
       installResult.m_result = IPluginInstaller::RESULT_SUCCESS;
+      // a detail left by an installer that did not handle the archive is stale
+      if (outermost) {
+        m_LastInstallerDetail.clear();
+      }
       return installResult;
     } break;
     case IPluginInstaller::RESULT_NOTATTEMPTED:
@@ -873,6 +993,16 @@ InstallationResult InstallationManager::install(const QString& fileName,
       return installResult;
     }
   }
+  if (m_Batch && (installResult.result() == IPluginInstaller::RESULT_NOTATTEMPTED ||
+                  installResult.result() == IPluginInstaller::RESULT_MANUALREQUESTED)) {
+    // no installer that needs no user could do it; a more precise detail given by an
+    // installer (or the password) is kept
+    if (m_LastInstallerDetail.isEmpty()) {
+      m_LastInstallerDetail = tr("Needs a manual installation");
+    }
+    return InstallationResult(IPluginInstaller::RESULT_FAILED);
+  }
+
   if (installResult.result() == IPluginInstaller::RESULT_NOTATTEMPTED) {
     reportError(
         tr("None of the available installer plugins were able to handle that archive.\n"

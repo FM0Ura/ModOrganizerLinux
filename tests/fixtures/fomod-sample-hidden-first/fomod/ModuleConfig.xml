@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>FOMOD Hidden First Sample</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Hidden step">
+      <visible>
+        <flagDependency flag="never" value="on"/>
+      </visible>
+      <optionalFileGroups order="Explicit">
+        <group name="Hidden group" type="SelectAll">
+          <plugins order="Explicit">
+            <plugin name="Hidden">
+              <description>Installs textures/hidden.dds, but its step is never shown.</description>
+              <files>
+                <file source="textures/hidden.dds" destination="textures/hidden.dds" priority="0"/>
+              </files>
+              <typeDescriptor>
+                <type name="Required"/>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Visible step">
+      <optionalFileGroups order="Explicit">
+        <group name="Visible group" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="X">
+              <description>Installs textures/x.dds.</description>
+              <files>
+                <file source="textures/x.dds" destination="textures/x.dds" priority="0"/>
+              </files>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Y">
+              <description>Installs textures/y.dds.</description>
+              <files>
+                <file source="textures/y.dds" destination="textures/y.dds" priority="0"/>
+              </files>
+              <typeDescriptor>
+                <type name="Optional"/>
+              </typeDescriptor>
+            </plugin>
+            <plugin name="Z">
+              <description>Installs textures/z.dds; not usable without Missing.esp.</description>
+              <files>
+                <file source="textures/z.dds" destination="textures/z.dds" priority="0"/>
+              </files>
+              <typeDescriptor>
+                <dependencyType>
+                  <defaultType name="Optional"/>
+                  <patterns>
+                    <pattern>
+                      <dependencies operator="And">
+                        <fileDependency file="Missing.esp" state="Missing"/>
+                      </dependencies>
+                      <type name="NotUsable"/>
+                    </pattern>
+                  </patterns>
+                </dependencyType>
+              </typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

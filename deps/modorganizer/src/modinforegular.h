@@ -456,6 +456,10 @@ public:
   {
     return {m_InstalledFileIDs.begin(), m_InstalledFileIDs.end()};
   }
+  virtual QStringList installedFilesOrder() const override
+  {
+    return m_InstalledFilesOrder;
+  }
 
   /**
    * @brief Nexus file id of this mod's install. When multiple installs have
@@ -531,6 +535,8 @@ private:
   int m_NexusID;
   // Ordered by install time, oldest first; back is the most recent install.
   std::vector<std::pair<int, int>> m_InstalledFileIDs;
+  // meta.ini "installedFilesOrder": keys of the installed files, most recent last
+  QStringList m_InstalledFilesOrder;
 
   // List of plugin settings:
   std::map<QString, std::map<QString, QVariant>> m_PluginSettings;

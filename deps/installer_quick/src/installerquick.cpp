@@ -4,6 +4,7 @@
 #include <QtPlugin>
 
 #include <uibase/game_features/igamefeatures.h>
+#include <uibase/iinstallationmanager.h>
 #include <uibase/iplugingame.h>
 #include <uibase/log.h>
 
@@ -141,7 +142,10 @@ InstallerQuick::install(GuessedValue<QString>& modName,
   }
   if (tree != nullptr) {
     SimpleInstallDialog dialog(modName, parentWidget());
-    if (m_MOInfo->pluginSetting(name(), "silent").toBool() ||
+    // a batch install (a modlist import) shows no dialog, as "silent"
+    const bool batch = manager() != nullptr &&
+                       manager()->installerOptions(name()).value("batch").toBool();
+    if (batch || m_MOInfo->pluginSetting(name(), "silent").toBool() ||
         dialog.exec() == QDialog::Accepted) {
       modName.update(dialog.getName(), GUESS_USER);
 

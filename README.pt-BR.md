@@ -52,6 +52,7 @@ a partir do mesmo código, contra o `uibase` do upstream.
 - 🧩 **Plugins** — os jogos da Bethesda, FOMOD, instaladores BAIN e bundle, pré-visualizações, as ferramentas de INI, os plugins Python e cerca de 75 jogos da comunidade (`basic_games`)
 - 📋 **LOOT** — ordenação de plugins com a libloot
 - 🌐 **Nexus Mods** — login guardado no Secret Service (KWallet, GNOME Keyring) e links `nxm://`
+- 📜 **Modlists** — exporte um perfil para um arquivo `.mo2list` e importe o de outra pessoa ([guia](docs/user/pt-BR/modlists.md); teste manual pendente)
 - 🧳 **BSA/BA2** — criação de arquivos com o BSA Packer
 - 🔄 **Atualiza sozinho** — pelos releases do GitHub, ou pelo Gear Lever
 

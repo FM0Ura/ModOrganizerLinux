@@ -16,7 +16,7 @@ list(FILTER _organizer_tests_sources EXCLUDE REGEX "(^|/)bench_refresh\\.cpp$")
 set_property(TARGET organizer_tests PROPERTY SOURCES ${_organizer_tests_sources})
 
 target_link_libraries(organizer_tests PRIVATE
-	organizer_desktop organizer_launch organizer_archivetree organizer_env
+	organizer_modlists organizer_desktop organizer_launch organizer_archivetree organizer_env
 	organizer_datatree)
 
 # the shared/ headers rely on the precompiled header of the application
