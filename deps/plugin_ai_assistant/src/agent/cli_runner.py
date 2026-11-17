@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -15,6 +16,7 @@ from typing import Callable
 from ..config import _in_container
 
 CLI_TIMEOUT_SECONDS = 600
+_KILL_WAIT_SECONDS = 2
 
 
 class TurnCancelled(Exception):
@@ -200,25 +202,38 @@ def _spawn(cmd: list[str], cwd, cancel_event) -> tuple[int, str, str]:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            # its own process group: the CLI's children (MCP bridge, hooks) inherit the
+            # pipes, so stopping the turn must stop all of them, not only the CLI
+            start_new_session=True,
         )
     except FileNotFoundError as exc:
         raise RuntimeError(f"'{cmd[0]}' was not found in PATH.") from exc
 
     out: dict[str, str] = {}
-    reader = threading.Thread(target=lambda: out.update(zip(("stdout", "stderr"), proc.communicate())))
+    reader = threading.Thread(
+        target=lambda: out.update(zip(("stdout", "stderr"), proc.communicate())), daemon=True
+    )
     reader.start()
     deadline = time.monotonic() + CLI_TIMEOUT_SECONDS
     while reader.is_alive():
         if cancel_event is not None and cancel_event.is_set():
-            proc.kill()
-            reader.join()
+            _kill_tree(proc, reader)
             raise TurnCancelled()
         if time.monotonic() > deadline:
-            proc.kill()
-            reader.join()
+            _kill_tree(proc, reader)
             raise RuntimeError(f"The CLI did not answer within {CLI_TIMEOUT_SECONDS} s.")
         reader.join(timeout=0.1)
     return proc.returncode, out.get("stdout", ""), out.get("stderr", "")
+
+
+def _kill_tree(proc: subprocess.Popen, reader: threading.Thread) -> None:
+    """Kills the CLI's process group; a process that left the group may still hold the
+    pipes, so the reader is waited for only briefly (it is a daemon thread)."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        proc.kill()
+    reader.join(timeout=_KILL_WAIT_SECONDS)
 
 
 def _session_lost(provider: str, code: int, stdout: str, stderr: str) -> bool:
