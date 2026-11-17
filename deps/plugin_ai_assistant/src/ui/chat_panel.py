@@ -11,7 +11,9 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QComboBox,
     QLabel,
+    QFileDialog,
     QPushButton,
+    QStackedWidget,
     QTextBrowser,
     QPlainTextEdit,
 )
@@ -21,9 +23,10 @@ from ..agent.cli_runner import prepare_bridge
 from ..agent.graph import build_system_prompt
 from ..agent.mcp_server import LocalMcpServer
 from ..agent.worker import AgentTurnWorker
-from ..history.export import approval_line
+from ..history.export import approval_line, to_markdown
 from ..history.store import Conversation, ConversationStore, Message, session_key
 from .approval_card import ApprovalCard
+from .history_view import HistoryView
 from .queue_view import QueueView
 from .settings_dialog import AssistantSettingsDialog
 from .slash_commands import HELP_TEXT, PROVIDER_ALIASES, SlashCommand, parse_slash
@@ -114,29 +117,47 @@ class ChatPanel(QWidget):
         self.mode_combo.setCurrentIndex(0 if self._config.permission_mode == "safe" else 1)
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
 
-        self.clear_btn = QPushButton("New Chat")
+        self.clear_btn = QPushButton("+ New")
         self.clear_btn.clicked.connect(self._on_new_chat)
+        self.history_btn = QPushButton("History")
+        self.history_btn.clicked.connect(self.show_history)
         self.settings_btn = QPushButton("Settings")
         self.settings_btn.clicked.connect(self._on_open_settings)
 
         top_bar.addWidget(self.provider_combo, 2)
         top_bar.addWidget(self.mode_combo, 2)
         top_bar.addWidget(self.clear_btn)
+        top_bar.addWidget(self.history_btn)
         top_bar.addWidget(self.settings_btn)
         root.addLayout(top_bar)
+
+        # the chat and the history screen share the panel below the top bar
+        self.stack = QStackedWidget()
+        self.chat_page = QWidget()
+        chat_layout = QVBoxLayout(self.chat_page)
+        chat_layout.setContentsMargins(0, 0, 0, 0)
+        self.stack.addWidget(self.chat_page)
+        self.history_view = HistoryView(lambda: self.store)
+        self.history_view.open_requested.connect(self._on_history_open)
+        self.history_view.back_requested.connect(self._show_chat)
+        self.history_view.export_requested.connect(self.export_conversation)
+        self.history_view.delete_requested.connect(self._on_history_delete)
+        self.history_view.rename_requested.connect(self._on_history_rename)
+        self.stack.addWidget(self.history_view)
+        root.addWidget(self.stack, 1)
 
         # Transcript area + approval container
         self.transcript = QTextBrowser()
         self.transcript.setOpenExternalLinks(True)
-        root.addWidget(self.transcript, 1)
+        chat_layout.addWidget(self.transcript, 1)
 
         self.cards_layout = QVBoxLayout()
-        root.addLayout(self.cards_layout)
+        chat_layout.addLayout(self.cards_layout)
 
         # messages typed while a turn runs
         self.queue_view = QueueView(self)
         self.queue_view.remove_requested.connect(self.remove_queued)
-        root.addWidget(self.queue_view)
+        chat_layout.addWidget(self.queue_view)
 
         # Busy row: shown while a turn runs
         busy_row = QHBoxLayout()
@@ -145,7 +166,7 @@ class ChatPanel(QWidget):
         self.cancel_btn.clicked.connect(self._on_cancel_clicked)
         busy_row.addWidget(self.status_label, 1)
         busy_row.addWidget(self.cancel_btn)
-        root.addLayout(busy_row)
+        chat_layout.addLayout(busy_row)
         self.status_label.hide()
         self.cancel_btn.hide()
         self._busy_timer = QTimer(self)
@@ -162,7 +183,7 @@ class ChatPanel(QWidget):
             btn = QPushButton(label)
             btn.clicked.connect(lambda _=False, p=prompt: self.submit(p))
             chips.addWidget(btn)
-        root.addLayout(chips)
+        chat_layout.addLayout(chips)
 
         # Input row
         input_row = QHBoxLayout()
@@ -174,7 +195,7 @@ class ChatPanel(QWidget):
         self.send_btn.clicked.connect(self._on_send_clicked)
         input_row.addWidget(self.input_box, 1)
         input_row.addWidget(self.send_btn)
-        root.addLayout(input_row)
+        chat_layout.addLayout(input_row)
 
     # --- settings ---------------------------------------------------------------------
 
@@ -364,13 +385,92 @@ class ChatPanel(QWidget):
         else:
             self._append_note(f"Unknown provider '{arg}'. Available: {names}.")
 
+    # --- history screen and export ----------------------------------------------------------
+
     def show_history(self) -> None:
-        """Replaced by the history view (Task 8)."""
-        self._append_note("The history view is not available yet.")
+        if self.is_busy():
+            return
+        self.history_view.refresh()
+        self.stack.setCurrentWidget(self.history_view)
+
+    def _show_chat(self) -> None:
+        self.stack.setCurrentWidget(self.chat_page)
+
+    def _tell(self, text: str, error: bool = False) -> None:
+        """Feedback for an action: in the history screen when it is showing, else in the transcript."""
+        if self.stack.currentWidget() is self.history_view:
+            self.history_view.show_message(text)
+        elif error:
+            self._append_error(text)
+        else:
+            # drawn only: an export confirmation is not part of the conversation
+            self._append(_HEADERS["note"], text, markdown=False)
+
+    def _on_history_open(self, conv_id: str) -> None:
+        if self.open_conversation(conv_id):
+            self._show_chat()
+        else:
+            self.history_view.show_message("Could not open that conversation.")
+
+    def _on_history_rename(self, conv_id: str, title: str) -> None:
+        title = " ".join(title.split())
+        if not title:
+            return
+        if conv_id == self.conversation.id:
+            # the next save of the open conversation must not overwrite the new title
+            self.conversation.title = title
+            self.conversation.title_custom = True
+            self._save_conversation()  # a conversation without a user message is not stored
+        self.store.rename(conv_id, title)
+        self.history_view.refresh()
+
+    def _on_history_delete(self, conv_id: str) -> None:
+        is_open = conv_id == self.conversation.id
+        if is_open and self.is_busy():
+            self.history_view.show_message("Wait for the running turn to finish first.")
+            return
+        self.store.delete(conv_id)
+        if is_open:
+            # nothing of the deleted conversation may be saved again: no draft stash here
+            self._cancel_pending_cards_silently()
+            self._clear_queue()
+            self.conversation = Conversation.new(self._config.provider)
+            self._select_provider(self.conversation.provider)
+            self._dispatcher.reset_session_approvals()
+            self.transcript.clear()
+            self.input_box.clear()
+        self.history_view.refresh()
+
+    def _cancel_pending_cards_silently(self) -> None:
+        for req_id in list(self._pending_cards):
+            self._dispatcher.resolve_approval(req_id, "reject")
+            self._take_card(req_id)
 
     def export_current(self) -> None:
-        """Replaced by the export action (Task 8)."""
-        self._append_note("Export is not available yet.")
+        if not self.conversation.has_user_message():
+            self._append_note("Nothing to export yet.")
+            return
+        self.export_conversation(self.conversation.id)
+
+    def export_conversation(self, conv_id: str, path: str | None = None) -> None:
+        conv = self.conversation if conv_id == self.conversation.id else self.store.load(conv_id)
+        if conv is None:
+            self._tell("Could not export that conversation.", error=True)
+            return
+        if path is None:
+            name = " ".join((conv.title or "Conversation").split())
+            name = "".join("_" if ch in '/\\:*?"<>|' else ch for ch in name)
+            path, _ = QFileDialog.getSaveFileName(
+                self, "Export conversation", f"{name}.md", "Markdown (*.md);;All files (*)"
+            )
+            if not path:
+                return
+        try:
+            Path(path).write_text(to_markdown(conv), encoding="utf-8")
+        except OSError as exc:
+            self._tell(f"Could not export the conversation: {exc}", error=True)
+            return
+        self._tell(f"Exported to {path}")
 
     def new_conversation(self, provider: str | None = None) -> None:
         if self.is_busy():
@@ -529,6 +629,7 @@ class ChatPanel(QWidget):
         # the conversation can't change under a running turn
         self.provider_combo.setEnabled(not busy)
         self.clear_btn.setEnabled(not busy)
+        self.history_btn.setEnabled(not busy)
         self.status_label.setVisible(busy)
         self.cancel_btn.setVisible(busy)
         self.cancel_btn.setEnabled(busy)
