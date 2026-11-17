@@ -49,6 +49,8 @@ PROVIDER_LABELS = [
 _CARD_DECISIONS = {"approve": "approved", "approve_session": "approved_session", "reject": "rejected"}
 _ARGS_SUMMARY_LIMIT = 120
 _LATE_REPLY_NOTE = "Reply received after cancelling (the assistant remembers it):\n\n"
+_INTERRUPTED_NOTE = "Turn interrupted: MO2 was closed."
+_SHUTDOWN_WAIT_MS = 3000
 
 
 def summarise_call(tool_name: str, args: dict) -> str:
@@ -85,6 +87,8 @@ class ChatPanel(QWidget):
         self._store: ConversationStore | None = None
         self.conversation = Conversation.new(self._config.provider)
         self._worker: AgentTurnWorker | None = None
+        # API turns stopped at shutdown that were still running: kept alive until they end
+        self._abandoned_workers: list[AgentTurnWorker] = []
         self._busy = False
         self._turn_cancelled = False
         self._queue: list[str] = []
@@ -521,6 +525,70 @@ class ChatPanel(QWidget):
         conv = self.store.most_recent()
         if conv is not None:
             self.open_conversation(conv.id)
+
+    # --- lifecycle --------------------------------------------------------------------------
+
+    def focus_input(self) -> None:
+        self._show_chat()
+        self.input_box.setFocus(Qt.FocusReason.ShortcutFocusReason)
+
+    def shutdown(self) -> None:
+        """MO2 is closing or changing instance: stops the turn and saves what was typed.
+
+        Only Python state, the worker and files: it runs from aboutToQuit, where Qt GL and
+        QtWebEngine objects must not be touched. Safe to call more than once.
+        """
+        interrupted = self.is_busy()
+        worker = self._worker
+        if interrupted and worker is not None:
+            # whatever the stopped turn still emits belongs to no conversation
+            for signal in (
+                worker.session_started,
+                worker.response_ready,
+                worker.note_ready,
+                worker.error_occurred,
+                worker.late_response,
+                worker.finished,
+            ):
+                try:
+                    signal.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+            self._turn_cancelled = True
+            worker.cancel()  # a CLI turn is killed; an API turn is abandoned
+        # rejecting the cards also releases a worker waiting for an approval
+        self._cancel_pending_cards()
+        if interrupted:
+            self._set_busy(False)
+            if worker is not None:
+                # a killed CLI ends at once; a QThread dropped while running would abort
+                worker.wait(_SHUTDOWN_WAIT_MS)
+                self._abandoned_workers = [w for w in self._abandoned_workers if w.isRunning()]
+                if worker.isRunning():
+                    self._abandoned_workers.append(worker)
+                self._worker = None
+            self._append_note(_INTERRUPTED_NOTE)
+        self._turn_cancelled = False
+        if self._stash_draft():
+            # the draft is in the saved conversation: nothing is left for the next one
+            self._clear_queue()
+            self.input_box.clear()
+
+    def switch_instance(self, instance_path: str) -> None:
+        """Leaves the conversation of the current instance and opens the history of another."""
+        self.shutdown()
+        self._instance_path = instance_path
+        self._store = None
+        # what is left was saved nowhere (no user message yet, or the save failed): keep it
+        typed = self.draft_text()
+        self._clear_queue()
+        self.input_box.setPlainText(typed)
+        self.conversation = Conversation.new(self._config.provider)
+        self._select_provider(self.conversation.provider)
+        self.transcript.clear()
+        self._show_chat()
+        self._dispatcher.reset_session_approvals()
+        self.open_most_recent()
 
     def _turn_number(self) -> int:
         return sum(1 for m in self.conversation.messages if m.role == "user")

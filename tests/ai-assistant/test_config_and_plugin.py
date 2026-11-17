@@ -39,3 +39,8 @@ def test_plugin_metadata_and_hermetic_init(fake_organizer, tmp_path: Path):
     assert plugin.init(fake_organizer) is True
     # Hermetic check: init() alone must not write config.json before user action
     assert not (Path(fake_organizer.pluginDataPath()) / "ai_assistant/config.json").exists()
+
+
+def test_plugin_icon_is_the_bundled_svg():
+    plugin = createPlugin()
+    assert plugin.icon().isNull() is False
