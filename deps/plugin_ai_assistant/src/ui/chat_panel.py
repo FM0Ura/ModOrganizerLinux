@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QTextCursor, QTextDocument
 from PyQt6.QtWidgets import (
     QWidget,
@@ -24,6 +24,7 @@ from ..agent.worker import AgentTurnWorker
 from ..history.export import approval_line
 from ..history.store import Conversation, ConversationStore, Message, session_key
 from .approval_card import ApprovalCard
+from .queue_view import QueueView
 from .settings_dialog import AssistantSettingsDialog
 
 _MARKDOWN_FEATURES = (
@@ -82,6 +83,8 @@ class ChatPanel(QWidget):
         self._worker: AgentTurnWorker | None = None
         self._busy = False
         self._turn_cancelled = False
+        self._queue: list[str] = []
+        self._composing = False
         # req_id -> (card, tool name, args) for the approval cards still on screen
         self._pending_cards: dict[str, tuple[ApprovalCard, str, dict]] = {}
         self._turn_started = 0.0
@@ -129,6 +132,11 @@ class ChatPanel(QWidget):
         self.cards_layout = QVBoxLayout()
         root.addLayout(self.cards_layout)
 
+        # messages typed while a turn runs
+        self.queue_view = QueueView(self)
+        self.queue_view.remove_requested.connect(self.remove_queued)
+        root.addWidget(self.queue_view)
+
         # Busy row: shown while a turn runs
         busy_row = QHBoxLayout()
         self.status_label = QLabel()
@@ -151,7 +159,7 @@ class ChatPanel(QWidget):
             ("Review Load Order", "List my active plugin load order and check for issues."),
         ]:
             btn = QPushButton(label)
-            btn.clicked.connect(lambda _=False, p=prompt: self.send_prompt(p))
+            btn.clicked.connect(lambda _=False, p=prompt: self.submit(p))
             chips.addWidget(btn)
         root.addLayout(chips)
 
@@ -160,6 +168,7 @@ class ChatPanel(QWidget):
         self.input_box = QPlainTextEdit()
         self.input_box.setPlaceholderText("Ask the AI Assistant to analyze logs, toggle mods, install archives...")
         self.input_box.setMaximumHeight(75)
+        self.input_box.installEventFilter(self)
         self.send_btn = QPushButton("Send")
         self.send_btn.clicked.connect(self._on_send_clicked)
         input_row.addWidget(self.input_box, 1)
@@ -236,16 +245,71 @@ class ChatPanel(QWidget):
             return False
 
     def _stash_draft(self) -> bool:
-        """Saves the current conversation with the input box as its draft."""
-        self.conversation.draft = self.input_box.toPlainText()
+        """Saves the current conversation with the input box and the queue as its draft."""
+        self.conversation.draft = self.draft_text()
         return self._save_conversation()
+
+    # --- input and queue ----------------------------------------------------------------
+
+    @property
+    def queue(self) -> list[str]:
+        return list(self._queue)
+
+    def draft_text(self) -> str:
+        """The input box and the queued messages, in order, joined by blank lines."""
+        parts = [self.input_box.toPlainText(), *self._queue]
+        return "\n\n".join(part for part in parts if part.strip())
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if obj is self.input_box:
+            kind = event.type()
+            if kind == QEvent.Type.InputMethod:
+                self._composing = bool(event.preeditString())
+            elif kind == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if not event.modifiers() & Qt.KeyboardModifier.ShiftModifier and not self._composing:
+                    self._on_send_clicked()
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _queue_changed(self) -> None:
+        self.queue_view.set_items(self._queue)
+        self.conversation.draft = self.draft_text()
+        self._save_conversation()
+
+    def enqueue(self, text: str) -> None:
+        text = text.strip()
+        if text:
+            self._queue.append(text)
+            self._queue_changed()
+
+    def remove_queued(self, index: int) -> None:
+        if 0 <= index < len(self._queue):
+            del self._queue[index]
+            self._queue_changed()
+
+    def _clear_queue(self) -> None:
+        """Empties the queue without touching the draft: it belongs to the conversation being left."""
+        self._queue.clear()
+        self.queue_view.set_items([])
+
+    def submit(self, text: str) -> None:
+        """Single entry point for user text: sends it, or queues it while a turn runs."""
+        text = text.strip()
+        if not text:
+            return
+        if self.is_busy():
+            self.enqueue(text)
+        else:
+            self.send_prompt(text)
 
     def new_conversation(self, provider: str | None = None) -> None:
         if self.is_busy():
             return
         # cards belong to the conversation being left: an approval must not carry over
         self._cancel_pending_cards()
+        draft = self.draft_text()
         saved = self._stash_draft()
+        self._clear_queue()
         provider = provider or self._config.provider
         self.conversation = Conversation.new(provider)
         self._select_provider(provider)
@@ -254,14 +318,17 @@ class ChatPanel(QWidget):
         if saved:
             # the draft went with the saved conversation; an unsaved one keeps it in the box
             self.input_box.clear()
+        else:
+            self.input_box.setPlainText(draft)
 
     def open_conversation(self, conv_id: str) -> bool:
         if self.is_busy() or self.store.load(conv_id) is None:
             return False  # panel unchanged
         # cards belong to the conversation being left: an approval must not carry over
         self._cancel_pending_cards()
-        typed = self.input_box.toPlainText()
+        typed = self.draft_text()
         saved = self._stash_draft()
+        self._clear_queue()
         conv = self.store.load(conv_id)  # loaded again: it may be the conversation just saved
         if conv is None:
             return False
@@ -335,16 +402,18 @@ class ChatPanel(QWidget):
         if not text:
             return
         self.input_box.clear()
-        self.send_prompt(text)
+        self.submit(text)
 
     def send_prompt(self, text: str) -> None:
         if self.is_busy():
+            self.enqueue(text)
             return
         provider = self.conversation.provider
         history = None
         if provider == "agy_cli":
             history = [(m.role, m.text) for m in self.conversation.messages if m.role in ("user", "assistant")]
-        self.conversation.draft = ""
+        # what is still typed stays as the draft; nothing left means it is cleared
+        self.conversation.draft = self.draft_text()
         self._record("user", text)
 
         # everything that touches the organizer happens here, on the main thread
@@ -406,6 +475,10 @@ class ChatPanel(QWidget):
         if self._worker is None:
             return
         self._turn_cancelled = True
+        # the queued messages go back to the box rather than being sent after the turn
+        text = self.draft_text()
+        self._clear_queue()
+        self.input_box.setPlainText(text)
         self.cancel_btn.setEnabled(False)
         self._worker.cancel()
         self._cancel_pending_cards()
@@ -434,6 +507,9 @@ class ChatPanel(QWidget):
         if self._turn_cancelled:
             self._append_note("Cancelled.")
         self._set_busy(False)
+        if self._queue and not self._turn_cancelled:
+            self.send_prompt(self._queue.pop(0))
+            self.queue_view.set_items(self._queue)
 
     # --- approvals --------------------------------------------------------------------------
 
