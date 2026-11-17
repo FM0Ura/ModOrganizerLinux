@@ -330,7 +330,7 @@ class ChatPanel(QWidget):
             return
         parsed = parse_slash(text)
         if isinstance(parsed, SlashCommand) and parsed.name == "help":
-            self._append_note(HELP_TEXT)  # always immediate, even during a turn
+            self._run_command(parsed, text)  # always immediate, even during a turn
         elif self.is_busy() and self._turn_cancelled:
             # a cancelled turn drops its queue: new text goes back to the box instead of being stranded
             current = self.input_box.toPlainText()
@@ -349,13 +349,24 @@ class ChatPanel(QWidget):
         if isinstance(parsed, str):
             self.send_prompt(parsed)
             return self.is_busy()
-        self._run_command(parsed)
+        self._run_command(parsed, text)
         return False
 
-    def _run_command(self, cmd: SlashCommand) -> None:
+    def _give_back(self, text: str) -> None:
+        """Puts text that did not run back in the input box, after what is typed there."""
+        current = self.input_box.toPlainText()
+        self.input_box.setPlainText("\n\n".join(part for part in (current, text) if part.strip()))
+
+    def _run_command(self, cmd: SlashCommand, original: str) -> None:
+        """original is the text as typed: a command it does not fit must not lose it."""
         name, arg = cmd.name, cmd.arg
         if name == "help":
             self._append_note(HELP_TEXT)
+            if arg:
+                self._give_back(original)
+        elif name in ("new", "history", "export") and arg:
+            self._append_note(f"/{name} takes no text; your message is back in the input box.")
+            self._give_back(original)
         elif name == "new":
             self.new_conversation()
         elif name == "history":
@@ -368,6 +379,7 @@ class ChatPanel(QWidget):
             self._command_provider(arg.lower())
         else:
             self._append_note("Unknown command; /help lists the commands.")
+            self._give_back(original)
 
     def _command_mode(self, arg: str) -> None:
         if not arg:
@@ -658,6 +670,8 @@ class ChatPanel(QWidget):
             self.enqueue(text)
             return
         provider = self.conversation.provider
+        # a CLI session lost before the first answer had no memory to lose
+        has_history = any(m.role == "assistant" for m in self.conversation.messages)
         history = None
         if provider == "agy_cli":
             history = [(m.role, m.text) for m in self.conversation.messages if m.role in ("user", "assistant")]
@@ -683,6 +697,8 @@ class ChatPanel(QWidget):
         self._worker = AgentTurnWorker(
             dispatcher=self._dispatcher,
             config=self._config,
+            provider=provider,
+            has_history=has_history,
             user_text=text,
             # None on the first turn: the worker creates (or learns) the id and emits session_started
             session_id=self.conversation.session.get(session_key(provider)),
@@ -704,7 +720,7 @@ class ChatPanel(QWidget):
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
-        self.send_btn.setEnabled(not busy)
+        # send stays enabled: a message sent during a turn goes to the queue
         # the conversation can't change under a running turn
         self.provider_combo.setEnabled(not busy)
         self.clear_btn.setEnabled(not busy)
@@ -796,6 +812,11 @@ class ChatPanel(QWidget):
         )
 
     def _on_approval_requested(self, req_id: str, tool_name: str, args: dict, destructive: bool) -> None:
+        if self.is_busy() and self._turn_cancelled:
+            # an abandoned API turn may still ask: it is refused without a card
+            self._dispatcher.resolve_approval(req_id, "reject")
+            self._record_approval(tool_name, dict(args), "cancelled")
+            return
         card = ApprovalCard(
             req_id, tool_name, args, destructive=destructive, parent=self, turn=self._turn_number()
         )

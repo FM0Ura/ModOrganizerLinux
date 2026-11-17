@@ -238,7 +238,7 @@ def test_busy_state_is_visible_and_cancellable(panel):
     panel.send_prompt("hello")
     worker = _FakeWorker.instances[-1]
     assert not panel.status_label.isHidden() and not panel.cancel_btn.isHidden()
-    assert not panel.send_btn.isEnabled()
+    assert panel.send_btn.isEnabled()  # a message sent during a turn is queued
 
     panel.cancel_btn.click()
     assert worker.cancelled

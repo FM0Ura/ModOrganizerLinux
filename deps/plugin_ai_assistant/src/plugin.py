@@ -49,6 +49,12 @@ class AiAssistantPlugin(mobase.IPluginTool):
             # after an aboutToQuit on this same object: both were closed
             self._dispatcher.reopen()
         self._mcp_server.start()  # no-op while it runs
+        # before the history is read: a failure there must not leave MO2 without the
+        # shortcut or, worse, without the hook that saves the conversation on exit
+        self._install_shortcut(main_window)
+        if not self._quit_connected:
+            QCoreApplication.instance().aboutToQuit.connect(self._on_about_to_quit)
+            self._quit_connected = True
         if self._dock is None:
             data_dir = Path(self._organizer.pluginDataPath()) / "ai_assistant"
             data_dir.mkdir(parents=True, exist_ok=True)
@@ -57,17 +63,16 @@ class AiAssistantPlugin(mobase.IPluginTool):
             )
             # MO2 restores a position the user saved (by objectName) over this default
             main_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._dock)
-            self._dock.chat_panel.open_most_recent()
+            try:
+                self._dock.chat_panel.open_most_recent()
+            except Exception:
+                _log.exception("AI Assistant: could not open the most recent conversation")
         else:
             # the conversation of the previous run is stopped and saved before the dock
             # moves; then the panel shows the history of this run's instance
             self._dock.chat_panel.switch_instance(instance_path)
             self._dock.setParent(main_window)
             main_window.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self._dock)
-        self._install_shortcut(main_window)
-        if not self._quit_connected:
-            QCoreApplication.instance().aboutToQuit.connect(self._on_about_to_quit)
-            self._quit_connected = True
 
     def _install_shortcut(self, main_window: QMainWindow) -> None:
         if self._shortcut is not None:

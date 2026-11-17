@@ -65,7 +65,8 @@ class MainThreadDispatcher(QObject):
         self._vfs_check = fn
 
     def reset_session_approvals(self) -> None:
-        self._session_approved_all = False
+        with self._lock:
+            self._session_approved_all = False
 
     def close(self) -> None:
         """Refuses every later tool call and releases the ones waiting, without running them."""
@@ -111,10 +112,11 @@ class MainThreadDispatcher(QObject):
         write_decision = "auto"
         if spec.is_mutating and self._permission_mode == "safe" and not self._session_approved_all:
             decision = self._wait_for_user_approval(spec.name, validated_args, spec.destructive)
-            if decision == "reject":
+            if decision not in ("approve", "approve_session"):
+                # fail closed: anything but an explicit approval is a rejection
                 return {"ok": False, "error": f"Action '{tool_name}' rejected by user."}
             if decision == "approve_session":
-                self._session_approved_all = True
+                # the flag itself is set by resolve_approval, on the main thread
                 write_decision = "approved_session"
             else:
                 write_decision = "approved"
@@ -169,6 +171,9 @@ class MainThreadDispatcher(QObject):
             info = self._pending_approvals.get(request_id)
             if info is not None:
                 info["decision"] = decision
+                if decision == "approve_session":
+                    # set here, not on the worker thread: a reset that follows must win
+                    self._session_approved_all = True
                 info["event"].set()
 
     @pyqtSlot(str)

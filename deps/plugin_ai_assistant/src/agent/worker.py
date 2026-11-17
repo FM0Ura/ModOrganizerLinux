@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import threading
 import uuid
 from pathlib import Path
@@ -53,10 +54,17 @@ class AgentTurnWorker(QThread):
         endpoint_path: Path,
         sqlite_path: Path | None = None,
         history: list[tuple[str, str]] | None = None,
+        *,
+        provider: str,
+        has_history: bool = True,
     ) -> None:
+        """provider is the conversation's; config only gives the other settings.
+        has_history: the conversation already has an answer (else a lost session is no news)."""
         super().__init__()
         self._dispatcher = dispatcher
         self._config = config
+        self._provider = provider
+        self._has_history = has_history
         self._user_text = user_text
         self._session_id = session_id
         self._history = history
@@ -73,7 +81,7 @@ class AgentTurnWorker(QThread):
 
     def run(self) -> None:
         try:
-            provider = self._config.provider
+            provider = self._provider
             resume = self._session_id is not None
             sid = self._session_id
             if sid is None and provider not in ("codex_cli", "agy_cli"):
@@ -94,11 +102,11 @@ class AgentTurnWorker(QThread):
                 )
                 if result.session_id and result.session_id != sid:
                     self.session_started.emit(result.session_id)
-                if result.note:
+                if result.note and self._has_history:
                     self.note_ready.emit(result.note)
                 reply = result.text
             else:
-                model = create_chat_model(self._config)
+                model = create_chat_model(dataclasses.replace(self._config, provider=provider))
                 graph = build_agent_graph(
                     self._dispatcher, model, sqlite_path=self._sqlite_path, system_prompt=self._system_prompt
                 )

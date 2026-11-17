@@ -29,6 +29,7 @@ class CountingModel(BaseChatModel):
 
 
 def _make(cfg, tmp_path, dispatcher=None, session_id=None, **kw):
+    kw.setdefault("provider", cfg.provider)
     return AgentTurnWorker(
         dispatcher=dispatcher,
         config=cfg,

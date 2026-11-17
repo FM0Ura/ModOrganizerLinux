@@ -198,7 +198,10 @@ class ConversationStore:
         entries = [_entry(c) for c in self._all()]
         entries.sort(key=lambda e: e["updated_at"], reverse=True)
         if entries:
-            self._write_index(entries)
+            try:
+                self._write_index(entries)
+            except OSError:
+                pass  # the index is only a cache of the conversation files
         return entries
 
     def save(self, conv: Conversation) -> bool:

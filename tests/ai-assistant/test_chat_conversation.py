@@ -38,7 +38,7 @@ class FakeWorker(QObject):
     def start(self):
         self.running = True
         # like the real worker: Claude/APIs get a fresh id before the turn runs
-        if self.kwargs["session_id"] is None and self.kwargs["config"].provider not in ("codex_cli", "agy_cli"):
+        if self.kwargs["session_id"] is None and self.kwargs["provider"] not in ("codex_cli", "agy_cli"):
             self.session_started.emit(str(uuid.uuid4()))
 
     def isRunning(self):
