@@ -224,7 +224,7 @@ class ChatPanel(QWidget):
             dispatcher=self._dispatcher,
             config=self._config,
             user_text=text,
-            thread_id=self._thread_id,
+            session_id=self._thread_id,
             system_prompt=system_prompt,
             cwd=cwd,
             bridge_path=self._bridge_path,

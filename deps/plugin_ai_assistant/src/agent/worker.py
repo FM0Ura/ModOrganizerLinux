@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
 from langchain_core.messages import HumanMessage
@@ -34,26 +35,31 @@ class AgentTurnWorker(QThread):
     on the main thread; the tools reach the organizer only through the dispatcher.
     """
 
+    session_started = pyqtSignal(str)
     response_ready = pyqtSignal(str)
+    note_ready = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
+    late_response = pyqtSignal(str)
 
     def __init__(
         self,
         dispatcher: MainThreadDispatcher,
         config: AssistantConfig,
         user_text: str,
-        thread_id: str,
+        session_id: str | None,
         system_prompt: str,
         cwd: Path | str | None,
         bridge_path: Path,
         endpoint_path: Path,
         sqlite_path: Path | None = None,
+        history: list[tuple[str, str]] | None = None,
     ) -> None:
         super().__init__()
         self._dispatcher = dispatcher
         self._config = config
         self._user_text = user_text
-        self._thread_id = thread_id
+        self._session_id = session_id
+        self._history = history
         self._system_prompt = system_prompt
         self._cwd = cwd
         self._bridge_path = bridge_path
@@ -67,16 +73,30 @@ class AgentTurnWorker(QThread):
 
     def run(self) -> None:
         try:
-            if self._config.provider in CLI_PROVIDERS:
-                reply = run_cli_turn(
-                    self._config.provider,
+            provider = self._config.provider
+            resume = self._session_id is not None
+            sid = self._session_id
+            if sid is None and provider not in ("codex_cli", "agy_cli"):
+                sid = str(uuid.uuid4())
+                self.session_started.emit(sid)
+            if provider in CLI_PROVIDERS:
+                result = run_cli_turn(
+                    provider,
                     self._user_text,
                     self._system_prompt,
                     self._bridge_path,
                     self._endpoint_path,
                     cwd=self._cwd,
                     cancel_event=self._cancel,
-                ).text  # Task 3 wires the session id and note
+                    session_id=sid,
+                    resume=resume,
+                    history=self._history,
+                )
+                if result.session_id and result.session_id != sid:
+                    self.session_started.emit(result.session_id)
+                if result.note:
+                    self.note_ready.emit(result.note)
+                reply = result.text
             else:
                 model = create_chat_model(self._config)
                 graph = build_agent_graph(
@@ -84,10 +104,13 @@ class AgentTurnWorker(QThread):
                 )
                 result = graph.invoke(
                     {"messages": [HumanMessage(content=self._user_text)]},
-                    config={"configurable": {"thread_id": self._thread_id}},
+                    config={"configurable": {"thread_id": sid}},
                 )
                 reply = _message_text(result["messages"][-1].content)
-            if not self._cancel.is_set():
+            if self._cancel.is_set():
+                if provider not in CLI_PROVIDERS:
+                    self.late_response.emit(reply)
+            else:
                 self.response_ready.emit(reply)
         except TurnCancelled:
             pass
