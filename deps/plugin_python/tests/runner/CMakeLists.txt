@@ -34,6 +34,8 @@ mo2_target_sources(runner-tests
 		plugins/dummy-game.py
 		plugins/dummy-installer.py
 		plugins/dummy-iplugin.py
+		plugins/nspkg_plugin/__init__.py
+		plugins/nspkg_plugin/inner/helper.py
 )
 mo2_configure_tests(runner-tests NO_SOURCES WARNINGS 4)
 
