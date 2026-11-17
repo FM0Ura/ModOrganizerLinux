@@ -127,3 +127,108 @@ def test_safe_mode_approve_session_allows_subsequent_writes(fake_organizer):
     assert out[1]["ok"] is True
     assert fake_organizer.modList().state("USSEP") == 0x01
     assert fake_organizer.modList().state("SkyUI") == 0x01
+
+
+def _run_in_thread(disp, calls):
+    from PyQt6.QtWidgets import QApplication
+
+    out = []
+
+    def worker_call():
+        for name, args in calls:
+            out.append(disp.execute(name, args))
+
+    t = threading.Thread(target=worker_call)
+    t.start()
+    while t.is_alive():
+        QApplication.processEvents()
+    t.join(timeout=2)
+    QApplication.processEvents()
+    return out
+
+
+def _collect(disp, approval=None):
+    events = []
+    disp.write_executed.connect(lambda n, a, d: events.append((n, a, d)))
+    if approval is not None:
+        disp.approval_requested.connect(
+            lambda rid, n, a, dest: disp.resolve_approval(rid, approval)
+        )
+    return events
+
+
+def _disp(fake_organizer, mode, vfs=False):
+    return MainThreadDispatcher(
+        fake_organizer,
+        _make_registry(fake_organizer),
+        permission_mode=mode,
+        vfs_mounted_check=lambda: vfs,
+    )
+
+
+def test_write_executed_decisions(fake_organizer):
+    # Autonomous -> auto (cross-thread path)
+    disp = _disp(fake_organizer, "autonomous")
+    events = _collect(disp)
+    _run_in_thread(disp, [("dummy_write", {"mod_name": "USSEP"})])
+    assert events == [("dummy_write", {"mod_name": "USSEP"}, "auto")]
+
+    # Safe + approve -> approved
+    disp = _disp(fake_organizer, "safe")
+    events = _collect(disp, "approve")
+    _run_in_thread(disp, [("dummy_write", {"mod_name": "USSEP"})])
+    assert events == [("dummy_write", {"mod_name": "USSEP"}, "approved")]
+
+    # Safe + approve_session -> approved_session, then auto
+    disp = _disp(fake_organizer, "safe")
+    events = _collect(disp, "approve_session")
+    _run_in_thread(
+        disp,
+        [("dummy_write", {"mod_name": "USSEP"}), ("dummy_write", {"mod_name": "SkyUI"})],
+    )
+    assert [e[2] for e in events] == ["approved_session", "auto"]
+    assert events[1][1] == {"mod_name": "SkyUI"}
+
+    # reject -> nothing
+    disp = _disp(fake_organizer, "safe")
+    events = _collect(disp, "reject")
+    _run_in_thread(disp, [("dummy_write", {"mod_name": "USSEP"})])
+    assert events == []
+
+    # VFS mounted -> nothing
+    disp = _disp(fake_organizer, "autonomous", vfs=True)
+    events = _collect(disp)
+    _run_in_thread(disp, [("dummy_write", {"mod_name": "USSEP"})])
+    assert events == []
+
+    # read tool -> nothing
+    disp = _disp(fake_organizer, "autonomous")
+    events = _collect(disp)
+    _run_in_thread(disp, [("dummy_read", {})])
+    assert events == []
+
+
+def test_write_executed_direct_main_thread_path(fake_organizer):
+    disp = _disp(fake_organizer, "autonomous")
+    events = _collect(disp)
+    res = disp.execute("dummy_write", {"mod_name": "USSEP"})
+    assert res["ok"] is True
+    assert events == [("dummy_write", {"mod_name": "USSEP"}, "auto")]
+
+
+def test_write_executed_not_emitted_when_tool_fails(fake_organizer):
+    reg = ToolRegistry()
+
+    @reg.register(
+        name="boom", description="x", args_schema=DummyWriteArgs, is_mutating=True
+    )
+    def boom(org, mod_name: str) -> dict:
+        raise RuntimeError("nope")
+
+    disp = MainThreadDispatcher(
+        fake_organizer, reg, permission_mode="autonomous", vfs_mounted_check=lambda: False
+    )
+    events = _collect(disp)
+    assert disp.execute("boom", {"mod_name": "a"})["ok"] is False
+    _run_in_thread(disp, [("boom", {"mod_name": "a"})])
+    assert events == []

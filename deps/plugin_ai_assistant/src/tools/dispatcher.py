@@ -28,6 +28,8 @@ def default_vfs_mounted_check(organizer) -> bool:
 
 class MainThreadDispatcher(QObject):
     approval_requested = pyqtSignal(str, str, dict, bool)
+    # (tool_name, args, decision): decision is approved | approved_session | auto.
+    write_executed = pyqtSignal(str, dict, str)
     _invoke_signal = pyqtSignal(str)
 
     def __init__(
@@ -79,16 +81,22 @@ class MainThreadDispatcher(QObject):
                 "error": "Blocked: Virtual filesystem is currently mounted (game or tool is running).",
             }
 
+        write_decision = "auto"
         if spec.is_mutating and self._permission_mode == "safe" and not self._session_approved_all:
             decision = self._wait_for_user_approval(spec.name, validated_args, spec.destructive)
             if decision == "reject":
                 return {"ok": False, "error": f"Action '{tool_name}' rejected by user."}
             if decision == "approve_session":
                 self._session_approved_all = True
+                write_decision = "approved_session"
+            else:
+                write_decision = "approved"
 
         app = QApplication.instance()
         if app is None or QThread.currentThread() == self.thread():
-            return self._run_spec_directly(spec, validated_args)
+            result = self._run_spec_directly(spec, validated_args)
+            self._emit_if_write_ran(spec, validated_args, result, write_decision)
+            return result
 
         call_id = str(uuid.uuid4())
         done_event = threading.Event()
@@ -98,6 +106,7 @@ class MainThreadDispatcher(QObject):
                 "args": validated_args,
                 "event": done_event,
                 "result": None,
+                "decision": write_decision,
             }
         self._invoke_signal.emit(call_id)
         done_event.wait(timeout=30.0)
@@ -138,7 +147,13 @@ class MainThreadDispatcher(QObject):
         if entry is None:
             return
         entry["result"] = self._run_spec_directly(entry["spec"], entry["args"])
+        # Emitted here, on the dispatcher's (main) thread, before waking the worker.
+        self._emit_if_write_ran(entry["spec"], entry["args"], entry["result"], entry["decision"])
         entry["event"].set()
+
+    def _emit_if_write_ran(self, spec, args: dict[str, Any], result: dict[str, Any], decision: str) -> None:
+        if spec.is_mutating and result.get("ok") is True:
+            self.write_executed.emit(spec.name, dict(args), decision)
 
     def _run_spec_directly(self, spec, validated_args: dict[str, Any]) -> dict[str, Any]:
         try:
