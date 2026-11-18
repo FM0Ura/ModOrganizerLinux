@@ -4,7 +4,7 @@ import json
 import time
 from pathlib import Path
 from PyQt6 import sip
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
+from PyQt6.QtCore import QEvent, QObject, QStandardPaths, Qt, QTimer
 from PyQt6.QtGui import QTextCursor, QTextDocument
 from PyQt6.QtWidgets import (
     QWidget,
@@ -68,6 +68,12 @@ _HEADERS = {
     "note": "<i style='color:gray;'>Note</i>",
     "error": "<b style='color:#d9534f;'>Error:</b>",
 }
+
+
+def _export_dir() -> Path:
+    """The user's Documents folder, or the home folder when there is none."""
+    docs = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+    return Path(docs) if docs and Path(docs).is_dir() else Path.home()
 
 
 class ChatPanel(QWidget):
@@ -481,8 +487,10 @@ class ChatPanel(QWidget):
         if path is None:
             name = " ".join((conv.title or "Conversation").split())
             name = "".join("_" if ch in '/\\:*?"<>|' else ch for ch in name)
+            # absolute: a bare name would land in MO2's working directory, which in the
+            # AppImage is its read-only mount
             path, _ = QFileDialog.getSaveFileName(
-                self, "Export conversation", f"{name}.md", "Markdown (*.md);;All files (*)"
+                self, "Export conversation", str(_export_dir() / f"{name}.md"), "Markdown (*.md);;All files (*)"
             )
             if not path:
                 return

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
@@ -129,7 +131,12 @@ def test_export_without_path_uses_save_dialog(seeded, tmp_path, monkeypatch):
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(fake))
     panel.export_conversation(a.id)
-    assert seen["suggested"] == "alpha crash.md" and target.exists()
+    # absolute: MO2's working directory is inside the read-only AppImage mount
+    suggested = Path(seen["suggested"])
+    assert suggested.is_absolute() and suggested.name == "alpha crash.md" and target.exists()
+    assert suggested.parent in (Path.home() / "Documents", Path.home() / "Documentos", Path.home()) or (
+        suggested.parent.is_dir() and suggested.parent != Path.cwd()
+    )
     monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(lambda *a, **k: ("", "")))
     target.unlink()
     panel.export_conversation(a.id)
@@ -217,3 +224,18 @@ def test_title_with_separator_is_kept_for_prompts(seeded, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", staticmethod(fake_q))
     view.delete(a.id)
     assert "one  ·  two" in seen["prompt"]
+
+
+def test_export_suggestion_ignores_the_working_directory(seeded, tmp_path, monkeypatch):
+    panel, _, a, _ = seeded
+    monkeypatch.chdir(tmp_path)  # stands in for /tmp/.mount_*/usr/bin
+    seen = {}
+
+    def fake(_parent, _caption, suggested, _filter):
+        seen["suggested"] = suggested
+        return "", ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", staticmethod(fake))
+    panel.export_conversation(a.id)
+    assert Path(seen["suggested"]).is_absolute()
+    assert Path(seen["suggested"]).parent != tmp_path
