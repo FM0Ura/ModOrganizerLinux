@@ -134,7 +134,7 @@ def test_cli_turn_runs_in_the_given_directory(tmp_path: Path):
         "claude_cli", "hi", "context", tmp_path / "b.py", tmp_path / "e.json", cwd=work,
         command_builder=lambda *a, **k: ["sh", "-c", "pwd"],
     )
-    assert Path(reply) == work
+    assert Path(reply.text) == work
 
 
 def test_cli_turn_can_be_cancelled(tmp_path: Path):
@@ -176,8 +176,11 @@ def test_graph_uses_the_given_system_prompt_without_the_organizer():
 
 
 class _FakeWorker(QObject):
+    session_started = pyqtSignal(str)
     response_ready = pyqtSignal(str)
+    note_ready = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
+    late_response = pyqtSignal(str)
     finished = pyqtSignal()
     instances: list["_FakeWorker"] = []
 
@@ -235,7 +238,7 @@ def test_busy_state_is_visible_and_cancellable(panel):
     panel.send_prompt("hello")
     worker = _FakeWorker.instances[-1]
     assert not panel.status_label.isHidden() and not panel.cancel_btn.isHidden()
-    assert not panel.send_btn.isEnabled()
+    assert panel.send_btn.isEnabled()  # a message sent during a turn is queued
 
     panel.cancel_btn.click()
     assert worker.cancelled

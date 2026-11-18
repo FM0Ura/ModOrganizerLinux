@@ -6,3 +6,6 @@ deps/game_bethesda/src/games/falloutnv/game_falloutnv_en.ts
 # Python bytecode
 __pycache__/
 *.pyc
+
+# local AppImage builds
+appimage-out/

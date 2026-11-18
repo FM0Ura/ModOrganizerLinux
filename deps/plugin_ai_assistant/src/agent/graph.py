@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import os
 import sqlite3
 from pathlib import Path
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -96,6 +97,8 @@ def build_agent_graph(
     if sqlite_path is not None:
         sqlite_path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(sqlite_path), check_same_thread=False)
+        # it holds whole API conversations
+        os.chmod(sqlite_path, 0o600)
         checkpointer = SqliteSaver(conn)
     else:
         checkpointer = MemorySaver()
