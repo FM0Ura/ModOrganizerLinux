@@ -25,7 +25,7 @@ Instale a ferramenta como mod (pelo MO2, a partir do arquivo baixado) e configur
 
 ## Plugins Python
 
-O MO2 usa o Python 3.14 e o PyQt6 **de dentro do AppImage**; não há nada para instalar. (Quem roda um build do CI num box, e não o AppImage, veja "Python no box" em [docs/dev/building.md](../../dev/building.md#python-no-box).)
+O MO2 usa o Python 3.14 e o PyQt6 **de dentro do AppImage**; não há nada para instalar. (Quem roda um build do CI num box, e não o AppImage, veja "Python no box" em [docs/dev/building.md](https://github.com/FM0Ura/ModOrganizerLinux/blob/main/docs/dev/building.md#python-no-box).)
 
 O Python do MO2 é isolado: não lê `PYTHONPATH` nem as variáveis `PYTHON*`, e não enxerga pacotes do `~/.local` nem de `/usr/local`; só a biblioteca padrão e os pacotes do Python do próprio AppImage, mais as pastas do próprio MO2. Plugins Python incluídos: pré-visualização de DDS, verificador do formato 43, verificador de plugins do script extender, Configurator (INIs), instalador de BAIN com wizard, FNIS e o `basic_games`.
 

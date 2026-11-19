@@ -5,6 +5,8 @@ CI and the releases work, and the variables that exist for development and tests
 who only want to run it should read the [README](../../README.md) and the
 [user guide](../user/en/install.md).
 
+See the [repository checks guide](quality.md) for Git hooks, linting, audits and MkDocs.
+
 Superproject for a native Linux port of [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer).
 The goal is a Mod Organizer 2 that runs natively on Linux (Bazzite is the reference
 platform) and manages mods for Steam games running through Proton, while the application

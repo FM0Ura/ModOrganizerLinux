@@ -1,0 +1,7 @@
+{
+  "include": ["deps/plugin_ai_assistant/src"],
+  "exclude": ["**/__pycache__"],
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "basic",
+  "stubPath": "deps/basic_games/typings"
+}
