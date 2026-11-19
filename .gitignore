@@ -9,3 +9,6 @@ __pycache__/
 
 # local AppImage builds
 appimage-out/
+
+# MkDocs output
+/site/

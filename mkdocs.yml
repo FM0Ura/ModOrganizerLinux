@@ -1,0 +1,25 @@
+site_name: ModOrganizerLinux
+repo_url: https://github.com/FM0Ura/ModOrganizerLinux
+docs_dir: docs/user
+nav:
+  - Início: index.md
+  - Português:
+      - Instalação: pt-BR/install.md
+      - Primeiros passos: pt-BR/first-steps.md
+      - Atualização: pt-BR/updating.md
+      - Jogos: pt-BR/games.md
+      - Modlists: pt-BR/modlists.md
+      - Problemas conhecidos: pt-BR/troubleshooting.md
+  - English:
+      - Installation: en/install.md
+      - First steps: en/first-steps.md
+      - Updating: en/updating.md
+      - Games: en/games.md
+      - Modlists: en/modlists.md
+      - Troubleshooting: en/troubleshooting.md
+markdown_extensions:
+  - toc:
+      slugify: !!python/name:markdown.extensions.toc.slugify_unicode
+validation:
+  links:
+    anchors: warn

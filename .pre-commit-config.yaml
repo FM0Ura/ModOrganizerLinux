@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-yaml
+        exclude: ^(deps/|mkdocs\.yml$)
+      - id: check-yaml
+        name: Check MkDocs YAML syntax
+        files: ^mkdocs\.yml$
+        # MkDocs uses a Python callable tag for its Unicode heading anchors.
+        args: [--unsafe]
+      - id: check-json
+        files: ^pyrightconfig\.json$
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v19.1.7
+    hooks:
+      - id: clang-format
+        files: ^deps/
+        args: [--style=file, --fallback-style=none]
