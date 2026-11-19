@@ -4,7 +4,12 @@ repos:
     hooks:
       - id: check-merge-conflict
       - id: check-yaml
-        exclude: ^deps/
+        exclude: ^(deps/|mkdocs\.yml$)
+      - id: check-yaml
+        name: Check MkDocs YAML syntax
+        files: ^mkdocs\.yml$
+        # MkDocs uses a Python callable tag for its Unicode heading anchors.
+        args: [--unsafe]
       - id: check-json
         files: ^pyrightconfig\.json$
   - repo: https://github.com/rhysd/actionlint
